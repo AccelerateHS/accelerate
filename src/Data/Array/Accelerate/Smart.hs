@@ -1225,98 +1225,98 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
 
 -- Operators from Floating
 
-mkSin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSin :: IsFloating (EltR t) => Exp t -> Exp t
 mkSin = mkPrimUnary $ PrimSin floatingType
 
-mkCos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCos :: IsFloating (EltR t) => Exp t -> Exp t
 mkCos = mkPrimUnary $ PrimCos floatingType
 
-mkTan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTan :: IsFloating (EltR t) => Exp t -> Exp t
 mkTan = mkPrimUnary $ PrimTan floatingType
 
-mkAsin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsin :: IsFloating (EltR t) => Exp t -> Exp t
 mkAsin = mkPrimUnary $ PrimAsin floatingType
 
-mkAcos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcos :: IsFloating (EltR t) => Exp t -> Exp t
 mkAcos = mkPrimUnary $ PrimAcos floatingType
 
-mkAtan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtan :: IsFloating (EltR t) => Exp t -> Exp t
 mkAtan = mkPrimUnary $ PrimAtan floatingType
 
-mkSinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSinh :: IsFloating (EltR t) => Exp t -> Exp t
 mkSinh = mkPrimUnary $ PrimSinh floatingType
 
-mkCosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkCosh :: IsFloating (EltR t) => Exp t -> Exp t
 mkCosh = mkPrimUnary $ PrimCosh floatingType
 
-mkTanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkTanh :: IsFloating (EltR t) => Exp t -> Exp t
 mkTanh = mkPrimUnary $ PrimTanh floatingType
 
-mkAsinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAsinh :: IsFloating (EltR t) => Exp t -> Exp t
 mkAsinh = mkPrimUnary $ PrimAsinh floatingType
 
-mkAcosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAcosh :: IsFloating (EltR t) => Exp t -> Exp t
 mkAcosh = mkPrimUnary $ PrimAcosh floatingType
 
-mkAtanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkAtanh :: IsFloating (EltR t) => Exp t -> Exp t
 mkAtanh = mkPrimUnary $ PrimAtanh floatingType
 
-mkExpFloating :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkExpFloating :: IsFloating (EltR t) => Exp t -> Exp t
 mkExpFloating = mkPrimUnary $ PrimExpFloating floatingType
 
-mkSqrt :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkSqrt :: IsFloating (EltR t) => Exp t -> Exp t
 mkSqrt = mkPrimUnary $ PrimSqrt floatingType
 
-mkLog :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkLog :: IsFloating (EltR t) => Exp t -> Exp t
 mkLog = mkPrimUnary $ PrimLog floatingType
 
-mkFPow :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFPow :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
 mkFPow = mkPrimBinary $ PrimFPow floatingType
 
-mkLogBase :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkLogBase :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
 mkLogBase = mkPrimBinary $ PrimLogBase floatingType
 
 -- Operators from Num
 
-mkAdd :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkAdd :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
 mkAdd = mkPrimBinary $ PrimAdd numType
 
-mkSub :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkSub :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
 mkSub = mkPrimBinary $ PrimSub numType
 
-mkMul :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
+mkMul :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
 mkMul = mkPrimBinary $ PrimMul numType
 
-mkNeg :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkNeg :: IsNum (EltR t) => Exp t -> Exp t
 mkNeg = mkPrimUnary $ PrimNeg numType
 
-mkAbs :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkAbs :: IsNum (EltR t) => Exp t -> Exp t
 mkAbs = mkPrimUnary $ PrimAbs numType
 
-mkSig :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
+mkSig :: IsNum (EltR t) => Exp t -> Exp t
 mkSig = mkPrimUnary $ PrimSig numType
 
 -- Operators from Integral
 
-mkQuot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkQuot :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkQuot = mkPrimBinary $ PrimQuot integralType
 
-mkRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkRem :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkRem = mkPrimBinary $ PrimRem integralType
 
-mkQuotRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkQuotRem :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
 mkQuotRem (Exp x) (Exp y) =
   let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
    in ( mkExp $ Prj PairIdxLeft  pair
       , mkExp $ Prj PairIdxRight pair)
 
-mkIDiv :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkIDiv :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkIDiv = mkPrimBinary $ PrimIDiv integralType
 
-mkMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkMod :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkMod = mkPrimBinary $ PrimMod integralType
 
-mkDivMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
+mkDivMod :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
 mkDivMod (Exp x) (Exp y) =
   let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
    in ( mkExp $ Prj PairIdxLeft  pair
@@ -1324,128 +1324,128 @@ mkDivMod (Exp x) (Exp y) =
 
 -- Operators from Bits and FiniteBits
 
-mkBAnd :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBAnd :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBAnd = mkPrimBinary $ PrimBAnd integralType
 
-mkBOr :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBOr :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBOr = mkPrimBinary $ PrimBOr integralType
 
-mkBXor :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBXor :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBXor = mkPrimBinary $ PrimBXor integralType
 
-mkBNot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkBNot :: IsIntegral (EltR t) => Exp t -> Exp t
 mkBNot = mkPrimUnary $ PrimBNot integralType
 
-mkBShiftL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBShiftL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
 
-mkBShiftR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBShiftR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
 
-mkBRotateL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBRotateL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
 
-mkBRotateR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
+mkBRotateR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
 mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
 
-mkPopCount :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkPopCount :: IsIntegral (EltR t) => Exp t -> Exp t
 mkPopCount = mkPrimUnary $ PrimPopCount integralType
 
-mkCountLeadingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkCountLeadingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
 mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
 
-mkCountTrailingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
+mkCountTrailingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
 mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
 
 -- Operators from Fractional
 
-mkFDiv :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkFDiv :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
 mkFDiv = mkPrimBinary $ PrimFDiv floatingType
 
-mkRecip :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
+mkRecip :: IsFloating (EltR t) => Exp t -> Exp t
 mkRecip = mkPrimUnary $ PrimRecip floatingType
 
 -- Operators from RealFrac
 
-mkTruncate :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkTruncate :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkTruncate = mkPrimUnary $ PrimTruncate floatingType integralType
 
-mkRound :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkRound :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkRound = mkPrimUnary $ PrimRound floatingType integralType
 
-mkFloor :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkFloor :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkFloor = mkPrimUnary $ PrimFloor floatingType integralType
 
-mkCeiling :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkCeiling :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
 mkCeiling = mkPrimUnary $ PrimCeiling floatingType integralType
 
 -- Operators from RealFloat
 
-mkAtan2 :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
+mkAtan2 :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
 mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
 
-mkIsNaN :: (Elt t, IsFloating (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp Bool
+mkIsNaN :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
 mkIsNaN = mkPrimUnary $ PrimIsNaN floatingType
 
-mkIsInfinite :: (Elt t, IsFloating (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp Bool
+mkIsInfinite :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
 mkIsInfinite = mkPrimUnary $ PrimIsInfinite floatingType
 
 -- Relational and equality operators
 
-mkLt :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkLt :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkLt = mkPrimBinary $ PrimLt scalarType
 
-mkGt :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkGt :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkGt = mkPrimBinary $ PrimGt scalarType
 
-mkLtEq :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkLtEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkLtEq = mkPrimBinary $ PrimLtEq scalarType
 
-mkGtEq :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkGtEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkGtEq = mkPrimBinary $ PrimGtEq scalarType
 
-mkEq :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkEq = mkPrimBinary $ PrimEq scalarType
 
-mkNEq :: (Elt t, IsScalar (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp Bool
+mkNEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
 mkNEq = mkPrimBinary $ PrimNEq scalarType
 
-mkMax :: (Elt t, IsScalar (EltR t)) => Exp t -> Exp t -> Exp t
+mkMax :: IsScalar (EltR t) => Exp t -> Exp t -> Exp t
 mkMax = mkPrimBinary $ PrimMax scalarType
 
-mkMin :: (Elt t, IsScalar (EltR t)) => Exp t -> Exp t -> Exp t
+mkMin :: IsScalar (EltR t) => Exp t -> Exp t -> Exp t
 mkMin = mkPrimBinary $ PrimMin scalarType
 
 -- Logical operators
 
-mkLAnd :: (Elt t, IsBit (EltR t)) => Exp t -> Exp t -> Exp t
+mkLAnd :: IsBit (EltR t) => Exp t -> Exp t -> Exp t
 mkLAnd = mkPrimBinary $ PrimLAnd bitType
 
-mkLOr :: (Elt t, IsBit (EltR t)) => Exp t -> Exp t -> Exp t
+mkLOr :: IsBit (EltR t) => Exp t -> Exp t -> Exp t
 mkLOr = mkPrimBinary $ PrimLOr bitType
 
-mkLNot :: (Elt t, IsBit (EltR t)) => Exp t -> Exp t
+mkLNot :: IsBit (EltR t) => Exp t -> Exp t
 mkLNot = mkPrimUnary $ PrimLNot bitType
 
 -- Numeric conversions
 
-mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+mkFromIntegral :: (IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
 mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 
-mkToFloating :: (Elt a, Elt b, IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
+mkToFloating :: (IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
 mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
-mkToBool :: (Elt a, IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp a -> Exp Bool
+mkToBool :: (IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp a -> Exp Bool
 mkToBool = mkPrimUnary $ PrimToBool (SingleIntegralType singleIntegralType) bitType
 
-mkFromBool :: (Elt a, IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp Bool -> Exp a
+mkFromBool :: (IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp Bool -> Exp a
 mkFromBool = mkPrimUnary $ PrimFromBool bitType (SingleIntegralType singleIntegralType)
 
 -- Other conversions
 
 -- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
 -- make this version "safe"
-mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
+mkBitcast :: forall b a. (IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
 mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
 mkCoerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
@@ -1507,16 +1507,16 @@ mkExp = Exp . SmartExp
 unExp :: Exp e -> SmartExp (EltR e)
 unExp (Exp e) = e
 
-unExpFunction :: (Elt a, Elt b) => (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
+unExpFunction :: (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
 unExpFunction f = unExp . f . Exp
 
-unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
+unExpBinaryFunction :: (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
 unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
 
-mkPrimUnary :: (Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
+mkPrimUnary :: PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
 mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
-mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
+mkPrimBinary :: PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)

@@ -121,8 +121,8 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim name =
         [d| instance KnownNat n => VEq n $(conT name) where
-              (==*) = mkPrimBinary $ PrimEq scalarType
-              (/=*) = mkPrimBinary $ PrimNEq scalarType
+              (==*) = mkEq
+              (/=*) = mkNEq
           |]
 
       mkTup :: Word8 -> Q Dec

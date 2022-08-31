@@ -19,7 +19,6 @@ module Data.Array.Accelerate.Classes.VOrd (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.VEq
 import Data.Array.Accelerate.Representation.Tag
@@ -114,10 +113,10 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim name =
         [d| instance KnownNat n => VOrd n $(conT name) where
-              (<*)  = mkPrimBinary $ PrimLt scalarType
-              (>*)  = mkPrimBinary $ PrimGt scalarType
-              (<=*) = mkPrimBinary $ PrimLtEq scalarType
-              (>=*) = mkPrimBinary $ PrimGtEq scalarType
+              (<*)  = mkLt
+              (>*)  = mkGt
+              (<=*) = mkLtEq
+              (>=*) = mkGtEq
               vmin  = mkMin
               vmax  = mkMax
           |]

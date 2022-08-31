@@ -90,7 +90,7 @@ module Data.Array.Accelerate.AST (
   Exp, OpenExp(..),
   Boundary(..),
   PrimFun(..),
-  PrimBool,
+  PrimBool, PrimMask,
   PrimMaybe,
   BitOrMask,
 
