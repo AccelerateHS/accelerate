@@ -120,11 +120,8 @@ instance KnownNat n => Foreign.Storable (BitMask n) where
 
   alignment _ = 1
   sizeOf _ =
-    let k     = fromIntegral (natVal' (proxy# :: Proxy# n))
-        (q,r) = quotRem k 8
-     in if r == 0
-          then q
-          else q+1
+    let k = fromIntegral (natVal' (proxy# :: Proxy# n))
+     in quot (k + 7) 8
 
   peek (Ptr addr#) =
     IO $ \s0 ->
@@ -197,11 +194,8 @@ extract (BitMask (Vec ba#)) i@(I# i#) =
 insert :: forall n. KnownNat n => BitMask n -> Int -> Bit -> BitMask n
 insert (BitMask (Vec ba#)) i (Bit b) = runST $ do
   let n     = fromInteger (natVal' (proxy# :: Proxy# n))
+      bytes = quot (n+7) 8
       (u,v) = quotRem i 8
-      (q,r) = quotRem n 8
-      bytes = if r == 0
-                 then q
-                 else q + 1
   --
   mba <- newByteArray n
   copyByteArray mba 0 (ByteArray ba#) 0 bytes
@@ -214,11 +208,8 @@ insert (BitMask (Vec ba#)) i (Bit b) = runST $ do
 {-# INLINE zeros #-}
 zeros :: forall n. KnownNat n => BitMask n
 zeros =
-  let n     = fromInteger (natVal' (proxy# :: Proxy# n))
-      (q,r) = quotRem n 8
-      l     = if r == 0
-                 then q
-                 else q + 1
+  let n = fromInteger (natVal' (proxy# :: Proxy# n))
+      l = quot (n+7) 8
   in
   case byteArrayFromListN l (replicate l (0 :: Word8)) of
     ByteArray ba# -> BitMask (Vec ba#)
@@ -226,11 +217,8 @@ zeros =
 {-# INLINE ones #-}
 ones :: forall n. KnownNat n => BitMask n
 ones =
-  let n     = fromInteger (natVal' (proxy# :: Proxy# n))
-      (q,r) = quotRem n 8
-      l     = if r == 0
-                 then q
-                 else q + 1
+  let n = fromInteger (natVal' (proxy# :: Proxy# n))
+      l = quot (n+7) 8
   in
   case byteArrayFromListN l (replicate l (0xff :: Word8)) of
     ByteArray ba# -> BitMask (Vec ba#)

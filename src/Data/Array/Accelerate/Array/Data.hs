@@ -143,16 +143,17 @@ newArrayData (TupRsingle _t)  !size = scalar _t
     scalar (NumScalarType t) = num t
     scalar (BitScalarType t) = bit t
 
+    -- XXX: Arrays of BitMask are stored with each mask aligned to a byte
+    -- boundary, rather than being packed tightly together. This might be a bit
+    -- surprising if we want to cast between types? We don't support any
+    -- non-power-of-two sized integer types though so perhaps this can not come
+    -- up in practice, but it is a bit strange that a 'Vec 4 Bool' will require
+    -- trice as much memory as necessary. ---TLM 2022-08-30
+    --
     bit :: BitType t -> IO (MutableArrayData t)
-    bit TypeBit      = let (q,r) = quotRem size 8
-                        in if r == 0
-                             then allocateArray q
-                             else allocateArray (q+1)
-    bit (TypeMask n) = let k     = fromInteger (natVal' n)
-                           (q,r) = quotRem k 8
-                        in if r == 0
-                             then allocateArray (size * q)
-                             else allocateArray (size * (q + 1))
+    bit TypeBit      = allocateArray ((size + 7) `quot` 8)
+    bit (TypeMask n) = let bytes = quot (fromInteger (natVal' n)+7) 8
+                        in allocateArray (size * bytes)
 
     num :: NumType t -> IO (MutableArrayData t)
     num (IntegralNumType t) = integral t
@@ -567,17 +568,10 @@ liftArrayData n = tuple
     scalar (BitScalarType t) = bit t
 
     bit :: BitType e -> ArrayData e -> CodeQ (ArrayData e)
-    bit TypeBit ua =
-      let (q,r) = quotRem n 8
-       in if r == 0
-            then liftUniqueArray q     ua
-            else liftUniqueArray (q+1) ua
+    bit TypeBit       ua = liftUniqueArray ((n+7) `quot` 8) ua
     bit (TypeMask n') ua =
-      let k     = fromInteger (natVal' n')
-          (q,r) = quotRem k 8
-       in if r == 0
-            then liftUniqueArray (n * q)     ua
-            else liftUniqueArray (n * (q+1)) ua
+      let bytes = quot (fromInteger (natVal' n')+7) 8
+       in liftUniqueArray (n * bytes) ua
 
     num :: NumType e -> ArrayData e -> CodeQ (ArrayData e)
     num (IntegralNumType t) = integral t

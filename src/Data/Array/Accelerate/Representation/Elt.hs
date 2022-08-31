@@ -45,13 +45,11 @@ undefElt = tuple
     bit :: BitType t -> t
     bit TypeBit      = Bit False
     bit (TypeMask n) =
-      let (q, r) = quotRem (fromInteger (natVal' n)) 8
-          bytes  = if r == 0 then q else q + 1
-      in
-      runST $ do
-        mba           <- newByteArray bytes
-        ByteArray ba# <- unsafeFreezeByteArray mba
-        return $! Vec ba#
+      let bytes = quot (fromInteger (natVal' n) + 7) 8
+       in runST $ do
+            mba           <- newByteArray bytes
+            ByteArray ba# <- unsafeFreezeByteArray mba
+            return $! Vec ba#
 
     num :: NumType t -> t
     num (IntegralNumType t) = integral t
@@ -114,9 +112,7 @@ bytesElt = tuple
 
     bit :: BitType t -> Int
     bit TypeBit      = 1 -- stored as Word8
-    bit (TypeMask n) =
-      let (q,r) = quotRem (fromInteger (natVal' n)) 8
-       in if r == 0 then q else q+1
+    bit (TypeMask n) = quot (fromInteger (natVal' n)+7) 8
 
     num :: NumType t -> Int
     num (IntegralNumType t) = integral t
