@@ -150,6 +150,10 @@ newArrayData (TupRsingle _t)  !size = scalar _t
     -- up in practice, but it is a bit strange that a 'Vec 4 Bool' will require
     -- trice as much memory as necessary. ---TLM 2022-08-30
     --
+    -- XXX: Actually this is a problem as both BitSize(Bit) and BitSize(Vec 1
+    -- Bit) are a single bit, so we should be able to coerce between them, but
+    -- they will be stored differently. ---TLM 2022-08-31
+    --
     bit :: BitType t -> IO (MutableArrayData t)
     bit TypeBit      = allocateArray ((size + 7) `quot` 8)
     bit (TypeMask n) = let bytes = quot (fromInteger (natVal' n)+7) 8
