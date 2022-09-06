@@ -17,3 +17,5 @@
 /docs/_build
 *.hi
 *.o
+.direnv
+.envrc
