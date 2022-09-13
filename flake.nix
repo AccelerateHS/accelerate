@@ -77,6 +77,13 @@
             pkgs.haskellPackages.ansi-terminal
             pkgs.haskell.packages.${compiler-nix-name}.fourmolu_0_6_0_0
             pkgs.hlint
+            pkgs.pkg-config
+            pkgs.capstone
+            pkgs.freetype
+            pkgs.glfw
+            pkgs.gtk3
+            pkgs.tbb
+            pkgs.tracy
           ];
         };
     in {
