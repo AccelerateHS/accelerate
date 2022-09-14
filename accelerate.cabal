@@ -1,12 +1,9 @@
-cabal-version:          2.2
-
-name:                   accelerate
-version:                1.3.0.0
-tested-with:            GHC >= 8.6
-build-type:             Custom
-
-synopsis:               An embedded language for accelerated array processing
-
+cabal-version:      2.2
+name:               accelerate
+version:            1.3.0.0
+tested-with:        GHC >=8.6
+build-type:         Custom
+synopsis:           An embedded language for accelerated array processing
 description:
   @Data.Array.Accelerate@ defines an embedded array language for computations
   for high-performance computing in Haskell. Computations on multi-dimensional,
@@ -34,50 +31,50 @@ description:
   The following supported add-ons are available as separate packages. Install
   them from Hackage with @cabal install \<package\>@
   .
-    * @accelerate-llvm-native@: Backend supporting parallel execution on
-      multicore CPUs.
+  * @accelerate-llvm-native@: Backend supporting parallel execution on
+  multicore CPUs.
   .
-    * @accelerate-llvm-ptx@: Backend supporting parallel execution on
-      CUDA-capable NVIDIA GPUs. Requires a GPU with compute capability 2.0 or
-      greater. See the following table for supported GPUs:
-      <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
+  * @accelerate-llvm-ptx@: Backend supporting parallel execution on
+  CUDA-capable NVIDIA GPUs. Requires a GPU with compute capability 2.0 or
+  greater. See the following table for supported GPUs:
+  <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
-    * @accelerate-examples@: Computational kernels and applications
-      demonstrating the use of Accelerate.
+  * @accelerate-examples@: Computational kernels and applications
+  demonstrating the use of Accelerate.
   .
-    * @accelerate-io*@: Fast conversions between Accelerate arrays and other
-      array and data formats.
+  * @accelerate-io*@: Fast conversions between Accelerate arrays and other
+  array and data formats.
   .
-    * @accelerate-fft@: Discrete Fourier transforms, with FFI bindings to
-      optimised implementations.
+  * @accelerate-fft@: Discrete Fourier transforms, with FFI bindings to
+  optimised implementations.
   .
-    * @accelerate-blas@: Numeric linear algebra, with FFI bindings to optimised
-      implementations.
+  * @accelerate-blas@: Numeric linear algebra, with FFI bindings to optimised
+  implementations.
   .
-    * @accelerate-bignum@: Fixed-width large integer arithmetic.
+  * @accelerate-bignum@: Fixed-width large integer arithmetic.
   .
-    * @containers-accelerate@: Container types for use with Accelerate.
+  * @containers-accelerate@: Container types for use with Accelerate.
   .
-    * @hashable-accelerate@: Class for types which can be converted to a hash
-      value.
+  * @hashable-accelerate@: Class for types which can be converted to a hash
+  value.
   .
-    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
+  * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
   .
-    * @containers-accelerate@: Hashing-based container types
+  * @containers-accelerate@: Hashing-based container types
   .
-    * @gloss-accelerate@: Generate gloss pictures from Accelerate.
+  * @gloss-accelerate@: Generate gloss pictures from Accelerate.
   .
-    * @gloss-raster-accelerate@: Parallel rendering of raster images and
-      animations.
+  * @gloss-raster-accelerate@: Parallel rendering of raster images and
+  animations.
   .
-    * @hashable-accelerate@: A class for types which can be converted into a hash value
+  * @hashable-accelerate@: A class for types which can be converted into a hash value
   .
-    * @lens-accelerate@: Lens operators for Accelerate types.
+  * @lens-accelerate@: Lens operators for Accelerate types.
   .
-    * @linear-accelerate@: Linear vector spaces in Accelerate.
+  * @linear-accelerate@: Linear vector spaces in Accelerate.
   .
-    * @mwc-random-accelerate@: Generate Accelerate arrays filled with high
-      quality pseudorandom numbers.
+  * @mwc-random-accelerate@: Generate Accelerate arrays filled with high
+  quality pseudorandom numbers.
   .
   [/Examples and documentation/]
   .
@@ -86,21 +83,21 @@ description:
   The @accelerate-examples@ package demonstrates a range of computational
   kernels and several complete applications, including:
   .
-    * An implementation of the Canny edge detection algorithm
+  * An implementation of the Canny edge detection algorithm
   .
-    * Interactive Mandelbrot and Julia set generators
+  * Interactive Mandelbrot and Julia set generators
   .
-    * A particle-based simulation of stable fluid flows
+  * A particle-based simulation of stable fluid flows
   .
-    * An /n/-body simulation of gravitational attraction between solid particles
+  * An /n/-body simulation of gravitational attraction between solid particles
   .
-    * An implementation of the PageRank algorithm
+  * An implementation of the PageRank algorithm
   .
-    * A simple interactive ray tracer
+  * A simple interactive ray tracer
   .
-    * A cellular automata simulation
+  * A cellular automata simulation
   .
-    * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
+  * A \"password recovery\" tool, for dictionary lookup of MD5 hashes
   .
   @lulesh-accelerate@ is an implementation of the Livermore Unstructured
   Lagrangian Explicit Shock Hydrodynamics (LULESH) mini-app. LULESH represents a
@@ -110,103 +107,102 @@ description:
   .
   [/Mailing list and contacts/]
   .
-    * Gitter chat: <https://gitter.im/AccelerateHS/Lobby>
+  * Gitter chat: <https://gitter.im/AccelerateHS/Lobby>
   .
-    * Mailing list: <accelerate-haskell@googlegroups.com> (discussion of both
-      use and development welcome).
+  * Mailing list: <accelerate-haskell@googlegroups.com> (discussion of both
+  use and development welcome).
   .
-    * Sign up for the mailing list here:
-      <http://groups.google.com/group/accelerate-haskell>
+  * Sign up for the mailing list here:
+  <http://groups.google.com/group/accelerate-haskell>
   .
-    * Bug reports and issue tracking:
-      <https://github.com/AccelerateHS/accelerate/issues>
+  * Bug reports and issue tracking:
+  <https://github.com/AccelerateHS/accelerate/issues>
   .
 
-license:                BSD-3-Clause
-license-file:           LICENSE
-author:                 The Accelerate Team
-maintainer:             Trevor L. McDonell <trevor.mcdonell@gmail.com>
-homepage:               https://github.com/AccelerateHS/accelerate/
-bug-reports:            https://github.com/AccelerateHS/accelerate/issues
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             The Accelerate Team
+maintainer:         Trevor L. McDonell <trevor.mcdonell@gmail.com>
+homepage:           https://github.com/AccelerateHS/accelerate/
+bug-reports:        https://github.com/AccelerateHS/accelerate/issues
+category:
+  Accelerate, Compilers/Interpreters, Concurrency, Data, Parallelism
 
-category:               Accelerate, Compilers/Interpreters, Concurrency, Data, Parallelism
-stability:              Experimental
-
+stability:          Experimental
 extra-source-files:
-    README.md
-    CHANGELOG.md
-    cbits/*.c
-    cbits/*.h
-    -- XKCP
-    cbits/xkcp/*.c
-    cbits/xkcp/*.h
-    cbits/xkcp/*.macros
-    cbits/xkcp/*.inc
-    -- TRACY
-    -- These are referenced directly using the FFI
-    cbits/tracy/*.h
-    cbits/tracy/*.hpp
-    cbits/tracy/*.cpp
-    cbits/tracy/common/*.h
-    cbits/tracy/common/*.hpp
-    cbits/tracy/common/*.cpp
-    cbits/tracy/client/*.h
-    cbits/tracy/client/*.hpp
-    cbits/tracy/client/*.cpp
-    -- These are used to build Tracy's client tools in Setup.hs
-    cbits/tracy/capture/build/unix/Makefile
-    cbits/tracy/capture/build/unix/*.mk
-    cbits/tracy/profiler/build/unix/Makefile
-    cbits/tracy/profiler/build/unix/*.mk
-    cbits/tracy/common/*.mk
-    -- The Makefiles fetch the source files from these Visual Studio project files
-    cbits/tracy/capture/build/win32/capture.vcxproj
-    cbits/tracy/capture/build/win32/capture.vcxproj.filters
-    cbits/tracy/profiler/build/win32/Tracy.vcxproj
-    cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
-    -- Used by the Tracy's client tools
-    cbits/tracy/capture/src/*.cpp
-    cbits/tracy/imgui/*.h
-    cbits/tracy/imgui/*.cpp
-    cbits/tracy/imgui/misc/freetype/*.h
-    cbits/tracy/imgui/misc/freetype/*.cpp
-    cbits/tracy/libbacktrace/*.h
-    cbits/tracy/libbacktrace/*.hpp
-    cbits/tracy/libbacktrace/*.cpp
-    cbits/tracy/nfd/*.h
-    cbits/tracy/nfd/*.c
-    cbits/tracy/profiler/src/*.h
-    cbits/tracy/profiler/src/*.hpp
-    cbits/tracy/profiler/src/*.cpp
-    cbits/tracy/profiler/libs/gl3w/GL/*.h
-    cbits/tracy/profiler/libs/gl3w/GL/*.c
-    cbits/tracy/server/*.h
-    cbits/tracy/server/*.hpp
-    cbits/tracy/server/*.cpp
-    cbits/tracy/zstd/*.h
-    cbits/tracy/zstd/common/*.h
-    cbits/tracy/zstd/common/*.c
-    cbits/tracy/zstd/compress/*.h
-    cbits/tracy/zstd/compress/*.c
-    cbits/tracy/zstd/decompress/*.h
-    cbits/tracy/zstd/decompress/*.c
-    cbits/tracy/zstd/dictBuilder/*.h
-    cbits/tracy/zstd/dictBuilder/*.c
+  cbits/*.c
+  cbits/*.h
+  cbits/tracy/*.cpp
+  cbits/tracy/*.h
+  cbits/tracy/*.hpp
+  cbits/tracy/capture/build/unix/*.mk
+  cbits/tracy/capture/build/unix/Makefile
+  cbits/tracy/capture/build/win32/capture.vcxproj
+  cbits/tracy/capture/build/win32/capture.vcxproj.filters
+  cbits/tracy/capture/src/*.cpp
+  cbits/tracy/client/*.cpp
+  cbits/tracy/client/*.h
+  cbits/tracy/client/*.hpp
+  cbits/tracy/common/*.cpp
+  cbits/tracy/common/*.h
+  cbits/tracy/common/*.hpp
+  cbits/tracy/common/*.mk
+  cbits/tracy/imgui/*.cpp
+  cbits/tracy/imgui/*.h
+  cbits/tracy/imgui/misc/freetype/*.cpp
+  cbits/tracy/imgui/misc/freetype/*.h
+  cbits/tracy/libbacktrace/*.cpp
+  cbits/tracy/libbacktrace/*.h
+  cbits/tracy/libbacktrace/*.hpp
+  cbits/tracy/nfd/*.c
+  cbits/tracy/nfd/*.h
+  cbits/tracy/profiler/build/unix/*.mk
+  cbits/tracy/profiler/build/unix/Makefile
+  cbits/tracy/profiler/build/win32/Tracy.vcxproj
+  cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
+  cbits/tracy/profiler/libs/gl3w/GL/*.c
+  cbits/tracy/profiler/libs/gl3w/GL/*.h
+  cbits/tracy/profiler/src/*.cpp
+  cbits/tracy/profiler/src/*.h
+  cbits/tracy/profiler/src/*.hpp
+  cbits/tracy/server/*.cpp
+  cbits/tracy/server/*.h
+  cbits/tracy/server/*.hpp
+  cbits/tracy/zstd/*.h
+  cbits/tracy/zstd/common/*.c
+  cbits/tracy/zstd/common/*.h
+  cbits/tracy/zstd/compress/*.c
+  cbits/tracy/zstd/compress/*.h
+  cbits/tracy/zstd/decompress/*.c
+  cbits/tracy/zstd/decompress/*.h
+  cbits/tracy/zstd/dictBuilder/*.c
+  cbits/tracy/zstd/dictBuilder/*.h
+  cbits/xkcp/*.c
+  cbits/xkcp/*.h
+  cbits/xkcp/*.inc
+  cbits/xkcp/*.macros
+  CHANGELOG.md
+  README.md
 
-extra-doc-files:
-    images/*.png
+-- XKCP
+-- TRACY
+-- These are referenced directly using the FFI
+-- These are used to build Tracy's client tools in Setup.hs
+-- The Makefiles fetch the source files from these Visual Studio project files
+-- Used by the Tracy's client tools
+extra-doc-files:    images/*.png
 
 custom-setup
   setup-depends:
-      base              >= 4.10
+    , base           >=4.10
     , Cabal
-    , cabal-doctest     >= 1.0
-    , directory         >= 1.0
-    , filepath          >= 1.0
+    , cabal-doctest  >=1.0
+    , directory      >=1.0
+    , filepath       >=1.0
 
 flag debug
-  manual:               True
-  default:              False
+  manual:      True
+  default:     False
   description:
     Enable kernel profiling and debug tracing messages.
     .
@@ -214,395 +210,355 @@ flag debug
     built to collect and view profiling data from supported backends. This
     requires several external dependencies:
     .
-      * pkg-config
+    * pkg-config
     .
-      * capstone
+    * capstone
     .
-      * freetype2
+    * freetype2
     .
-      * glfw3
+    * glfw3
     .
-      * gtk3 (linux only)
+    * gtk3 (linux only)
     .
-      * TBB (should be part of your compiler toolchain)
+    * TBB (should be part of your compiler toolchain)
     .
     For example on Debian/Ubuntu you can install all of these via:
     .
-      > sudo apt install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+    > sudo apt install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
     .
     Or on macOS via:
     .
-      > brew install pkg-config capstone freetype glfw
+    > brew install pkg-config capstone freetype glfw
     .
     With debugging enabled, applications will read the following options from
     the environment variable @ACCELERATE_FLAGS@, and via the command-line as:
     .
-      > ./program +ACC ... -ACC
+    > ./program +ACC ... -ACC
     .
     Note that a backend may not implement (or be applicable to) all options.
     .
     The following flags control phases of the compiler. The are enabled with
     @-f\<flag\>@ and can be reveresed with @-fno-\<flag\>@:
     .
-      * @acc-sharing@: Enable sharing recovery of array expressions (True).
+    * @acc-sharing@: Enable sharing recovery of array expressions (True).
     .
-      * @exp-sharing@: Enable sharing recovery of scalar expressions (True).
+    * @exp-sharing@: Enable sharing recovery of scalar expressions (True).
     .
-      * @fusion@: Enable array fusion (True).
+    * @fusion@: Enable array fusion (True).
     .
-      * @simplify@: Enable program simplification phase (True).
+    * @simplify@: Enable program simplification phase (True).
     .
-      * @inplace@: Enable in-place array updates (True).
+    * @inplace@: Enable in-place array updates (True).
     .
-      * @flush-cache@: Clear any persistent caches on program startup (False).
+    * @flush-cache@: Clear any persistent caches on program startup (False).
     .
-      * @force-recomp@: Force recompilation of array programs (False).
+    * @force-recomp@: Force recompilation of array programs (False).
     .
-      * @fast-math@: Allow algebraically equivalent transformations which may
-        change floating point results (e.g., reassociate) (True).
+    * @fast-math@: Allow algebraically equivalent transformations which may
+    change floating point results (e.g., reassociate) (True).
     .
-      * @fast-permute-const@: Allow non-atomic `permute const` for product types
-        (True).
+    * @fast-permute-const@: Allow non-atomic `permute const` for product types
+    (True).
     .
     The following options control debug message output, and are enabled with
     @-d\<flag\>@.
     .
-      * @debug@: Include debug symbols in the generated and compiled kernels.
+    * @debug@: Include debug symbols in the generated and compiled kernels.
     .
-      * @verbose@: Be extra chatty.
+    * @verbose@: Be extra chatty.
     .
-      * @dump-phases@: Print timing information about each phase of the compiler.
-        Enable GC stats (@+RTS -t@ or otherwise) for memory usage information.
+    * @dump-phases@: Print timing information about each phase of the compiler.
+    Enable GC stats (@+RTS -t@ or otherwise) for memory usage information.
     .
-      * @dump-sharing@: Print information related to sharing recovery.
+    * @dump-sharing@: Print information related to sharing recovery.
     .
-      * @dump-simpl-stats@: Print statistics related to fusion & simplification.
+    * @dump-simpl-stats@: Print statistics related to fusion & simplification.
     .
-      * @dump-simpl-iterations@: Print a summary after each simplifier iteration.
+    * @dump-simpl-iterations@: Print a summary after each simplifier iteration.
     .
-      * @dump-vectorisation@: Print information related to the vectoriser.
+    * @dump-vectorisation@: Print information related to the vectoriser.
     .
-      * @dump-dot@: Generate a representation of the program graph in Graphviz
-        DOT format.
+    * @dump-dot@: Generate a representation of the program graph in Graphviz
+    DOT format.
     .
-      * @dump-simpl-dot@: Generate a more compact representation of the program
-        graph in Graphviz DOT format. In particular, scalar expressions are
-        elided.
+    * @dump-simpl-dot@: Generate a more compact representation of the program
+    graph in Graphviz DOT format. In particular, scalar expressions are
+    elided.
     .
-      * @dump-gc@: Print information related to the Accelerate garbage
-        collector.
+    * @dump-gc@: Print information related to the Accelerate garbage
+    collector.
     .
-      * @dump-gc-stats@: Print aggregate garbage collection information at the
-        end of program execution.
+    * @dump-gc-stats@: Print aggregate garbage collection information at the
+    end of program execution.
     .
-      * @dump-cc@: Print information related to kernel code
-        generation/compilation. Print the generated code if @verbose@.
+    * @dump-cc@: Print information related to kernel code
+    generation/compilation. Print the generated code if @verbose@.
     .
-      * @dump-ld@: Print information related to runtime linking.
+    * @dump-ld@: Print information related to runtime linking.
     .
-      * @dump-asm@: Print information related to kernel assembly. Print the
-        assembled code if @verbose@.
+    * @dump-asm@: Print information related to kernel assembly. Print the
+    assembled code if @verbose@.
     .
-      * @dump-exec@: Print information related to program execution.
+    * @dump-exec@: Print information related to program execution.
     .
-      * @dump-sched@: Print information related to execution scheduling.
+    * @dump-sched@: Print information related to execution scheduling.
     .
 
 flag bounds-checks
-  manual:               True
-  default:              True
-  description:          Enable bounds checking
+  manual:      True
+  default:     True
+  description: Enable bounds checking
 
 flag unsafe-checks
-  manual:               True
-  default:              False
-  description:          Enable bounds checking in unsafe operations
+  manual:      True
+  default:     False
+  description: Enable bounds checking in unsafe operations
 
 flag internal-checks
-  manual:               True
-  default:              False
-  description:          Enable internal consistency checks
+  manual:      True
+  default:     False
+  description: Enable internal consistency checks
 
 -- Enabling this drastically increases build times
 -- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
 flag nofib
-  manual:               True
-  default:              False
-  description:          Build the nofib test suite (required for backend testing)
+  manual:      True
+  default:     False
+  description: Build the nofib test suite (required for backend testing)
 
 library
   build-depends:
-          base                          >= 4.12 && <= 4.17
-        , ansi-terminal                 >= 0.6.2
-        , base-orphans                  >= 0.3
-        , bytestring                    >= 0.10.2
-        , containers                    >= 0.3
-        , deepseq                       >= 1.3
-        , directory                     >= 1.0
-        , double-conversion             >= 2.0
-        , exceptions                    >= 0.6
-        , filepath                      >= 1.0
-        , formatting                    >= 7.0
-        , ghc-prim
-        , half                          >= 0.3
-        , hashable                      >= 1.1
-        , hashtables                    >= 1.2.3
-        , hedgehog                      >= 0.5
-        , microlens                     >= 0.4
-        , mtl                           >= 2.0
-        , prettyprinter                 >= 1.7
-        , prettyprinter-ansi-terminal   >= 1.1.2
-        , primitive                     >= 0.6.4
-        , tasty                         >= 0.11
-        , template-haskell
-        , terminal-size                 >= 0.3
-        , text                          >= 1.2.4
-        , transformers                  >= 0.3
-        , unique
-        , unordered-containers          >= 0.2
-        , vector                        >= 0.10
+    , ansi-terminal                >=0.6.2
+    , base                         >=4.12   && <=4.17
+    , base-orphans                 >=0.3
+    , bytestring                   >=0.10.2
+    , containers                   >=0.3
+    , deepseq                      >=1.3
+    , directory                    >=1.0
+    , double-conversion            >=2.0
+    , exceptions                   >=0.6
+    , filepath                     >=1.0
+    , formatting                   >=7.0
+    , ghc-prim
+    , half                         >=0.3
+    , hashable                     >=1.1
+    , hashtables                   >=1.2.3
+    , hedgehog                     >=0.5
+    , microlens                    >=0.4
+    , mtl                          >=2.0
+    , prettyprinter                >=1.7
+    , prettyprinter-ansi-terminal  >=1.1.2
+    , primitive                    >=0.6.4
+    , tasty                        >=0.11
+    , template-haskell
+    , terminal-size                >=0.3
+    , text                         >=1.2.4
+    , transformers                 >=0.3
+    , unique
+    , unordered-containers         >=0.2
+    , vector                       >=0.10
 
   exposed-modules:
-        -- The core language and reference implementation
-        Data.Array.Accelerate
-        Data.Array.Accelerate.Interpreter
+    Crypto.Hash.XKCP
+    Data.Array.Accelerate
+    Data.Array.Accelerate.Analysis.Hash
+    Data.Array.Accelerate.Analysis.Match
+    Data.Array.Accelerate.Array.Data
+    Data.Array.Accelerate.Array.Remote
+    Data.Array.Accelerate.Array.Remote.Class
+    Data.Array.Accelerate.Array.Remote.LRU
+    Data.Array.Accelerate.Array.Remote.Table
+    Data.Array.Accelerate.Array.Unique
+    Data.Array.Accelerate.AST
+    Data.Array.Accelerate.AST.Environment
+    Data.Array.Accelerate.AST.Idx
+    Data.Array.Accelerate.AST.LeftHandSide
+    Data.Array.Accelerate.AST.Var
+    Data.Array.Accelerate.Async
+    Data.Array.Accelerate.Control.Monad
+    Data.Array.Accelerate.Data.Bits
+    Data.Array.Accelerate.Data.Complex
+    Data.Array.Accelerate.Data.Either
+    Data.Array.Accelerate.Data.Fold
+    Data.Array.Accelerate.Data.Functor
+    Data.Array.Accelerate.Data.Maybe
+    Data.Array.Accelerate.Data.Monoid
+    Data.Array.Accelerate.Data.Ratio
+    Data.Array.Accelerate.Debug.Internal
+    Data.Array.Accelerate.Debug.Trace
+    Data.Array.Accelerate.Error
+    Data.Array.Accelerate.Interpreter
+    Data.Array.Accelerate.Lifetime
+    Data.Array.Accelerate.Pretty
+    Data.Array.Accelerate.Representation.Array
+    Data.Array.Accelerate.Representation.Elt
+    Data.Array.Accelerate.Representation.Shape
+    Data.Array.Accelerate.Representation.Slice
+    Data.Array.Accelerate.Representation.Stencil
+    Data.Array.Accelerate.Representation.Tag
+    Data.Array.Accelerate.Representation.Type
+    Data.Array.Accelerate.Representation.Vec
+    Data.Array.Accelerate.Smart
+    Data.Array.Accelerate.Sugar.Array
+    Data.Array.Accelerate.Sugar.Elt
+    Data.Array.Accelerate.Sugar.Foreign
+    Data.Array.Accelerate.Sugar.Shape
+    Data.Array.Accelerate.Sugar.Tag
+    Data.Array.Accelerate.Sugar.Vec
+    Data.Array.Accelerate.Test.NoFib
+    Data.Array.Accelerate.Test.Similar
+    Data.Array.Accelerate.Trafo
+    Data.Array.Accelerate.Trafo.Config
+    Data.Array.Accelerate.Trafo.Delayed
+    Data.Array.Accelerate.Trafo.Fusion
+    Data.Array.Accelerate.Trafo.LetSplit
+    Data.Array.Accelerate.Trafo.Sharing
+    Data.Array.Accelerate.Trafo.Simplify
+    Data.Array.Accelerate.Trafo.Substitution
+    Data.Array.Accelerate.Trafo.Var
+    Data.Array.Accelerate.Type
+    Data.Array.Accelerate.Unsafe
+    Data.BitSet
+    Data.Primitive.Vec
 
-        -- Prelude-like
-        Data.Array.Accelerate.Control.Monad
-        Data.Array.Accelerate.Data.Bits
-        Data.Array.Accelerate.Data.Complex
-        Data.Array.Accelerate.Data.Either
-        Data.Array.Accelerate.Data.Fold
-        Data.Array.Accelerate.Data.Functor
-        Data.Array.Accelerate.Data.Maybe
-        Data.Array.Accelerate.Data.Monoid
-        Data.Array.Accelerate.Data.Ratio
-        Data.Array.Accelerate.Debug.Trace
-        Data.Array.Accelerate.Unsafe
-
-        -- For backend development (hidden)
-        Data.Array.Accelerate.AST
-        Data.Array.Accelerate.AST.Environment
-        Data.Array.Accelerate.AST.Idx
-        Data.Array.Accelerate.AST.LeftHandSide
-        Data.Array.Accelerate.AST.Var
-        Data.Array.Accelerate.Analysis.Hash
-        Data.Array.Accelerate.Analysis.Match
-        Data.Array.Accelerate.Array.Data
-        Data.Array.Accelerate.Array.Remote
-        Data.Array.Accelerate.Array.Remote.Class
-        Data.Array.Accelerate.Array.Remote.LRU
-        Data.Array.Accelerate.Array.Remote.Table
-        Data.Array.Accelerate.Array.Unique
-        Data.Array.Accelerate.Async
-        Data.Array.Accelerate.Error
-        Data.Array.Accelerate.Debug.Internal
-        Data.Array.Accelerate.Lifetime
-        Data.Array.Accelerate.Pretty
-        Data.Array.Accelerate.Representation.Array
-        Data.Array.Accelerate.Representation.Elt
-        Data.Array.Accelerate.Representation.Shape
-        Data.Array.Accelerate.Representation.Slice
-        Data.Array.Accelerate.Representation.Stencil
-        Data.Array.Accelerate.Representation.Tag
-        Data.Array.Accelerate.Representation.Type
-        Data.Array.Accelerate.Representation.Vec
-        Data.Array.Accelerate.Smart
-        Data.Array.Accelerate.Sugar.Array
-        Data.Array.Accelerate.Sugar.Elt
-        Data.Array.Accelerate.Sugar.Foreign
-        Data.Array.Accelerate.Sugar.Shape
-        Data.Array.Accelerate.Sugar.Tag
-        Data.Array.Accelerate.Sugar.Vec
-        Data.Array.Accelerate.Trafo
-        Data.Array.Accelerate.Trafo.Config
-        Data.Array.Accelerate.Trafo.Delayed
-        Data.Array.Accelerate.Trafo.Fusion
-        Data.Array.Accelerate.Trafo.LetSplit
-        Data.Array.Accelerate.Trafo.Sharing
-        Data.Array.Accelerate.Trafo.Simplify
-        Data.Array.Accelerate.Trafo.Substitution
-        Data.Array.Accelerate.Trafo.Var
-        Data.Array.Accelerate.Type
-
-        -- For testing
-        Data.Array.Accelerate.Test.NoFib
-        Data.Array.Accelerate.Test.Similar
-
-        -- Other
-        Data.BitSet
-        Data.Primitive.Vec
-        Crypto.Hash.XKCP
-
+  -- The core language and reference implementation
+  -- Prelude-like
+  -- For backend development (hidden)
+  -- For testing
+  -- Other
   other-modules:
-        Data.Array.Accelerate.Analysis.Hash.TH
-        Data.Array.Accelerate.Array.Remote.Nursery
-        Data.Array.Accelerate.Classes.Bounded
-        Data.Array.Accelerate.Classes.Enum
-        Data.Array.Accelerate.Classes.Eq
-        Data.Array.Accelerate.Classes.Floating
-        Data.Array.Accelerate.Classes.Fractional
-        Data.Array.Accelerate.Classes.FromIntegral
-        Data.Array.Accelerate.Classes.Integral
-        Data.Array.Accelerate.Classes.Num
-        Data.Array.Accelerate.Classes.Ord
-        Data.Array.Accelerate.Classes.Rational
-        Data.Array.Accelerate.Classes.Real
-        Data.Array.Accelerate.Classes.RealFloat
-        Data.Array.Accelerate.Classes.RealFrac
-        Data.Array.Accelerate.Classes.ToFloating
-        Data.Array.Accelerate.Debug.Internal.Clock
-        Data.Array.Accelerate.Debug.Internal.Flags
-        Data.Array.Accelerate.Debug.Internal.Graph
-        Data.Array.Accelerate.Debug.Internal.Profile
-        Data.Array.Accelerate.Debug.Internal.Stats
-        Data.Array.Accelerate.Debug.Internal.Timed
-        Data.Array.Accelerate.Debug.Internal.Trace
-        Data.Array.Accelerate.Debug.Internal.Tracy
-        Data.Array.Accelerate.Language
-        Data.Array.Accelerate.Lift
-        Data.Array.Accelerate.Orphans
-        Data.Array.Accelerate.Pattern
-        Data.Array.Accelerate.Pattern.Bool
-        Data.Array.Accelerate.Pattern.Either
-        Data.Array.Accelerate.Pattern.Maybe
-        Data.Array.Accelerate.Pattern.Ordering
-        Data.Array.Accelerate.Pattern.TH
-        Data.Array.Accelerate.Prelude
-        Data.Array.Accelerate.Pretty.Graphviz
-        Data.Array.Accelerate.Pretty.Graphviz.Monad
-        Data.Array.Accelerate.Pretty.Graphviz.Type
-        Data.Array.Accelerate.Pretty.Print
-        Data.Array.Accelerate.Trafo.Algebra
-        Data.Array.Accelerate.Trafo.Environment
-        Data.Array.Accelerate.Trafo.Shrink
-        Data.Atomic
+    Data.Array.Accelerate.Analysis.Hash.TH
+    Data.Array.Accelerate.Array.Remote.Nursery
+    Data.Array.Accelerate.Classes.Bounded
+    Data.Array.Accelerate.Classes.Enum
+    Data.Array.Accelerate.Classes.Eq
+    Data.Array.Accelerate.Classes.Floating
+    Data.Array.Accelerate.Classes.Fractional
+    Data.Array.Accelerate.Classes.FromIntegral
+    Data.Array.Accelerate.Classes.Integral
+    Data.Array.Accelerate.Classes.Num
+    Data.Array.Accelerate.Classes.Ord
+    Data.Array.Accelerate.Classes.Rational
+    Data.Array.Accelerate.Classes.Real
+    Data.Array.Accelerate.Classes.RealFloat
+    Data.Array.Accelerate.Classes.RealFrac
+    Data.Array.Accelerate.Classes.ToFloating
+    Data.Array.Accelerate.Debug.Internal.Clock
+    Data.Array.Accelerate.Debug.Internal.Flags
+    Data.Array.Accelerate.Debug.Internal.Graph
+    Data.Array.Accelerate.Debug.Internal.Profile
+    Data.Array.Accelerate.Debug.Internal.Stats
+    Data.Array.Accelerate.Debug.Internal.Timed
+    Data.Array.Accelerate.Debug.Internal.Trace
+    Data.Array.Accelerate.Debug.Internal.Tracy
+    Data.Array.Accelerate.Language
+    Data.Array.Accelerate.Lift
+    Data.Array.Accelerate.Orphans
+    Data.Array.Accelerate.Pattern
+    Data.Array.Accelerate.Pattern.Bool
+    Data.Array.Accelerate.Pattern.Either
+    Data.Array.Accelerate.Pattern.Maybe
+    Data.Array.Accelerate.Pattern.Ordering
+    Data.Array.Accelerate.Pattern.TH
+    Data.Array.Accelerate.Prelude
+    Data.Array.Accelerate.Pretty.Graphviz
+    Data.Array.Accelerate.Pretty.Graphviz.Monad
+    Data.Array.Accelerate.Pretty.Graphviz.Type
+    Data.Array.Accelerate.Pretty.Print
+    Data.Array.Accelerate.Test.NoFib.Base
+    Data.Array.Accelerate.Test.NoFib.Config
+    Data.Array.Accelerate.Trafo.Algebra
+    Data.Array.Accelerate.Trafo.Environment
+    Data.Array.Accelerate.Trafo.Shrink
+    Data.Atomic
+    Language.Haskell.TH.Extra
 
-        -- Data.Array.Accelerate.Array.Lifted
-        -- Data.Array.Accelerate.Trafo.Vectorise
+  -- Data.Array.Accelerate.Array.Lifted
+  -- Data.Array.Accelerate.Trafo.Vectorise
 
-        -- nofib test suite
-        Data.Array.Accelerate.Test.NoFib.Base
-        Data.Array.Accelerate.Test.NoFib.Config
-
-        Language.Haskell.TH.Extra
-
+  -- nofib test suite
   if flag(nofib)
     build-depends:
-          tasty-expected-failure        >= 0.11
-        , tasty-hedgehog                >= 0.1
-        , tasty-hunit                   >= 0.9
-        , tasty-rerun                   >= 1.1
+      , tasty-expected-failure  >=0.11
+      , tasty-hedgehog          >=0.1
+      , tasty-hunit             >=0.9
+      , tasty-rerun             >=1.1
+
     --     , pipes                         >= 4.1.6   -- #286
 
     other-modules:
-        Data.Array.Accelerate.Test.NoFib.Sharing
-        Data.Array.Accelerate.Test.NoFib.Prelude
-        Data.Array.Accelerate.Test.NoFib.Prelude.Map
-        Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
-        Data.Array.Accelerate.Test.NoFib.Prelude.SIMD
-        Data.Array.Accelerate.Test.NoFib.Prelude.Fold
-        Data.Array.Accelerate.Test.NoFib.Prelude.Scan
-        Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
-        Data.Array.Accelerate.Test.NoFib.Prelude.Permute
-        Data.Array.Accelerate.Test.NoFib.Prelude.Filter
-        Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
-        Data.Array.Accelerate.Test.NoFib.Imaginary
-        Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
-        Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
-        Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
-        Data.Array.Accelerate.Test.NoFib.Spectral
-        Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
-        Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
-        Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
-        Data.Array.Accelerate.Test.NoFib.Issues
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue93
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue102
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue114
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue119
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue123
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue137
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue168
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue184
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue185
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue187
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue228
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue255
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue264
-        -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue287
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue288
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue362
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue364
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue407
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue409
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue427
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue436
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue437
-        Data.Array.Accelerate.Test.NoFib.Issues.Issue439
+      Data.Array.Accelerate.Test.NoFib.Imaginary
+      Data.Array.Accelerate.Test.NoFib.Imaginary.DotP
+      Data.Array.Accelerate.Test.NoFib.Imaginary.SASUM
+      Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY
+      Data.Array.Accelerate.Test.NoFib.Issues
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue102
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue114
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue119
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue123
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue137
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue168
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue184
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue185
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue187
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue228
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue255
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue264
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue287
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue288
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue362
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue364
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue407
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue409
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue427
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue436
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue437
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue439
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue93
+      Data.Array.Accelerate.Test.NoFib.Prelude
+      Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
+      Data.Array.Accelerate.Test.NoFib.Prelude.Filter
+      Data.Array.Accelerate.Test.NoFib.Prelude.Fold
+      Data.Array.Accelerate.Test.NoFib.Prelude.Map
+      Data.Array.Accelerate.Test.NoFib.Prelude.Permute
+      Data.Array.Accelerate.Test.NoFib.Prelude.Scan
+      Data.Array.Accelerate.Test.NoFib.Prelude.SIMD
+      Data.Array.Accelerate.Test.NoFib.Prelude.Stencil
+      Data.Array.Accelerate.Test.NoFib.Prelude.ZipWith
+      Data.Array.Accelerate.Test.NoFib.Sharing
+      Data.Array.Accelerate.Test.NoFib.Spectral
+      Data.Array.Accelerate.Test.NoFib.Spectral.BlackScholes
+      Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
+      Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
 
+  -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
   else
-    cpp-options:
-        -DACCELERATE_DISABLE_NOFIB
+    cpp-options: -DACCELERATE_DISABLE_NOFIB
 
-  if impl(ghc >= 8.0)
-    exposed-modules:
-        Data.Array.Accelerate.Data.Semigroup
+  if impl(ghc >=8.0)
+    exposed-modules: Data.Array.Accelerate.Data.Semigroup
 
-  default-language:
-        Haskell2010
-
-  hs-source-dirs:
-        src
-
-  cc-options:
-        -O3
-        -Wall
-
-  cxx-options:
-        -O3
-        -Wall
-        -std=c++11
-
+  default-language: Haskell2010
+  hs-source-dirs:   src
+  cc-options:       -O3 -Wall
+  cxx-options:      -O3 -Wall -std=c++11
   ghc-options:
-        -O2
-        -Wall
-        -Wcompat
-        -Wmissed-specialisations
-        -- -Wredundant-constraints
-        -freduction-depth=100
-        -fspec-constr-count=50
-        -funbox-strict-fields
-        -optc=-O3
-        -optc=-Wall
+    -O2 -Wall -Wcompat -Wmissed-specialisations -freduction-depth=100
+    -fspec-constr-count=50 -funbox-strict-fields -optc=-O3 -optc=-Wall
 
-  if impl(ghc >= 8.10)
-    ghc-options:
-        -optcxx=-O3
-        -optcxx=-Wall
-        -optcxx=-std=c++11
+  -- -Wredundant-constraints
+  if impl(ghc >=8.10)
+    ghc-options: -optcxx=-O3 -optcxx=-Wall -optcxx=-std=c++11
 
-  ghc-prof-options:
-        -caf-all
-        -auto-all
+  ghc-prof-options: -caf-all -auto-all
 
   if flag(debug)
-    cc-options:
-        -DACCELERATE_DEBUG
+    cc-options:  -DACCELERATE_DEBUG
+    cpp-options: -DACCELERATE_DEBUG -DTRACY_ENABLE -DTRACY_NO_SAMPLING
+    cxx-options: -DTRACY_ENABLE -DTRACY_NO_SAMPLING
 
-    cpp-options:
-        -DACCELERATE_DEBUG
-        -DTRACY_ENABLE
-        -DTRACY_NO_SAMPLING
-
-    cxx-options:
-        -DTRACY_ENABLE
-        -DTRACY_NO_SAMPLING
-
-    if impl(ghc >= 8.10)
-      ghc-options:
-        -optcxx=-DTRACY_ENABLE
-        -optcxx=-DTRACY_NO_SAMPLING
+    if impl(ghc >=8.10)
+      ghc-options: -optcxx=-DTRACY_ENABLE -optcxx=-DTRACY_NO_SAMPLING
 
     -- Accelerate's backends may use dynamic linking to load compiled kernels
     -- that directly call Tracy's functions. In that case these symbols need to
@@ -612,165 +568,130 @@ library
     -- @--export-dynamic-symbol-list=file@ but these seem to be less portable
     -- between compilers.
     if !os(windows)
-      ld-options:
-        -rdynamic
+      ld-options: -rdynamic
 
   if flag(bounds-checks)
-    cpp-options:
-        -DACCELERATE_BOUNDS_CHECKS
+    cpp-options: -DACCELERATE_BOUNDS_CHECKS
 
   if flag(unsafe-checks)
-    cpp-options:
-        -DACCELERATE_UNSAFE_CHECKS
+    cpp-options: -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
-    cpp-options:
-        -DACCELERATE_INTERNAL_CHECKS
+    cpp-options: -DACCELERATE_INTERNAL_CHECKS
 
   if os(windows)
-    cc-options:
-        -- https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
-        -fno-asynchronous-unwind-tables
+    cc-options:    -fno-asynchronous-unwind-tables
+
+    -- https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
     ghc-options:
-        -optc=-fno-asynchronous-unwind-tables
-        -fexternal-interpreter
-    build-depends:
-        Win32
+      -optc=-fno-asynchronous-unwind-tables -fexternal-interpreter
+
+    build-depends: Win32
+
   else
-    build-depends:
-        unix
+    build-depends: unix
 
   -- https://stackoverflow.com/questions/65966969/why-does-march-native-not-work-on-apple-m1
-  if !(os(darwin) && arch(aarch64))
-    cc-options:
-        -march=native
-    cxx-options:
-        -march=native
-    ghc-options:
-        -optc=-march=native
-    if impl(ghc >= 8.10)
-      ghc-options:
-        -optcxx=-march=native
+  if !(os(osx) && arch(aarch64))
+    cc-options:  -march=native
+    cxx-options: -march=native
+    ghc-options: -optc=-march=native
 
-  -- Don't add the extensions list here. Instead, place individual LANGUAGE
-  -- pragmas in the files that require a specific extension. This means the
-  -- project loads in GHCi, and avoids extension clashes.
-  --
-  -- Extensions:
+    if impl(ghc >=8.10)
+      ghc-options: -optcxx=-march=native
+
+-- Don't add the extensions list here. Instead, place individual LANGUAGE
+-- pragmas in the files that require a specific extension. This means the
+-- project loads in GHCi, and avoids extension clashes.
+--
+-- Extensions:
 
 
 test-suite doctest
-  type:                 exitcode-stdio-1.0
-  default-language:     Haskell2010
-  hs-source-dirs:       test/doctest
-  main-is:              Main.hs
-  other-modules:        Build_doctests
-  autogen-modules:      Build_doctests
-
+  type:              exitcode-stdio-1.0
+  default-language:  Haskell2010
+  hs-source-dirs:    test/doctest
+  main-is:           Main.hs
+  other-modules:     Build_doctests
+  autogen-modules:   Build_doctests
   build-depends:
-          base                          >= 4.10
-        , accelerate
-        , doctest                       >= 0.11
+    , accelerate
+    , base        >=4.10
+    , doctest     >=0.11
 
-  ghc-options:
-        -Wall
-        -threaded
-        -rtsopts
-
+  ghc-options:       -Wall -threaded -rtsopts
   x-doctest-options:
-        -freduction-depth=100
-        -fspec-constr-count=50
+    -freduction-depth=100
+    -fspec-constr-count=50
 
   if os(windows)
-    ghc-options:
-        -fexternal-interpreter
-
+    ghc-options: -fexternal-interpreter
 
 test-suite nofib-interpreter
-  type:                 exitcode-stdio-1.0
-  default-language:     Haskell2010
-  hs-source-dirs:       test/nofib
-  main-is:              Main.hs
+  type:             exitcode-stdio-1.0
+  default-language: Haskell2010
+  hs-source-dirs:   test/nofib
+  main-is:          Main.hs
 
   if !flag(nofib)
     buildable: False
 
   build-depends:
-          base                          >= 4.10
-        , accelerate
+    , accelerate
+    , base        >=4.10
 
   ghc-options:
-        -O2
-        -Wall
-        -threaded
-        -rtsopts
-        -with-rtsopts=-A128M
-        -with-rtsopts=-n4M
+    -O2 -Wall -threaded -rtsopts -with-rtsopts=-A128M
+    -with-rtsopts=-n4M
 
   if os(windows)
-    ghc-options:
-        -fexternal-interpreter
-
+    ghc-options: -fexternal-interpreter
 
 executable tracy
-  default-language:     Haskell2010
-  hs-source-dirs:       app
-  main-is:              Main.hs
+  default-language:  Haskell2010
+  hs-source-dirs:    app
+  main-is:           Main.hs
 
   if !flag(debug)
     buildable: False
 
   build-depends:
-        base                            >= 4.10
-      , accelerate
-      , formatting
+    , accelerate
+    , base        >=4.10
+    , formatting
 
-  pkgconfig-depends:
-        capstone
-      , freetype2
-      , glfw3
+  pkgconfig-depends: capstone, freetype2, glfw3
 
-  if !os(windows) && !os(darwin)
-    pkgconfig-depends:
-        gtk+-3.0
+  if (!os(windows) && !os(osx))
+    pkgconfig-depends: gtk+-3.0
 
-  cpp-options:
-        -DEXECUTABLE="tracy"
-
-  ghc-options:
-        -O0
-
+  cpp-options:       -DEXECUTABLE="tracy"
+  ghc-options:       -O0
 
 executable tracy-capture
-  default-language:     Haskell2010
-  hs-source-dirs:       app
-  main-is:              Main.hs
+  default-language:  Haskell2010
+  hs-source-dirs:    app
+  main-is:           Main.hs
 
   if !flag(debug)
     buildable: False
 
   build-depends:
-        base                            >= 4.10
-      , accelerate
-      , formatting
+    , accelerate
+    , base        >=4.10
+    , formatting
 
-  pkgconfig-depends:
-        capstone
-
-  cpp-options:
-        -DEXECUTABLE="tracy-capure"
-
-  ghc-options:
-        -O0
-
+  pkgconfig-depends: capstone
+  cpp-options:       -DEXECUTABLE="tracy-capure"
+  ghc-options:       -O0
 
 source-repository head
-  Type:                 git
-  Location:             git://github.com/AccelerateHS/accelerate.git
+  type:     git
+  location: git://github.com/AccelerateHS/accelerate.git
 
 source-repository this
-  Type:                 git
-  Tag:                  v1.3.0.0
-  Location:             git://github.com/AccelerateHS/accelerate.git
+  type:     git
+  tag:      v1.3.0.0
+  location: git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell

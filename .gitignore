@@ -19,3 +19,5 @@
 *.o
 .direnv
 .envrc
+result
+.pre-commit-config.yaml
