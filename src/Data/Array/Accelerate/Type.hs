@@ -76,7 +76,7 @@ import Numeric.Half
 import Text.Printf
 
 import GHC.Prim
-import GHC.TypeLits
+import GHC.TypeNats
 
 type Float16 = Half
 type Float32 = Float
@@ -412,7 +412,7 @@ runQ $ do
               scalarType = NumScalarType numType
 
             type instance BitSize $t = $(litT (numTyLit bits))
-            type instance BitSize (Vec n $t) = n GHC.TypeLits.* $(litT (numTyLit bits))
+            type instance BitSize (Vec n $t) = n GHC.TypeNats.* $(litT (numTyLit bits))
           |]
 
       mkFloating :: Name -> Integer -> Q [Dec]
@@ -442,7 +442,7 @@ runQ $ do
               scalarType = NumScalarType numType
 
             type instance BitSize $t = $(litT (numTyLit bits))
-            type instance BitSize (Vec n $t) = n GHC.TypeLits.* $(litT (numTyLit bits))
+            type instance BitSize (Vec n $t) = n GHC.TypeNats.* $(litT (numTyLit bits))
           |]
 
   ss <- mapM (mkIntegral "Int") integralTypes

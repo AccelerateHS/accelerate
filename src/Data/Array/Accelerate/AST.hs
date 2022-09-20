@@ -647,9 +647,12 @@ data OpenExp env aenv t where
   Undef         :: ScalarType t
                 -> OpenExp env aenv t
 
-  -- Reinterpret the bits of a value as a different type
-  Coerce        :: BitSizeEq a b
-                => ScalarType a
+  -- Reinterpret the bits of a value as a different type.
+  --
+  -- The types must have the same bit size, but that constraint is not include
+  -- at this point because GHC's typelits solver is often not powerful enough to
+  -- discharge that constraint. ---TLM 2022-09-20
+  Coerce        :: ScalarType a
                 -> ScalarType b
                 -> OpenExp env aenv a
                 -> OpenExp env aenv b

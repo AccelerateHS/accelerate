@@ -615,8 +615,7 @@ data PreSmartExp acc exp t where
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
 
-  Coerce        :: BitSizeEq a b
-                => ScalarType a
+  Coerce        :: ScalarType a
                 -> ScalarType b
                 -> exp a
                 -> PreSmartExp acc exp b
@@ -1011,8 +1010,10 @@ mkPack xs =
   let go :: Word8 -> [Exp a] -> Exp (Vec n a) -> Exp (Vec n a)
       go _ []     vec = vec
       go i (v:vs) vec = go (i+1) vs (insert vec (constant i) v)
+      --
+      n = fromIntegral (natVal' (proxy# :: Proxy# n))
   in
-  go 0 xs undef
+  go 0 (take n xs) undef
 
 -- | Extract a single scalar element from the given SIMD vector at the
 -- specified index
@@ -1443,8 +1444,6 @@ mkFromBool = mkPrimUnary $ PrimFromBool bitType (SingleIntegralType singleIntegr
 
 -- Other conversions
 
--- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
--- make this version "safe"
 mkBitcast :: forall b a. (IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
 mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
