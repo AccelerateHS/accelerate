@@ -44,7 +44,7 @@ module Data.Array.Accelerate.Data.Complex (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
@@ -278,7 +278,7 @@ instance Eq a => Eq (Complex a) where
   r1 ::+ c1 == r2 ::+ c2 = r1 == r2 && c1 == c2
   r1 ::+ c1 /= r2 ::+ c2 = r1 /= r2 || c1 /= c2
 
-instance RealFloat a => P.Num (Exp (Complex a)) where
+instance (RealFloat a, Exponent a ~ Int) => P.Num (Exp (Complex a)) where
   (+) = case complexR (eltR @a) of
           ComplexTup   -> lift2 ((+) :: Complex (Exp a) -> Complex (Exp a) -> Complex (Exp a))
           ComplexVec t -> mkPrimBinary $ PrimAdd t
@@ -297,7 +297,7 @@ instance RealFloat a => P.Num (Exp (Complex a)) where
   abs z         = magnitude z ::+ 0
   fromInteger n = fromInteger n ::+ 0
 
-instance RealFloat a => P.Fractional (Exp (Complex a)) where
+instance (RealFloat a, Exponent a ~ Int) => P.Fractional (Exp (Complex a)) where
   fromRational x  = fromRational x ::+ 0
   z / z'          = (x*x''+y*y'') / d ::+ (y*x''-x*y'') / d
     where
@@ -309,7 +309,7 @@ instance RealFloat a => P.Fractional (Exp (Complex a)) where
       k   = - max (exponent x') (exponent y')
       d   = x'*x'' + y'*y''
 
-instance RealFloat a => P.Floating (Exp (Complex a)) where
+instance (RealFloat a, Exponent a ~ Int, BitOrMask (EltR a) ~ Bit) => P.Floating (Exp (Complex a)) where
   pi                = pi ::+ 0
   exp (x ::+ y)     = let expx = exp x
                        in expx * cos y ::+ expx * sin y
@@ -387,7 +387,7 @@ instance Functor Complex where
 
 -- | The non-negative magnitude of a complex number
 --
-magnitude :: RealFloat a => Exp (Complex a) -> Exp a
+magnitude :: (RealFloat a, Exponent a ~ Int) => Exp (Complex a) -> Exp a
 magnitude (r ::+ i) = scaleFloat k (sqrt (sqr (scaleFloat mk r) + sqr (scaleFloat mk i)))
   where
     k     = max (exponent r) (exponent i)
@@ -406,8 +406,8 @@ magnitude' (r ::+ i) = sqrt (r*r + i*i)
 -- magnitude is zero, then so is the phase.
 --
 phase :: RealFloat a => Exp (Complex a) -> Exp a
-phase z@(r ::+ i) =
-  if z == 0
+phase (r ::+ i) =
+  if r == 0 && i == 0
     then 0
     else atan2 i r
 
@@ -415,7 +415,7 @@ phase z@(r ::+ i) =
 -- phase) pair in canonical form: the magnitude is non-negative, and the phase
 -- in the range @(-'pi', 'pi']@; if the magnitude is zero, then so is the phase.
 --
-polar :: RealFloat a => Exp (Complex a) -> Exp (a,a)
+polar :: (RealFloat a, Exponent a ~ Int) => Exp (Complex a) -> Exp (a,a)
 polar z =  T2 (magnitude z) (phase z)
 
 -- | Form a complex number from polar components of magnitude and phase.

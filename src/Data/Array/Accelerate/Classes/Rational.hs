@@ -75,7 +75,7 @@ integralToRational
 integralToRational x = fromIntegral x :% 1
 
 floatingToRational
-    :: (RealFloat a, Integral b, FromIntegral (Significand a) b, FromIntegral Int (Significand a), FiniteBits (Significand a))
+    :: (RealFloat a, Integral b, FromIntegral (Significand a) b, FromIntegral Int (Significand a), FiniteBits (Significand a), FromIntegral (Exponent a) (Significand a))
     => Exp a
     -> Exp (Ratio b)
 floatingToRational x = fromIntegral u :% fromIntegral v
