@@ -2,8 +2,8 @@
 # For advanced use and comprehensive documentation of the format, please see:
 # https://docs.haskellstack.org/en/stable/yaml_configuration/
 
-compiler: ghc-9.2.1
-resolver: nightly-2022-02-19
+compiler: ghc-9.2.4
+resolver: nightly-2022-09-23
 
 packages:
 - .

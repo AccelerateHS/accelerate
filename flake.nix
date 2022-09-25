@@ -45,19 +45,28 @@
       plainpkgsFor = system: import nixpkgs-upstream {inherit system;};
 
       supportedsystems = systems.flakeExposed;
+      supportedghcs = [[8 10 7] [9 0 2] [9 2 4] [9 4 2]];
+
       perSystem = genAttrs supportedsystems;
 
-      toolsForGHC = ghcversion: system: {
-        haskell-language-server = (plainpkgsFor system).haskell-language-server.override {supportedGhcVersions = [ghcversion];};
-        hlint = (plainpkgsFor system).haskell.packages."ghc${ghcversion}".hlint_3_4_1;
-        fourmolu = with nixpkgs.lib;
-        # use fourmolu 0.6 for ghc9+
-          if (head (stringToCharacters ghcversion) == "9")
-          then (plainpkgsFor system).haskell.packages."ghc${ghcversion}".fourmolu_0_6_0_0
-          else (plainpkgsFor system).haskellPackages.fourmolu;
+      ghcVer = l: let
+        allstr = builtins.map builtins.toString;
+        shortRaw = take 2 (allstr l);
+      in rec {
+        long = concatStrings (allstr l);
+        short = concatStrings shortRaw;
+        stack = concatStringsSep "." shortRaw;
+        compiler-nix-name = "ghc${long}";
       };
 
-      precommitcheckForGHC = ghcversion: system:
+      toolsForghc = ghcversion: system: let
+        gver = ghcVer ghcversion;
+      in {
+        haskell-language-server = (plainpkgsFor system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
+        inherit ((plainpkgsFor system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
+      };
+
+      precommitcheckForghc = ghcversion: system:
         pre-commit-hooks.lib.${system}.run
         {
           src = ./.;
@@ -74,26 +83,28 @@
             shellcheck.enable = true;
           };
 
-          tools = {inherit (toolsForGHC ghcversion system) fourmolu hlint;};
+          tools = {inherit (toolsForghc ghcversion system) fourmolu hlint;};
         };
 
-      projectForGHC = ghcversion: system: let
+      projectForghc = ghcversion: system: let
         pkgs = pkgsFor system;
         plainpkgs = plainpkgsFor system;
-        tools = toolsForGHC ghcversion system;
-        compiler-nix-name = "ghc${ghcversion}";
+        gver = ghcVer ghcversion;
+        tools = toolsForghc ghcversion system;
       in
-        pkgs.haskell-nix.project {
+        pkgs.haskell-nix.stackProject' {
           src = ./.;
-          inherit compiler-nix-name;
+          inherit (gver) compiler-nix-name;
+          stackYaml = "stack-${gver.stack}.yaml";
           shell = {
-            inherit (precommitcheckForGHC ghcversion system) shellHook;
+            inherit (precommitcheckForghc ghcversion system) shellHook;
             withHoogle = true;
             exactDeps = true;
 
             nativeBuildInputs = [
               plainpkgs.alejandra
               plainpkgs.cabal-install
+              plainpkgs.stack
               plainpkgs.fd
               plainpkgs.ripgrep
 
@@ -107,14 +118,15 @@
           };
         };
 
-      toolingShellFor = ghcVersion: system: let
+      toolingShellFor = ghcversion: system: let
         plainpkgs = plainpkgsFor system;
-        tools = toolsForGHC ghcVersion system;
+        tools = toolsForghc ghcversion system;
       in
         plainpkgs.mkShell {
-          inherit (precommitcheckForGHC ghcVersion system) shellHook;
+          inherit (precommitcheckForghc ghcversion system) shellHook;
           nativeBuildInputs = [
             plainpkgs.cabal-install
+            plainpkgs.stack
             plainpkgs.fd
             plainpkgs.ripgrep
 
@@ -128,30 +140,66 @@
           ];
         };
 
-      project-94 = perSystem (projectForGHC "942");
-      project-92 = perSystem (projectForGHC "924");
-      project-810 = perSystem (projectForGHC "8107");
+      mkFlakeAttrsFor = ghcversions: let
+        ps =
+          map (
+            ver: let
+              gver = ghcVer ver;
+            in {
+              name = "project-${gver.short}";
+              value = perSystem (projectForghc ver);
+              origVer = ver;
+            }
+          )
+          ghcversions;
+
+        fs =
+          map (p: let
+            gver = ghcVer p.origVer;
+          in {
+            inherit (p) origVer;
+            name = "flake-${gver.short}";
+            value = perSystem (sys: p.value.${sys}.flake {});
+          })
+          ps;
+
+        mkOutput = attrName: sys:
+          map (f: {
+            name = "ghc${(ghcVer f.origVer).short}";
+            value = f.value.${sys}.${attrName};
+          })
+          fs;
+
+        mkChecks = sys:
+          map (f: {
+            name = "ghc${(ghcVer f.origVer).short}";
+            value =
+              f.value.${sys}.checks
+              // {formatCheck = precommitcheckForghc f.origVer sys;};
+          })
+          fs;
+      in {
+        projects = builtins.listToAttrs ps;
+        flakes = builtins.listToAttrs fs;
+        devShells = perSystem (sys: builtins.listToAttrs (mkOutput "devShells" sys));
+        packages = perSystem (sys: builtins.listToAttrs (mkOutput "packages" sys));
+        checks = perSystem (sys: builtins.listToAttrs (mkChecks sys));
+      };
+
+      accelerateFlakes = mkFlakeAttrsFor supportedghcs;
     in {
-      inherit cabalprojectlocal project-810 project-92 project-94;
+      inherit cabalprojectlocal mkFlakeAttrsFor supportedsystems supportedghcs;
+      inherit (accelerateFlakes) flakes projects packages checks;
+
       pkgs = perSystem pkgsFor;
       plainpkgs = perSystem plainpkgsFor;
-      flake-810 = perSystem (system: self.project-810.${system}.flake {});
-      flake-92 = perSystem (system: self.project-92.${system}.flake {});
-      flake-94 = perSystem (system: self.project-94.${system}.flake {});
 
-      packages = perSystem (system: {
-        ghc94 = self.flake-94.${system}.packages;
-        ghc92 = self.flake-92.${system}.packages;
-        ghc810 = self.flake-810.${system}.packages;
-      });
-
-      devShells = perSystem (system: rec {
-        tooling = toolingShellFor "924" system;
-        ghc94 = self.flake-94.${system}.devShell;
-        ghc92 = self.flake-92.${system}.devShell;
-        ghc810 = self.flake-810.${system}.devShell;
-        default = tooling;
-      });
+      devShells = perSystem (sys:
+        accelerateFlakes.devShells.${sys}
+        // rec {
+          default = tooling;
+          tooling = toolingShellFor [9 2 4] sys;
+        });
 
       formatter = perSystem (system: self.pkgs.${system}.alejandra);
     };
