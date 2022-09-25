@@ -68,10 +68,20 @@
       # and a system name returns hls, hlint and fourmolu
       toolsForghc = ghcversion: system: let
         gver = ghcVer ghcversion;
-      in {
-        haskell-language-server = (plainpkgsFor system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
-        inherit ((plainpkgsFor system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
-      };
+      in
+        {
+          haskell-language-server = (plainpkgsFor system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
+          inherit ((plainpkgsFor system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
+        }
+        //
+        # ghc 8 doesn't build fourmolu 0.4 because it doesn't provide the correct cabal version
+        (
+          if (builtins.head ghcversion) == 8
+          then {
+            inherit ((plainpkgsFor system).haskellPackages) fourmolu;
+          }
+          else {}
+        );
 
       # utility function that, passed a ghc version in the list format
       # and a system name returns a pre-commit-check attrset with a shellHook
@@ -201,7 +211,7 @@
       in {
         projects = builtins.listToAttrs ps;
         flakes = builtins.listToAttrs fs;
-        devShells = perSystem (sys: builtins.listToAttrs (mkOutput "devShells" sys));
+        devShells = perSystem (sys: builtins.listToAttrs (mkOutput "devShell" sys));
         packages = perSystem (sys: builtins.listToAttrs (mkOutput "packages" sys));
         checks = perSystem (sys: builtins.listToAttrs (mkChecks sys));
       };
