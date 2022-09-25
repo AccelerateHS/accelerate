@@ -44,11 +44,16 @@
       # and the caching of tools is worse than on nixpkgs due to the use of their haskell-nix overlay
       plainpkgsFor = system: import nixpkgs-upstream {inherit system;};
 
+      # We support a bunch of systems and ghc versions,
+      # this is what the flakes provides outputs for
       supportedsystems = systems.flakeExposed;
       supportedghcs = [[8 10 7] [9 0 2] [9 2 4] [9 4 2]];
 
       perSystem = genAttrs supportedsystems;
 
+      # Utility function that provides a bunch of useful
+      # representations of ghc versions, receives a list with
+      # three elements that represent a ghc version, e.g. [9 2 4]
       ghcVer = l: let
         allstr = builtins.map builtins.toString;
         shortRaw = take 2 (allstr l);
@@ -59,6 +64,8 @@
         compiler-nix-name = "ghc${long}";
       };
 
+      # utility functions that, passed a ghc version in the list format
+      # and a system name returns hls, hlint and fourmolu
       toolsForghc = ghcversion: system: let
         gver = ghcVer ghcversion;
       in {
@@ -66,6 +73,9 @@
         inherit ((plainpkgsFor system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
       };
 
+      # utility function that, passed a ghc version in the list format
+      # and a system name returns a pre-commit-check attrset with a shellHook
+      # and a formatCheck that can be run
       precommitcheckForghc = ghcversion: system:
         pre-commit-hooks.lib.${system}.run
         {
@@ -86,6 +96,10 @@
           tools = {inherit (toolsForghc ghcversion system) fourmolu hlint;};
         };
 
+      # builds, given a ghc version in the list format and a system name, a
+      # haskell.nix stackProject that contains all accelerate libraries and executables
+      # the resolver is chosen based on the ghcVersion passed, i.e. if you want a specific
+      # ghc version, you need the appropriate resolver
       projectForghc = ghcversion: system: let
         pkgs = pkgsFor system;
         plainpkgs = plainpkgsFor system;
@@ -118,6 +132,8 @@
           };
         };
 
+      # a tooling shell that provides all the necessary stuff to do
+      # formatting and quick adjustments, it does not provide a full dev env
       toolingShellFor = ghcversion: system: let
         plainpkgs = plainpkgsFor system;
         tools = toolsForghc ghcversion system;
@@ -140,6 +156,10 @@
           ];
         };
 
+      # utility functions that generates flakes and flake outputs based on the ghcVersions
+      # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
+      # it provides haskell.nix project and flake, as well as the standard flake outputs
+      # packages, checks and devShells
       mkFlakeAttrsFor = ghcversions: let
         ps =
           map (
@@ -197,6 +217,7 @@
       devShells = perSystem (sys:
         accelerateFlakes.devShells.${sys}
         // rec {
+          # the default shell is the tooling shell as it loads fastest
           default = tooling;
           tooling = toolingShellFor [9 2 4] sys;
         });
