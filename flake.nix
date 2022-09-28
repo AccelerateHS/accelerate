@@ -1,7 +1,7 @@
 {
   description = "Accelerate - High-performance parallel arrays for Haskell";
   nixConfig = {
-    bash-prompt = "accelerate-devShell ~ ";
+    bash-prompt = "\\e[34;1maccelerate-devShell ~ \\e[0m";
 
     allow-import-from-derivation = true;
 
@@ -50,7 +50,8 @@
       # this is what the flakes provides outputs for
       # If you want to run nix flake show, make sure this is a singleton list that only contains your system,
       # because IFD will not succeed to build for other specified systems
-      supportedsystems = systems.flakeExposed;
+      supportedsystems = ["x86_64-linux"];
+      # supportedsystems = systems.flakeExposed;
 
       # We cannot easily support ghc865 with nix as it's so much out of date
       # that it's not included in nixpkgs anymore
@@ -203,14 +204,14 @@
       # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
       # it provides haskell.nix project and flake, as well as the standard flake outputs
       # packages, checks and devShells
-      mkFlakeAttrsFor = ghcversions: let
+      mkFlakeAttrsFor = ghcversions: projFun: sysFun: let
         ps =
           map (
             ver: let
               gver = ghcVer ver;
             in {
               name = "project-${gver.short}";
-              value = perSystem (projectForghc ver);
+              value = sysFun (projFun ver);
               origVer = ver;
             }
           )
@@ -222,7 +223,7 @@
           in {
             inherit (p) origVer;
             name = "flake-${gver.short}";
-            value = perSystem (sys: p.value.${sys}.flake {});
+            value = sysFun (sys: p.value.${sys}.flake {});
           })
           ps;
 
@@ -244,14 +245,15 @@
       in {
         projects = builtins.listToAttrs ps;
         flakes = builtins.listToAttrs fs;
-        devShells = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "devShell" sys)));
-        packages = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "packages" sys)));
-        checks = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkChecks sys)));
+        devShells = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "devShell" sys)));
+        packages = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "packages" sys)));
+        checks = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkChecks sys)));
       };
 
-      accelerateFlakes = mkFlakeAttrsFor supportedghcs;
+      accelerateFlakes = mkFlakeAttrsFor supportedghcs projectForghc perSystem;
     in {
-      inherit flattenAttrs mkFlakeAttrsFor supportedsystems supportedghcs;
+      inherit supportedsystems supportedghcs flattenAttrs ghcVer mkFlakeAttrsFor toolingShellFor toolsForghc;
+      # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
       inherit (accelerateFlakes) flakes projects packages checks;
 
       pkgs = perSystem pkgsFor;
