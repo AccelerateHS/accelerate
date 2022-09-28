@@ -3,6 +3,8 @@
   nixConfig = {
     bash-prompt = "accelerate-devShell ~ ";
 
+    allow-import-from-derivation = true;
+
     substituters = [
       "https://cache.nixos.org" # nixos cache
       "https://hydra.iohk.io" # iog hydra cache
@@ -46,8 +48,21 @@
 
       # We support a bunch of systems and ghc versions,
       # this is what the flakes provides outputs for
+      # If you want to run nix flake show, make sure this is a singleton list that only contains your system,
+      # because IFD will not succeed to build for other specified systems
       supportedsystems = systems.flakeExposed;
-      supportedghcs = [[8 10 7] [9 0 2] [9 2 4] [9 4 2]];
+
+      # We cannot easily support ghc865 with nix as it's so much out of date
+      # that it's not included in nixpkgs anymore
+      supportedghcs = [
+        [8 10 7]
+        [9 0 2]
+        [9 2 4]
+        /*
+        [9 4 2] FIXME: we're waiting for stackage nightly to upgrade to 942 and haskell.nix getting compiler support
+                       for it
+        */
+      ];
 
       perSystem = genAttrs supportedsystems;
 
@@ -63,6 +78,24 @@
         stack = concatStringsSep "." shortRaw;
         compiler-nix-name = "ghc${long}";
       };
+
+      # Utility function that will take a separator and an attrset and
+      # flatten the attrset until only it's leaves remain, the keys for the
+      # new attrset are sep-separated old keys
+      flattenAttrs = sep: attrs: let
+        recurse = p:
+          mapAttrsToList
+          (n: v: let
+            p' =
+              if p == ""
+              then p
+              else p + sep;
+          in
+            if (isAttrs v && !(isDerivation v))
+            then recurse (p' + n) v
+            else {${p' + n} = v;});
+      in
+        foldr (a: b: a // b) {} (flatten (recurse "" attrs));
 
       # utility functions that, passed a ghc version in the list format
       # and a system name returns hls, hlint and fourmolu
@@ -166,7 +199,7 @@
           ];
         };
 
-      # utility functions that generates flakes and flake outputs based on the ghcVersions
+      # utility function that generates flakes and flake outputs based on the ghcVersions
       # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
       # it provides haskell.nix project and flake, as well as the standard flake outputs
       # packages, checks and devShells
@@ -211,14 +244,14 @@
       in {
         projects = builtins.listToAttrs ps;
         flakes = builtins.listToAttrs fs;
-        devShells = perSystem (sys: builtins.listToAttrs (mkOutput "devShell" sys));
-        packages = perSystem (sys: builtins.listToAttrs (mkOutput "packages" sys));
-        checks = perSystem (sys: builtins.listToAttrs (mkChecks sys));
+        devShells = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "devShell" sys)));
+        packages = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "packages" sys)));
+        checks = perSystem (sys: flattenAttrs "-" (builtins.listToAttrs (mkChecks sys)));
       };
 
       accelerateFlakes = mkFlakeAttrsFor supportedghcs;
     in {
-      inherit cabalprojectlocal mkFlakeAttrsFor supportedsystems supportedghcs;
+      inherit flattenAttrs mkFlakeAttrsFor supportedsystems supportedghcs;
       inherit (accelerateFlakes) flakes projects packages checks;
 
       pkgs = perSystem pkgsFor;
