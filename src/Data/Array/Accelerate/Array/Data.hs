@@ -143,21 +143,9 @@ newArrayData (TupRsingle _t)  !size = scalar _t
     scalar (NumScalarType t) = num t
     scalar (BitScalarType t) = bit t
 
-    -- XXX: Arrays of BitMask are stored with each mask aligned to a byte
-    -- boundary, rather than being packed tightly together. This might be a bit
-    -- surprising if we want to cast between types? We don't support any
-    -- non-power-of-two sized integer types though so perhaps this can not come
-    -- up in practice, but it is a bit strange that a 'Vec 4 Bool' will require
-    -- trice as much memory as necessary. ---TLM 2022-08-30
-    --
-    -- XXX: Actually this is a problem as both BitSize(Bit) and BitSize(Vec 1
-    -- Bit) are a single bit, so we should be able to coerce between them, but
-    -- they will be stored differently. ---TLM 2022-08-31
-    --
     bit :: BitType t -> IO (MutableArrayData t)
     bit TypeBit      = allocateArray ((size + 7) `quot` 8)
-    bit (TypeMask n) = let bytes = quot (fromInteger (natVal' n)+7) 8
-                        in allocateArray (size * bytes)
+    bit (TypeMask n) = allocateArray (((size * fromInteger (natVal' n)) + 7) `quot` 8)
 
     num :: NumType t -> IO (MutableArrayData t)
     num (IntegralNumType t) = integral t
@@ -560,7 +548,7 @@ mallocPlainForeignPtrBytesAligned (I# size#) = IO $ \s0 ->
 
 
 liftArrayData :: Int -> TypeR e -> ArrayData e -> CodeQ (ArrayData e)
-liftArrayData n = tuple
+liftArrayData !size = tuple
   where
     tuple :: TypeR e -> ArrayData e -> CodeQ (ArrayData e)
     tuple TupRunit         ()       = [|| () ||]
@@ -572,10 +560,8 @@ liftArrayData n = tuple
     scalar (BitScalarType t) = bit t
 
     bit :: BitType e -> ArrayData e -> CodeQ (ArrayData e)
-    bit TypeBit       ua = liftUniqueArray ((n+7) `quot` 8) ua
-    bit (TypeMask n') ua =
-      let bytes = quot (fromInteger (natVal' n')+7) 8
-       in liftUniqueArray (n * bytes) ua
+    bit TypeBit      ua = liftUniqueArray ((size + 7) `quot` 8) ua
+    bit (TypeMask n) ua = liftUniqueArray (((size * fromInteger (natVal' n)) + 7) `quot` 8) ua
 
     num :: NumType e -> ArrayData e -> CodeQ (ArrayData e)
     num (IntegralNumType t) = integral t
@@ -583,8 +569,8 @@ liftArrayData n = tuple
 
     integral :: IntegralType e -> ArrayData e -> CodeQ (ArrayData e)
     integral = \case
-      SingleIntegralType t    -> single t n
-      VectorIntegralType n' t -> vector n' t (n * fromInteger (natVal' n'))
+      SingleIntegralType t   -> single t size
+      VectorIntegralType n t -> vector n t (size * fromInteger (natVal' n))
       where
         single :: SingleIntegralType e -> Int -> ArrayData e -> CodeQ (ArrayData e)
         single TypeInt8    = liftUniqueArray
@@ -612,8 +598,8 @@ liftArrayData n = tuple
 
     floating :: FloatingType e -> ArrayData e -> CodeQ (ArrayData e)
     floating = \case
-      SingleFloatingType t    -> single t n
-      VectorFloatingType n' t -> vector n' t (n * fromInteger (natVal' n'))
+      SingleFloatingType t   -> single t size
+      VectorFloatingType n t -> vector n t (size * fromInteger (natVal' n))
       where
         single :: SingleFloatingType e -> Int -> ArrayData e -> CodeQ (ArrayData e)
         single TypeFloat16  = liftUniqueArray
