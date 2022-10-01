@@ -157,7 +157,7 @@ inlineVars lhsBound expr bound
       Extract vR iR v i     -> Extract vR iR <$> travE v <*> travE i
       Insert vR iR v i x    -> Insert vR iR <$> travE v <*> travE i <*> travE x
       Shuffle vR iR x y m   -> Shuffle vR iR <$> travE x <*> travE y <*> travE m
-      Select m x y          -> Select <$> travE m <*> travE x <*> travE y
+      Select eR m x y       -> Select eR <$> travE m <*> travE x <*> travE y
       IndexSlice si e1 e2   -> IndexSlice si <$> travE e1 <*> travE e2
       IndexFull  si e1 e2   -> IndexFull  si <$> travE e1 <*> travE e2
       ToIndex   shr e1 e2   -> ToIndex   shr <$> travE e1 <*> travE e2
@@ -558,7 +558,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     Extract vR iR u i     -> Extract vR iR   <$> rebuildOpenExp v av u <*> rebuildOpenExp v av i
     Insert vR iR u i x    -> Insert vR iR    <$> rebuildOpenExp v av u <*> rebuildOpenExp v av i <*> rebuildOpenExp v av x
     Shuffle vR iR x y m   -> Shuffle vR iR   <$> rebuildOpenExp v av x <*> rebuildOpenExp v av y <*> rebuildOpenExp v av m
-    Select m x y          -> Select          <$> rebuildOpenExp v av m <*> rebuildOpenExp v av x <*> rebuildOpenExp v av y
+    Select eR m x y       -> Select eR       <$> rebuildOpenExp v av m <*> rebuildOpenExp v av x <*> rebuildOpenExp v av y
     IndexSlice x ix sh    -> IndexSlice x    <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sh
     IndexFull x ix sl     -> IndexFull x     <$> rebuildOpenExp v av ix <*> rebuildOpenExp v av sl
     ToIndex shr sh ix     -> ToIndex shr     <$> rebuildOpenExp v av sh <*> rebuildOpenExp v av ix

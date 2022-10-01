@@ -1475,7 +1475,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Extract vR iR v i               -> Extract vR iR (cvtE v) (cvtE i)
         Insert vR iR v i x              -> Insert vR iR (cvtE v) (cvtE i) (cvtE x)
         Shuffle vR iR x y i             -> Shuffle vR iR (cvtE x) (cvtE y) (cvtE i)
-        Select m x y                    -> Select (cvtE m) (cvtE x) (cvtE y)
+        Select eR m x y                 -> Select eR (cvtE m) (cvtE x) (cvtE y)
         IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)

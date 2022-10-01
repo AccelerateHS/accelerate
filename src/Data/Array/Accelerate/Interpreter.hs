@@ -919,7 +919,7 @@ evalOpenExp pexp env aenv =
                                    in  evalOpenExp exp2 env' aenv
     Evar (Var _ ix)             -> prj ix env
     Const _ c                   -> c
-    Undef tp                    -> undefElt (TupRsingle tp)
+    Undef eR                    -> undefElt (TupRsingle eR)
     PrimApp f x                 -> evalPrim f (evalE x)
     Nil                         -> ()
     Pair e1 e2                  -> let !x1 = evalE e1
@@ -929,8 +929,7 @@ evalOpenExp pexp env aenv =
     Insert vR iR v i x          -> evalInsert vR iR (evalE v) (evalE i) (evalE x)
     Shuffle rR iR x y i         -> let TupRsingle eR = expType x
                                     in evalShuffle eR rR iR (evalE x) (evalE y) (evalE i)
-    Select m x y                -> let TupRsingle eR = expType x
-                                    in evalSelect eR (evalE m) (evalE x) (evalE y)
+    Select eR m x y             -> evalSelect eR (evalE m) (evalE x) (evalE y)
     IndexSlice slice slix sh    -> restrict slice (evalE slix) (evalE sh)
       where
         restrict :: SliceIndex slix sl co sh -> slix -> sh -> sl

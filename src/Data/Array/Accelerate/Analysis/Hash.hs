@@ -325,7 +325,7 @@ encodeOpenExp exp =
     Extract vR iR v i           -> intHost $(hashQ "Extract")     <> encodeScalarType vR <> encodeSingleIntegralType iR <> travE v <> travE i
     Insert vR iR v i x          -> intHost $(hashQ "Insert")      <> encodeScalarType vR <> encodeSingleIntegralType iR <> travE v <> travE i <> travE x
     Shuffle eR iR x y i         -> intHost $(hashQ "Shuffle")     <> encodeScalarType eR <> encodeSingleIntegralType iR <> travE x <> travE y <> travE i
-    Select m x y                -> intHost $(hashQ "Select")      <> travE m <>travE x <> travE y
+    Select eR m x y             -> intHost $(hashQ "Select")      <> encodeScalarType eR <> travE m <>travE x <> travE y
     Const tp c                  -> intHost $(hashQ "Const")       <> encodeScalarConst tp c
     Undef tp                    -> intHost $(hashQ "Undef")       <> encodeScalarType tp
     IndexSlice spec ix sh       -> intHost $(hashQ "IndexSlice")  <> travE ix <> travE sh <> encodeSliceIndex spec

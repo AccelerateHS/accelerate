@@ -369,8 +369,11 @@ module Data.Array.Accelerate (
   -- *** Tuples
   fst, afst, snd, asnd, curry, uncurry,
 
+  -- *** SIMD vectors
+  insert, extract, shuffle,
+
   -- *** Flow control
-  (?), match, cond, while, iterate,
+  (?), select, match, cond, while, iterate,
 
   -- *** Scalar reduction
   sfoldl,

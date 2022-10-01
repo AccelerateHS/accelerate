@@ -279,7 +279,7 @@ simplifyOpenExp env = first getAny . cvtE
       Extract vR iR v i         -> Extract vR iR <$> cvtE v <*> cvtE i
       Insert vR iR v i x        -> Insert vR iR <$> cvtE v <*> cvtE i <*> cvtE x
       Shuffle eR iR x y i       -> Shuffle eR iR <$> cvtE x <*> cvtE y <*> cvtE i
-      Select m x y              -> Select <$> cvtE m <*> cvtE x <*> cvtE y
+      Select eR m x y           -> Select eR <$> cvtE m <*> cvtE x <*> cvtE y
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
@@ -591,7 +591,7 @@ summariseOpenExp = (terms +~ 1) . goE
         Extract _ _ v i       -> travE v +++ travE i
         Insert _ _ v i x      -> travE v +++ travE i +++ travE x
         Shuffle _ _ x y i     -> travE x +++ travE y +++ travE i
-        Select m x y          -> travE m +++ travE x +++ travE y
+        Select _ m x y        -> travE m +++ travE x +++ travE y
         IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
         ToIndex _ sh ix       -> travE sh +++ travE ix

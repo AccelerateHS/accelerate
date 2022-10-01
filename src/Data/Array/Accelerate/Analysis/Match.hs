@@ -497,8 +497,9 @@ matchOpenExp (Shuffle eR1 iR1 x1 y1 i1) (Shuffle eR2 iR2 x2 y2 i2)
   , Just Refl <- matchOpenExp i1 i2
   = Just Refl
 
-matchOpenExp (Select p1 x1 y1) (Select p2 x2 y2)
-  | Just Refl <- matchOpenExp p1 p2
+matchOpenExp (Select eR1 p1 x1 y1) (Select eR2 p2 x2 y2)
+  | Just Refl <- matchScalarType eR1 eR2
+  , Just Refl <- matchOpenExp p1 p2
   , Just Refl <- matchOpenExp x1 x2
   , Just Refl <- matchOpenExp y1 y2
   = Just Refl

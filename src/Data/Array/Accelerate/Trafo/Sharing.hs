@@ -761,7 +761,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Extract vR iR v i     -> AST.Extract vR iR (cvt v) (cvt i)
           Insert vR iR v i x    -> AST.Insert vR iR (cvt v) (cvt i) (cvt x)
           Shuffle eR iR x y i   -> AST.Shuffle eR iR (cvt x) (cvt y) (cvt i)
-          Select m x y          -> AST.Select (cvt m) (cvt x) (cvt y)
+          Select eR m x y       -> AST.Select eR (cvt m) (cvt x) (cvt y)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
           Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
@@ -1884,7 +1884,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Extract vR iR v i      -> travE2 (Extract vR iR) v i
             Insert vR iR v i x     -> travE3 (Insert vR iR) v i x
             Shuffle eR iR x y i    -> travE3 (Shuffle eR iR) x y i
-            Select m x y           -> travE3 Select m x y
+            Select eR m x y        -> travE3 (Select eR) m x y
             ToIndex shr sh ix      -> travE2 (ToIndex shr) sh ix
             FromIndex shr sh e     -> travE2 (FromIndex shr) sh e
             Match t e              -> travE1 (Match t) e
@@ -2791,7 +2791,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Extract vR iR v i     -> travE2 (Extract vR iR) v i
           Insert vR iR v i x    -> travE3 (Insert vR iR) v i x
           Shuffle eR iR x y i   -> travE3 (Shuffle eR iR) x y i
-          Select m x y          -> travE3 Select m x y
+          Select eR m x y       -> travE3 (Select eR) m x y
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
           Match t e             -> travE1 (Match t) e

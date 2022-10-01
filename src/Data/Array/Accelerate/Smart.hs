@@ -553,7 +553,8 @@ data PreSmartExp acc exp t where
                 -> exp (Prim.Vec m i)
                 -> PreSmartExp acc exp (Prim.Vec m a)
 
-  Select        :: exp (Prim.Vec n Bit)
+  Select        :: ScalarType (Prim.Vec n a)
+                -> exp (Prim.Vec n PrimBool)
                 -> exp (Prim.Vec n a)
                 -> exp (Prim.Vec n a)
                 -> PreSmartExp acc exp (Prim.Vec n a)
@@ -908,7 +909,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     --
     Insert t _ _ _ _                -> TupRsingle t
     Shuffle t _ _ _ _               -> TupRsingle t
-    Select _ x _                    -> typeR x
+    Select t _ _ _                  -> TupRsingle t
     ToIndex _ _ _                   -> TupRsingle (scalarType @INT)
     FromIndex shr _ _               -> shapeType shr
     Case _ ((_,c):_)                -> typeR c
@@ -1201,7 +1202,7 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
     bit :: BitType t -> SmartExp t -> SmartExp t -> SmartExp t
     bit (TypeMask n)
       | Just Refl <- sameNat' n (proxy# :: Proxy# n)
-      = SmartExp $$ Select mask
+      = SmartExp $$ Select (BitScalarType (TypeMask n)) mask
     bit _ = error "impossible"
 
     num :: NumType t -> SmartExp t -> SmartExp t -> SmartExp t
@@ -1209,15 +1210,15 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
     num (FloatingNumType vR) = floating vR
 
     integral :: IntegralType t -> SmartExp t -> SmartExp t -> SmartExp t
-    integral (VectorIntegralType n _)
+    integral (VectorIntegralType n t)
       | Just Refl <- sameNat' n (proxy# :: Proxy# n)
-      = SmartExp $$ Select mask
+      = SmartExp $$ Select (NumScalarType (IntegralNumType (VectorIntegralType n t))) mask
     integral _ = error "impossible"
 
     floating :: FloatingType t -> SmartExp t -> SmartExp t -> SmartExp t
-    floating (VectorFloatingType n _)
+    floating (VectorFloatingType n t)
       | Just Refl <- sameNat' n (proxy# :: Proxy# n)
-      = SmartExp $$ Select mask
+      = SmartExp $$ Select (NumScalarType (FloatingNumType (VectorFloatingType n t))) mask
     floating _ = error "impossible"
 
 

@@ -566,7 +566,8 @@ data OpenExp env aenv t where
                 -> OpenExp env aenv (Vec m i)
                 -> OpenExp env aenv (Vec m a)
 
-  Select        :: OpenExp env aenv (PrimMask n)
+  Select        :: ScalarType (Vec n a)
+                -> OpenExp env aenv (PrimMask n)
                 -> OpenExp env aenv (Vec n a)
                 -> OpenExp env aenv (Vec n a)
                 -> OpenExp env aenv (Vec n a)
@@ -843,7 +844,7 @@ expType = \case
   --
   Insert t _ _ _ _             -> TupRsingle t
   Shuffle t _ _ _ _            -> TupRsingle t
-  Select _ x _                 -> expType x
+  Select t _ _ _               -> TupRsingle t
   IndexSlice si _ _            -> shapeType $ sliceShapeR si
   IndexFull  si _ _            -> shapeType $ sliceDomainR si
   ToIndex{}                    -> TupRsingle scalarType
@@ -1126,7 +1127,7 @@ rnfOpenExp topExp =
     Extract vR iR v i         -> rnfScalarType vR `seq` rnfSingleIntegralType iR `seq` rnfE v `seq` rnfE i
     Insert vR iR v i x        -> rnfScalarType vR `seq` rnfSingleIntegralType iR `seq` rnfE v `seq` rnfE i `seq` rnfE x
     Shuffle eR iR x y i       -> rnfScalarType eR `seq` rnfSingleIntegralType iR `seq` rnfE x `seq` rnfE y `seq` rnfE i
-    Select m x y              -> rnfE m `seq` rnfE x `seq` rnfE y
+    Select eR m x y           -> rnfScalarType eR `seq` rnfE m `seq` rnfE x `seq` rnfE y
     IndexSlice slice slix sh  -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sh
     IndexFull slice slix sl   -> rnfSliceIndex slice `seq` rnfE slix `seq` rnfE sl
     ToIndex shr sh ix         -> rnfShapeR shr `seq` rnfE sh `seq` rnfE ix
@@ -1344,7 +1345,7 @@ liftOpenExp pexp =
     Extract vR iR v i         -> [|| Extract $$(liftScalarType vR) $$(liftSingleIntegralType iR) $$(liftE v) $$(liftE i) ||]
     Insert vR iR v i x        -> [|| Insert $$(liftScalarType vR) $$(liftSingleIntegralType iR) $$(liftE v) $$(liftE i) $$(liftE x) ||]
     Shuffle eR iR x y i       -> [|| Shuffle $$(liftScalarType eR) $$(liftSingleIntegralType iR) $$(liftE x) $$(liftE y) $$(liftE i) ||]
-    Select m x y              -> [|| Select $$(liftE m) $$(liftE x) $$(liftE y) ||]
+    Select eR m x y           -> [|| Select $$(liftScalarType eR) $$(liftE m) $$(liftE x) $$(liftE y) ||]
     IndexSlice slice slix sh  -> [|| IndexSlice $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sh) ||]
     IndexFull slice slix sl   -> [|| IndexFull $$(liftSliceIndex slice) $$(liftE slix) $$(liftE sl) ||]
     ToIndex shr sh ix         -> [|| ToIndex $$(liftShapeR shr) $$(liftE sh) $$(liftE ix) ||]

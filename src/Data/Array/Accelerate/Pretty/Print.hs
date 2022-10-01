@@ -419,7 +419,7 @@ prettyOpenExp ctx env aenv exp =
     Extract _ _ v i       -> ppF2 (Operator "#" Infix L 9) (ppE v) (ppE i)
     Insert{}              -> prettyInsert ctx env aenv exp
     Shuffle _ _ x y i     -> ppF3 "shuffle" (ppE x) (ppE y) (ppE i)
-    Select m x y          -> ppF3 "select" (ppE m) (ppE x) (ppE y)
+    Select _ m x y        -> ppF3 "select" (ppE m) (ppE x) (ppE y)
     Case tR x xs d        -> prettyCase env aenv tR x xs d
     Cond p t e            -> flatAlt multi single
       where

@@ -293,7 +293,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Extract vR iR v i         -> Extract vR iR <$> shrinkE v <*> shrinkE i
       Insert vR iR v i x        -> Insert vR iR <$> shrinkE v <*> shrinkE i <*> shrinkE x
       Shuffle eR iR x y i       -> Shuffle eR iR <$> shrinkE x <*> shrinkE y <*> shrinkE i
-      Select m x y              -> Select <$> shrinkE m <*> shrinkE x <*> shrinkE y
+      Select eR m x y           -> Select eR <$> shrinkE m <*> shrinkE x <*> shrinkE y
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
@@ -494,7 +494,7 @@ usesOfExp range = countE
       Extract _ _ v i           -> countE v <> countE i
       Insert _ _ v i x          -> countE v <> countE i <> countE x
       Shuffle _ _ x y i         -> countE x <> countE y <> countE i
-      Select m x y              -> countE m <> countE x <> countE y
+      Select _ m x y            -> countE m <> countE x <> countE y
       IndexSlice _ ix sh        -> countE ix <> countE sh
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
@@ -582,7 +582,7 @@ usesOfPreAcc withShape countAcc idx = count
       Extract _ _ v i            -> countE v + countE i
       Insert _ _ v i x           -> countE v + countE i + countE x
       Shuffle _ _ x y i          -> countE x + countE y + countE i
-      Select m x y               -> countE m + countE x + countE y
+      Select _ m x y             -> countE m + countE x + countE y
       IndexSlice _ ix sh         -> countE ix + countE sh
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix
