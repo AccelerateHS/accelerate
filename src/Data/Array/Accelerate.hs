@@ -421,9 +421,9 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- Types
-  Int, Int8, Int16, Int32, Int64,
-  Word, Word8, Word16, Word32, Word64,
-  Half(..), Float, Double,
+  Int, Int8, Int16, Int32, Int64, Int128,
+  Word, Word8, Word16, Word32, Word64, Word128,
+  Half(..), Float, Double, Float16, Float32, Float64, Float128,
   Bool,   pattern True,    pattern False,
   Maybe,  pattern Nothing, pattern Just,
   Either, pattern Left,    pattern Right,
