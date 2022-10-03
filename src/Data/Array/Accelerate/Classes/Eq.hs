@@ -212,28 +212,6 @@ instance Eq Ordering where
   x /= y = mkCoerce x /= (mkCoerce y :: Exp TAG)
 
 instance VEq n a => Eq (Vec n a) where
-  (==) = vcmp (==*)
-  (/=) = vcmp (/=*)
-
-vcmp :: forall n a. KnownNat n
-     => (Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool))
-     -> (Exp (Vec n a) -> Exp (Vec n a) -> Exp Bool)
-vcmp op x y =
-  let n :: Int
-      n = fromInteger $ natVal' (proxy# :: Proxy# n)
-      v = op x y
-      --
-      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
-          => Exp (Vec n Bool)
-          -> Exp Bool
-      cmp u =
-        let u' = mkPrimUnary (PrimFromBool bitType integralType) u :: Exp t
-         in mkEq (constant ((1 `unsafeShiftL` n) - 1)) u'
-  in
-  if n P.<= 8   then cmp @Word8   v else
-  if n P.<= 16  then cmp @Word16  v else
-  if n P.<= 32  then cmp @Word32  v else
-  if n P.<= 64  then cmp @Word64  v else
-  if n P.<= 128 then cmp @Word128 v else
-    internalError "Can not handle Vec types with more than 128 lanes"
+  x == y = vand (x ==* y)
+  x /= y = vor  (x /=* y)
 

@@ -58,6 +58,7 @@ module Data.Array.Accelerate.Smart (
   insert, mkInsert,
   shuffle,
   select,
+  vand, vor,
 
   -- ** Smart constructors for primitive functions
   -- *** Operators from Num
@@ -129,6 +130,7 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
 import qualified Data.Primitive.Vec                                 as Prim
 
+import Data.Bits                                                    ( Bits, unsafeShiftL )
 import Data.Kind
 import Data.Text.Lazy.Builder
 import Formatting                                                   hiding ( splat )
@@ -1227,6 +1229,48 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
       | Just Refl <- sameNat' n (proxy# :: Proxy# n)
       = SmartExp $$ Select (NumScalarType (FloatingNumType (VectorFloatingType n t))) mask
     floating _ = error "impossible"
+
+
+-- | Return 'True' if all lanes of the vector are 'True'
+--
+-- @since 1.4.0.0
+--
+vand :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
+vand v =
+  let n :: Int
+      n = fromInteger $ natVal' (proxy# :: Proxy# n)
+      --
+      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
+          => Exp Bool
+      cmp = mkEq (constant ((1 `unsafeShiftL` n) - 1))
+                 (mkPrimUnary (PrimFromBool bitType integralType) v :: Exp t)
+  in
+  if n <= 8   then cmp @Word8   else
+  if n <= 16  then cmp @Word16  else
+  if n <= 32  then cmp @Word32  else
+  if n <= 64  then cmp @Word64  else
+  if n <= 128 then cmp @Word128 else
+    internalError "Can not handle Vec types with more than 128 lanes"
+
+-- | Return 'True' if any lane of the vector is 'True'
+--
+-- @since 1.4.0.0
+--
+vor :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
+vor v =
+  let n :: Int
+      n = fromInteger $ natVal' (proxy# :: Proxy# n)
+      --
+      cmp :: forall t. (Elt t, Num t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
+          => Exp Bool
+      cmp = mkNEq (constant 0) (mkPrimUnary (PrimFromBool bitType integralType) v :: Exp t)
+  in
+  if n <= 8   then cmp @Word8   else
+  if n <= 16  then cmp @Word16  else
+  if n <= 32  then cmp @Word32  else
+  if n <= 64  then cmp @Word64  else
+  if n <= 128 then cmp @Word128 else
+    internalError "Can not handle Vec types with more than 128 lanes"
 
 
 -- Smart constructors for primitive applications

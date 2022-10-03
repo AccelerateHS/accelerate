@@ -382,6 +382,7 @@ module Data.Array.Accelerate (
   -- *** Logical operations
   (&&), (||), not,
   (&&!), (||!),
+  vand, vor,
 
   -- *** Numeric operations
   subtract, even, odd, gcd, lcm, (^), (^^),
