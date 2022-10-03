@@ -311,9 +311,6 @@ mkBitcast'
     -> Exp (Vec n b)
 mkBitcast' (Exp a) = mkExp $ Coerce (scalarType @(VecR n a)) (scalarType @(VecR n b)) a
 
-splat :: (KnownNat n, SIMD n a, Elt a) => Exp a -> Exp (Vec n a)
-splat x = mkPack (P.repeat x)
-
 defaultFloatRadix :: forall a. P.RealFloat a => Exp a -> Exp Int
 defaultFloatRadix _ = P.fromInteger (P.floatRadix (undefined::a))
 

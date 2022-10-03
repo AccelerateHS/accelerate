@@ -53,7 +53,7 @@ module Data.Array.Accelerate.Smart (
   indexHead, indexTail,
 
   -- ** Vector operations
-  mkPack, mkUnpack,
+  splat, mkPack, mkUnpack,
   extract, mkExtract,
   insert, mkInsert,
   shuffle,
@@ -131,7 +131,7 @@ import qualified Data.Primitive.Vec                                 as Prim
 
 import Data.Kind
 import Data.Text.Lazy.Builder
-import Formatting
+import Formatting                                                   hiding ( splat )
 
 import GHC.Prim
 import GHC.TypeLits
@@ -1001,10 +1001,12 @@ indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail (Exp x) = mkExp $ Prj PairIdxLeft x
 
 
-mkUnpack :: forall n a. (SIMD n a, Elt a) => Exp (Vec n a) -> [Exp a]
-mkUnpack v =
-  let n = fromIntegral (natVal' (proxy# :: Proxy# n)) :: Word8
-   in map (extract v . constant) [0 .. n-1]
+-- | Fill all lanes of a SIMD vector with the given value
+--
+-- @since 1.4.0.0
+--
+splat :: (SIMD n a, Elt a) => Exp a -> Exp (Vec n a)
+splat x = mkPack (repeat x)
 
 mkPack :: forall n a. (SIMD n a, Elt a) => [Exp a] -> Exp (Vec n a)
 mkPack xs =
@@ -1015,6 +1017,11 @@ mkPack xs =
       n = fromIntegral (natVal' (proxy# :: Proxy# n))
   in
   go 0 (take n xs) undef
+
+mkUnpack :: forall n a. (SIMD n a, Elt a) => Exp (Vec n a) -> [Exp a]
+mkUnpack v =
+  let n = fromIntegral (natVal' (proxy# :: Proxy# n)) :: Word8
+   in map (extract v . constant) [0 .. n-1]
 
 -- | Extract a single scalar element from the given SIMD vector at the
 -- specified index
