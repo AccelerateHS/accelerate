@@ -22,7 +22,10 @@ import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
+import Data.Array.Accelerate.Classes.Integral
+
 import Language.Haskell.TH                                          hiding ( Exp )
+import Prelude                                                      hiding ( Integral )
 
 
 -- | Convert from Bool to integral types
