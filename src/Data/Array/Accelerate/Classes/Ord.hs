@@ -30,9 +30,9 @@ module Data.Array.Accelerate.Classes.Ord (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.VEq
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pattern.Ordering
 import Data.Array.Accelerate.Pattern.Tuple
@@ -44,15 +44,11 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.VOrd
 
-import Data.Bits
 import Data.Char
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import Prelude                                                      ( ($), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
 import Text.Printf
 import qualified Prelude                                            as P
-
-import GHC.Exts
-import GHC.TypeLits
 
 
 infix 4 <
@@ -245,25 +241,13 @@ instance VOrd n a => Ord (Vec n a) where
   (<=) = vcmp (<=*)
   (>=) = vcmp (>=*)
 
-vcmp :: forall n a. KnownNat n
+vcmp :: forall n a. VOrd n a
      => (Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool))
      -> (Exp (Vec n a) -> Exp (Vec n a) -> Exp Bool)
-vcmp op x y =
-  let n :: Int
-      n = fromInteger $ natVal' (proxy# :: Proxy# n)
-      v = op x y
-      --
-      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
-          => Exp (Vec n Bool)
-          -> Exp Bool
-      cmp u =
-        let u' = mkPrimUnary (PrimFromBool bitType integralType) u :: Exp t
-         in mkEq (constant ((1 `unsafeShiftL` n) - 1)) u'
+vcmp cmp x y =
+  let go [u]    [_]    = u
+      go (u:us) (v:vs) = u || (v && go us vs)
+      go _      _      = internalError "unexpected vector encoding"
   in
-  if n P.<= 8   then cmp @Word8   v else
-  if n P.<= 16  then cmp @Word16  v else
-  if n P.<= 32  then cmp @Word32  v else
-  if n P.<= 64  then cmp @Word64  v else
-  if n P.<= 128 then cmp @Word128 v else
-    internalError "Can not handle Vec types with more than 128 lanes"
+  go (mkUnpack (cmp x y)) (mkUnpack (x ==* y))
 
