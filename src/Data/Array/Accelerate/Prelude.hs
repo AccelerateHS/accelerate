@@ -131,6 +131,7 @@ import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Sli
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.FromBool
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
@@ -1656,7 +1657,7 @@ compact keep arr
   -- for the offset indices.
   | Just Refl <- matchShapeType @sh @Z
   = let
-        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 target len   = scanl' (+) 0 (map fromBool keep)
         prj ix          = if keep!ix
                              then Just (I1 (target!ix))
                              else Nothing
@@ -1673,7 +1674,7 @@ compact keep arr
 compact keep arr
   = let
         sz              = indexTail (shape arr)
-        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 target len   = scanl' (+) 0 (map fromBool keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
                              then Just (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))

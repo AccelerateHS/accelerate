@@ -331,6 +331,7 @@ module Data.Array.Accelerate (
   RealFloat(..),
 
   -- *** Numeric conversion classes
+  FromBool(..),
   FromIntegral(..),
   ToFloating(..),
 
@@ -392,7 +393,7 @@ module Data.Array.Accelerate (
   intersect,
 
   -- *** Conversions
-  ord, chr, boolToInt, bitcast,
+  ord, chr, bitcast,
 
   -- ---------------------------------------------------------------------------
   -- * Foreign Function Interface (FFI)
@@ -439,6 +440,7 @@ import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.FromBool
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num

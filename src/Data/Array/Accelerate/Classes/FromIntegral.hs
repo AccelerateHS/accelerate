@@ -65,7 +65,7 @@ class FromIntegral a b where
 -- >     --
 -- >   concat `fmap` mapM dig cons
 --
-runQ $
+runQ $ do
   let
       integralTypes :: [Name]
       integralTypes =
@@ -102,6 +102,19 @@ runQ $
             instance KnownNat n => FromIntegral (Vec n $(conT a)) (Vec n $(conT b)) where
               fromIntegral = $(varE $ if a == b then 'id else 'mkFromIntegral )
           |]
-  in
-  concat <$> sequence [ thFromIntegral from to | from <- integralTypes, to <- numTypes ]
+
+      thToBool :: Name -> Q [Dec]
+      thToBool a =
+        [d| -- | @since 1.4.0.0
+            instance FromIntegral $(conT a) Bool where
+              fromIntegral = mkToBool
+
+            -- | @since 1.4.0.0
+            instance KnownNat n => FromIntegral (Vec n $(conT a)) (Vec n Bool) where
+              fromIntegral = mkToBool
+          |]
+  --
+  x <- concat <$> sequence [ thFromIntegral from to | from <- integralTypes, to <- numTypes ]
+  y <- concat <$> mapM thToBool integralTypes
+  return (x ++ y)
 

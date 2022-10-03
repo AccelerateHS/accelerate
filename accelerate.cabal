@@ -459,6 +459,7 @@ library
         Data.Array.Accelerate.Classes.Eq
         Data.Array.Accelerate.Classes.Floating
         Data.Array.Accelerate.Classes.Fractional
+        Data.Array.Accelerate.Classes.FromBool
         Data.Array.Accelerate.Classes.FromIntegral
         Data.Array.Accelerate.Classes.Integral
         Data.Array.Accelerate.Classes.Num

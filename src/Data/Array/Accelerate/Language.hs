@@ -83,7 +83,7 @@ module Data.Array.Accelerate.Language (
   subtract, even, odd, gcd, lcm, (^), (^^),
 
   -- * Conversions
-  ord, chr, boolToInt, bitcast,
+  ord, chr, bitcast,
 
 ) where
 
@@ -1477,12 +1477,6 @@ ord = mkFromIntegral
 --
 chr :: Exp Int -> Exp Char
 chr = mkFromIntegral
-
--- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
--- into '1'.
---
-boolToInt :: Exp Bool -> Exp Int
-boolToInt = mkFromBool
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

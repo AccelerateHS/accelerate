@@ -1437,11 +1437,11 @@ mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 mkToFloating :: (IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
 mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
-mkToBool :: (IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp a -> Exp Bool
-mkToBool = mkPrimUnary $ PrimToBool (SingleIntegralType singleIntegralType) bitType
+mkToBool :: (IsIntegral (EltR a), IsBit (EltR b)) => Exp a -> Exp b
+mkToBool = mkPrimUnary $ PrimToBool integralType bitType
 
-mkFromBool :: (IsSingleIntegral (EltR a), BitOrMask (EltR a) ~ Bit) => Exp Bool -> Exp a
-mkFromBool = mkPrimUnary $ PrimFromBool bitType (SingleIntegralType singleIntegralType)
+mkFromBool :: (IsBit (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
+mkFromBool = mkPrimUnary $ PrimFromBool bitType integralType
 
 -- Other conversions
 
