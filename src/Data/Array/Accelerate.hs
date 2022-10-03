@@ -380,8 +380,9 @@ module Data.Array.Accelerate (
   sfoldl,
 
   -- *** Logical operations
-  (&&), (||), not,
-  (&&!), (||!),
+  not, vnot,
+  (&&), (&&!), (&&*),
+  (||), (||!), (||*),
   vand, vor,
 
   -- *** Numeric operations
