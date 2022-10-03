@@ -56,6 +56,7 @@
       # We cannot easily support ghc865 with nix as it's so much out of date
       # that it's not included in nixpkgs anymore
       supportedghcs = [
+        [8 8 4]
         [8 10 7]
         [9 0 2]
         [9 2 4]

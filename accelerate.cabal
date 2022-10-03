@@ -329,7 +329,7 @@ flag nofib
 library
   build-depends:
     , ansi-terminal                >=0.6.2
-    , base                         >=4.12   && <=4.17
+    , base                         >=4.12   && <4.17.0
     , base-orphans                 >=0.3
     , bytestring                   >=0.10.2
     , containers                   >=0.3
