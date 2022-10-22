@@ -101,19 +101,19 @@
 
       # utility functions that, passed a ghc version in the list format
       # and a system name returns hls, hlint and fourmolu
-      toolsForghc = ghcversion: system: let
+      toolsForghc = ghcversion: system: pkgFun: let
         gver = ghcVer ghcversion;
       in
         {
-          haskell-language-server = (plainpkgsFor system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
-          inherit ((plainpkgsFor system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
+          haskell-language-server = (pkgFun system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
+          inherit ((pkgFun system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
         }
         //
         # ghc 8 doesn't build fourmolu 0.4 because it doesn't provide the correct cabal version
         (
           if (builtins.head ghcversion) == 8
           then {
-            inherit ((plainpkgsFor system).haskellPackages) fourmolu;
+            inherit ((pkgFun system).haskellPackages) fourmolu;
           }
           else {}
         );
@@ -138,7 +138,7 @@
             shellcheck.enable = true;
           };
 
-          tools = {inherit (toolsForghc ghcversion system) fourmolu hlint;};
+          tools = {inherit (toolsForghc ghcversion system plainpkgsFor) fourmolu hlint;};
         };
 
       # builds, given a ghc version in the list format and a system name, a
@@ -149,7 +149,7 @@
         pkgs = pkgsFor system;
         plainpkgs = plainpkgsFor system;
         gver = ghcVer ghcversion;
-        tools = toolsForghc ghcversion system;
+        tools = toolsForghc ghcversion system plainpkgsFor;
       in
         pkgs.haskell-nix.stackProject' {
           src = ./.;
@@ -181,7 +181,7 @@
       # formatting and quick adjustments, it does not provide a full dev env
       toolingShellFor = ghcversion: system: let
         plainpkgs = plainpkgsFor system;
-        tools = toolsForghc ghcversion system;
+        tools = toolsForghc ghcversion system plainpkgsFor;
       in
         plainpkgs.mkShell {
           inherit (precommitcheckForghc ghcversion system) shellHook;
