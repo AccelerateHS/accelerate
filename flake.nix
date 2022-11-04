@@ -47,11 +47,10 @@
       plainpkgsFor = system: import nixpkgs-upstream {inherit system;};
 
       # We support a bunch of systems and ghc versions,
-      # this is what the flakes provides outputs for
-      # If you want to run nix flake show, make sure this is a singleton list that only contains your system,
-      # because IFD will not succeed to build for other specified systems
-      supportedsystems = ["x86_64-linux"];
-      # supportedsystems = systems.flakeExposed;
+      supportedsystems = systems.flakeExposed;
+
+      # This is should be set to the system that the flake is run on
+      evalSystem = "x86_64-linux";
 
       # We cannot easily support ghc865 with nix as it's so much out of date
       # that it's not included in nixpkgs anymore
@@ -153,6 +152,7 @@
       in
         pkgs.haskell-nix.stackProject' {
           src = ./.;
+          inherit evalSystem;
           inherit (gver) compiler-nix-name;
           stackYaml = "stack-${gver.stack}.yaml";
           shell = {
