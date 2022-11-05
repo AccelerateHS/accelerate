@@ -91,13 +91,21 @@ cancel (Async tid _) = throwTo tid ThreadKilled
 --
 {-# INLINE rawForkIO #-}
 rawForkIO :: IO () -> IO ThreadId
+#if MIN_VERSION_ghc_prim(0,9,0)
+rawForkIO (IO action) = IO $ \s ->
+#else
 rawForkIO action = IO $ \s ->
+#endif
   case fork# action s of
     (# s', tid #) -> (# s', ThreadId tid #)
 
 {-# INLINE rawForkOn #-}
 rawForkOn :: Int -> IO () -> IO ThreadId
+#if MIN_VERSION_ghc_prim(0,9,0)
+rawForkOn (I# cpu) (IO action) = IO $ \s ->
+#else
 rawForkOn (I# cpu) action = IO $ \s ->
+#endif
   case forkOn# cpu action s of
     (# s', tid #) -> (# s', ThreadId tid #)
 
