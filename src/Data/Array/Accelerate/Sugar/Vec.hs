@@ -1,7 +1,8 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |

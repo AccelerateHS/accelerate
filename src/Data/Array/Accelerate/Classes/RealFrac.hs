@@ -275,3 +275,4 @@ preludeError x
             , "These Prelude.RealFrac instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
+
