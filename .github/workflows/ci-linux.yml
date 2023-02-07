@@ -31,16 +31,30 @@ jobs:
       HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - run: ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
 
-      - uses: actions/cache@v2
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: actions/cache-always@v3
+        uses: .github/actions/cache-always
         with:
           path: snapshot.pkgdb
           key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
 
-      - uses: actions/cache@v2
+      - name: actions/cache-always@v3
+        uses: .github/actions/cache-always
         with:
           path: |
             ~/.local/bin
@@ -56,10 +70,10 @@ jobs:
       - name: Install stack
         run: |
           mkdir -p ~/.local/bin
-          if [[ ! -x ~/.local/bin/stack ]]; then
-            curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-            chmod a+x ~/.local/bin/stack
-          fi
+          # if [[ ! -x ~/.local/bin/stack ]]; then
+          #   curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+          #   chmod a+x ~/.local/bin/stack
+          # fi
           echo "~/.local/bin" >> $GITHUB_PATH
 
       - name: Install GHC

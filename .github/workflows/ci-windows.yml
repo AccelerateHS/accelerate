@@ -30,16 +30,16 @@ jobs:
       __COMPAT_LAYER: ""
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - run: mv stack-${{ matrix.ghc }}.yaml stack.yaml
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: snapshot.pkgdb
           key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: |
             C:\Users\runneradmin\AppData\Roaming\stack
