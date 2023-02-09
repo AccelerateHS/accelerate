@@ -48,13 +48,13 @@ jobs:
           sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
 
       - name: actions/cache-always@v3
-        uses: .github/actions/cache-always
+        uses: ./.github/actions/cache-always
         with:
           path: snapshot.pkgdb
           key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
 
       - name: actions/cache-always@v3
-        uses: .github/actions/cache-always
+        uses: ./.github/actions/cache-always
         with:
           path: |
             ~/.local/bin
