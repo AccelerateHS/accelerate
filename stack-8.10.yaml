@@ -2,7 +2,7 @@
 # For advanced use and comprehensive documentation of the format, please see:
 # https://docs.haskellstack.org/en/stable/yaml_configuration/
 
-resolver: lts-18.25
+resolver: lts-18.28
 
 packages:
 - .
