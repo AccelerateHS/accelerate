@@ -31,8 +31,18 @@ type SrcLoc = Word64
 --
 #if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
 
-foreign import ccall unsafe "___tracy_init_thread" init_thread :: IO ()
-foreign import ccall unsafe "___tracy_set_thread_name" set_thread_name :: CString -> IO ()
+#ifdef TRACY_MANUAL_LIFETIME
+foreign import ccall unsafe "___tracy_startup_profiler" startup_profiler :: IO ()
+foreign import ccall unsafe "___tracy_shutdown_profiler" shutdown_profiler :: IO ()
+#else
+startup_profiler :: IO ()
+startup_profiler = return ()
+
+shutdown_profiler :: IO ()
+shutdown_profiler = return ()
+#endif
+
+foreign import ccall unsafe "___tracy_connected" tracy_connected :: IO CInt
 
 foreign import ccall unsafe "___tracy_alloc_srcloc" alloc_srcloc :: Word32 -> CString -> CSize -> CString -> CSize -> IO SrcLoc
 foreign import ccall unsafe "___tracy_alloc_srcloc_name" alloc_srcloc_name :: Word32 -> CString -> CSize -> CString -> CSize -> CString -> CSize -> IO SrcLoc
@@ -62,19 +72,33 @@ foreign import ccall unsafe "___tracy_emit_frame_image" emit_frame_image :: Ptr 
 foreign import ccall unsafe "___tracy_emit_plot" emit_plot :: CString -> Double -> IO ()
 foreign import ccall unsafe "___tracy_emit_message_appinfo" emit_message_appinfo :: CString -> CSize -> IO ()
 
+#ifdef TRACY_FIBERS
+foreign import ccall unsafe "___tracy_fiber_enter" fiber_enter :: CString -> IO ()
+foreign import ccall unsafe "___tracy_fiber_leave" fiber_leave :: IO ()
+#else
+fiber_enter :: CString -> IO ()
+fiber_enter _ = return ()
+
+fiber_leave :: IO ()
+fiber_leave   = return ()
+#endif
+
 -- SEE: [linking to .c files]
 --
 runQ $ do
-  addForeignFilePath LangCxx "cbits/tracy/TracyClient.cpp"
+  addForeignFilePath LangCxx "cbits/tracy/public/TracyClient.cpp"
   return []
 
 #else
 
-init_thread :: IO ()
-init_thread = return ()
+startup_profiler :: IO ()
+startup_profiler = return ()
 
-set_thread_name :: CString -> IO ()
-set_thread_name _ = return ()
+shutdown_profiler :: IO ()
+shutdown_profiler = return ()
+
+tracy_connected :: IO CInt
+tracy_connected = return 0
 
 alloc_srcloc :: Word32 -> CString -> CSize -> CString -> CSize -> IO SrcLoc
 alloc_srcloc _ _ _ _ _ = return 0
@@ -141,6 +165,12 @@ emit_plot _ _ = return ()
 
 emit_message_appinfo :: CString -> CSize -> IO ()
 emit_message_appinfo _ _ = return ()
+
+fiber_enter :: CString -> IO ()
+fiber_enter _ = return ()
+
+fiber_leave :: IO ()
+fiber_leave = return ()
 
 #endif
 

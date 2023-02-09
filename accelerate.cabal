@@ -144,15 +144,15 @@ extra-source-files:
     cbits/xkcp/*.inc
     -- TRACY
     -- These are referenced directly using the FFI
-    cbits/tracy/*.h
-    cbits/tracy/*.hpp
-    cbits/tracy/*.cpp
-    cbits/tracy/common/*.h
-    cbits/tracy/common/*.hpp
-    cbits/tracy/common/*.cpp
-    cbits/tracy/client/*.h
-    cbits/tracy/client/*.hpp
-    cbits/tracy/client/*.cpp
+    cbits/tracy/public/*.cpp
+    cbits/tracy/public/tracy/*.h
+    cbits/tracy/public/tracy/*.hpp
+    cbits/tracy/public/common/*.h
+    cbits/tracy/public/common/*.hpp
+    cbits/tracy/public/common/*.cpp
+    cbits/tracy/public/client/*.h
+    cbits/tracy/public/client/*.hpp
+    cbits/tracy/public/client/*.cpp
     -- These are used to build Tracy's client tools in Setup.hs
     cbits/tracy/capture/build/unix/Makefile
     cbits/tracy/capture/build/unix/*.mk
@@ -166,32 +166,35 @@ extra-source-files:
     cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
     -- Used by the Tracy's client tools
     cbits/tracy/capture/src/*.cpp
-    cbits/tracy/imgui/*.h
     cbits/tracy/imgui/*.cpp
-    cbits/tracy/imgui/misc/freetype/*.h
+    cbits/tracy/imgui/*.h
     cbits/tracy/imgui/misc/freetype/*.cpp
-    cbits/tracy/libbacktrace/*.h
-    cbits/tracy/libbacktrace/*.hpp
-    cbits/tracy/libbacktrace/*.cpp
+    cbits/tracy/imgui/misc/freetype/*.h
+    cbits/tracy/nfd/*.cpp
     cbits/tracy/nfd/*.h
-    cbits/tracy/nfd/*.c
+    cbits/tracy/nfd/*.m
+    cbits/tracy/profiler/src/*.cpp
     cbits/tracy/profiler/src/*.h
     cbits/tracy/profiler/src/*.hpp
-    cbits/tracy/profiler/src/*.cpp
-    cbits/tracy/profiler/libs/gl3w/GL/*.h
-    cbits/tracy/profiler/libs/gl3w/GL/*.c
+    cbits/tracy/profiler/src/font/*.hpp
+    cbits/tracy/profiler/src/imgui/*.cpp
+    cbits/tracy/profiler/src/imgui/*.h
+    cbits/tracy/public/libbacktrace/*.cpp
+    cbits/tracy/public/libbacktrace/*.h
+    cbits/tracy/public/libbacktrace/*.hpp
+    cbits/tracy/server/*.cpp
     cbits/tracy/server/*.h
     cbits/tracy/server/*.hpp
-    cbits/tracy/server/*.cpp
     cbits/tracy/zstd/*.h
-    cbits/tracy/zstd/common/*.h
     cbits/tracy/zstd/common/*.c
-    cbits/tracy/zstd/compress/*.h
+    cbits/tracy/zstd/common/*.h
     cbits/tracy/zstd/compress/*.c
-    cbits/tracy/zstd/decompress/*.h
+    cbits/tracy/zstd/compress/*.h
+    cbits/tracy/zstd/decompress/*.S
     cbits/tracy/zstd/decompress/*.c
-    cbits/tracy/zstd/dictBuilder/*.h
+    cbits/tracy/zstd/decompress/*.h
     cbits/tracy/zstd/dictBuilder/*.c
+    cbits/tracy/zstd/dictBuilder/*.h
 
 extra-doc-files:
     images/*.png
