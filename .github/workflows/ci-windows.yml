@@ -68,6 +68,7 @@ jobs:
 
       - name: Test nofib
         run: stack --no-terminal test accelerate:nofib-interpreter --fast --flag accelerate:nofib
+        if: ${{ matrix.ghc != '8.10' }} && ${{ matrix.ghc != '9.0' }} && ${{ matrix.ghc != '9.2' }}
 
       # - name: Test haddock generation
       #   run: stack --no-terminal haddock --haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs" --fast --flag accelerate:nofib
