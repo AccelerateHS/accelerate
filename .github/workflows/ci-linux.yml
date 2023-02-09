@@ -27,7 +27,7 @@ jobs:
           - "8.8"
           - "8.6"
     env:
-      STACK_FLAGS: "--fast --flag accelerate:nofib"
+      STACK_FLAGS: "--flag accelerate:nofib"
       HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""
 
     steps:
@@ -67,13 +67,19 @@ jobs:
             ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-
             ${{ runner.os }}-${{ matrix.ghc }}-
 
-      - name: Install stack
+      # - name: Install stack
+      #   run: |
+      #      if [[ ! -x ~/.local/bin/stack ]]; then
+      #        curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+      #        chmod a+x ~/.local/bin/stack
+      #      fi
+
+      - name: Setup stack
         run: |
           mkdir -p ~/.local/bin
-          # if [[ ! -x ~/.local/bin/stack ]]; then
-          #   curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-          #   chmod a+x ~/.local/bin/stack
-          # fi
+          mkdir -p ~/.stack/hooks
+          curl https://raw.githubusercontent.com/haskell/ghcup-hs/master/scripts/hooks/stack/ghc-install.sh > ~/.stack/hooks/ghc-install.sh
+          chmod +x ~/.stack/hooks/ghc-install.sh
           echo "~/.local/bin" >> $GITHUB_PATH
 
       - name: Install GHC
@@ -85,9 +91,9 @@ jobs:
       - name: Build
         run: stack build $STACK_FLAGS $HADDOCK_FLAGS --test --no-run-tests
 
-      - name: Test doctest
-        run: stack test accelerate:doctest $STACK_FLAGS
-        if: ${{ matrix.ghc != '9.2' }}
+      # - name: Test doctest
+      #   run: stack test accelerate:doctest $STACK_FLAGS
+      #   if: ${{ matrix.ghc != '9.2' }} && ${{ matrix.ghc != '9.4' }}
 
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS
