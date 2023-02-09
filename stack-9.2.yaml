@@ -11,9 +11,6 @@ packages:
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
-flags:
-  accelerate:
-    debug: true
 
 # Extra package databases containing global packages
 # extra-package-dbs: []
