@@ -26,8 +26,10 @@ jobs:
           - "8.10"
           - "8.8"
           - "8.6"
+        build:
+          - debug
+          - release
     env:
-      STACK_FLAGS: "--flag accelerate:nofib"
       HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""
 
     steps:
@@ -73,6 +75,16 @@ jobs:
       #        curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
       #        chmod a+x ~/.local/bin/stack
       #      fi
+
+      - name: Setup environment
+        if: ${{ matrix.mode == 'release' }}
+        run: |
+          echo 'STACK_FLAGS=--flag accelerate:nofib' >> $GITHUB_ENV
+
+      - name: Setup environment
+        if: ${{ matrix.mode == 'debug' }}
+        run: |
+          echo 'STACK_FLAGS="--flag accelerate:nofib --flag accelerate:debug"' >> $GITHUB_ENV
 
       - name: Setup stack
         run: |
