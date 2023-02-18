@@ -77,14 +77,12 @@ jobs:
       #      fi
 
       - name: Setup environment
-        if: ${{ matrix.mode == 'release' }}
         run: |
-          echo 'STACK_FLAGS=--flag accelerate:nofib' >> $GITHUB_ENV
-
-      - name: Setup environment
-        if: ${{ matrix.mode == 'debug' }}
-        run: |
-          echo 'STACK_FLAGS="--flag accelerate:nofib --flag accelerate:debug"' >> $GITHUB_ENV
+          if [ ${{ matrix.build }} == 'release' ]; then
+            echo 'STACK_FLAGS=--flag accelerate:nofib' >> $GITHUB_ENV
+          else
+            echo 'STACK_FLAGS="--flag accelerate:nofib --flag accelerate:debug"' >> $GITHUB_ENV
+          fi
 
       - name: Setup stack
         run: |
