@@ -81,8 +81,8 @@ jobs:
             echo 'HADDOCK_FLAGS=--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs"' >> $GITHUB_ENV
           else
             sudo apt-get -y install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
-            echo 'STACK_FLAGS=--flag accelerate:nofib --flag accelerate:debug --ghc-options="-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK"' >> $GITHUB_ENV
-            echo 'HADDOCK_FLAGS=--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs --optghc=\"-optc=-DTRACY_TIMER_FALLBACK\" --optghc=\"-optcxx=-DTRACY_TIMER_FALLBACK\""' >> $GITHUB_ENV
+            echo 'STACK_FLAGS=--flag accelerate:nofib --flag accelerate:debug --ghc-options=\'-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK\'' >> $GITHUB_ENV
+            echo 'HADDOCK_FLAGS=--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments="--no-print-missing-docs --optghc='-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK'"' >> $GITHUB_ENV
           fi
 
       - name: Setup stack
