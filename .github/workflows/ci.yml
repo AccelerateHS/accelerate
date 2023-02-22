@@ -2,7 +2,7 @@ name: ci
 
 # Trigger the workflow on push or pull request
 on:
-  workflow_dispatch:
+  # workflow_dispatch:
   pull_request:
     # branches: [master]
     types: [synchronize, opened, reopened]
