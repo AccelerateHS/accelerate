@@ -1,0 +1,118 @@
+name: ci
+
+# Trigger the workflow on push or pull request
+on:
+  workflow_dispatch:
+  pull_request:
+    # branches: [master]
+    types: [synchronize, opened, reopened]
+  push:
+    # branches: [main]
+    paths:
+      - '.github/workflows/ci.yml'
+      - '*.cabal'
+      - 'cabal.project'
+      - 'src/**'
+      - 'test/**'
+      - 'cbits/**'
+  schedule:
+    # additionally run once per week (At 00:00 on Sunday) to maintain cache
+    - cron: '0 0 * * 0'
+
+jobs:
+  cabal:
+    name: ${{ matrix.os }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - 'ubuntu-latest'
+          - 'macOS-latest'
+          - 'windows-latest'
+        ghc:
+          - 'latest'
+          - '9.4'
+          - '9.2'
+          - '9.0'
+          - '8.10'
+          - '8.8'
+          - '8.6'
+        mode:
+          - 'debug'
+          - 'release'
+        exclude:
+          - os: 'windows-latest'
+            mode: 'debug'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: Set up Haskell
+        uses: haskell/actions/setup@v2
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: latest
+
+      - name: Set up environment
+        run: |
+          if [ ${{ matrix.mode }} == 'release' ]; then
+            echo 'CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib' >> $GITHUB_ENV
+          else
+            if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
+              sudo apt-get -y install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+            elif [ ${{ matrix.os }} == 'macOS-latest' ]; then
+              brew install pkg-config capstone freetype glfw
+            fi
+            echo 'CABAL_FLAGS=--enable-tests --test-show-details=direct --flags="nofib debug" --ghc-options="-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK"' >> $GITHUB_ENV
+          fi
+
+      - name: Configure
+        run: |
+          cabal configure $CABAL_FLAGS
+
+      - name: Freeze
+        run: |
+          cabal freeze
+
+      - name: actions/cache-always@v3
+        uses: ./.github/actions/cache-always
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('cabal.project.freeze') }}
+            ${{ runner.os }}-${{ matrix.ghc }}-
+
+      - name: Build dependencies
+        run: cabal build --only-dependencies
+
+      - name: Build
+        run: cabal build
+
+      - name: Documentation
+        run: cabal haddock
+
+      - name: Test doctest
+        run: cabal test doctest
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+
+      - name: Test nofib
+        run: stack test nofib-interpreter
+
+# vi: nospell
