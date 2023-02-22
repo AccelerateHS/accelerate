@@ -109,7 +109,7 @@ jobs:
 
       - name: Test doctest
         run: cabal test doctest
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.os == 'ubuntu-latest' }} && ${{ matrix.mode != 'debug' }}
 
       - name: Test nofib
         run: cabal test nofib-interpreter
