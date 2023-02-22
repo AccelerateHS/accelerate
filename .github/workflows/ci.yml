@@ -107,6 +107,7 @@ jobs:
 
       - name: Haddock
         run: cabal haddock
+        if: ${{ matrix.mode != 'debug' }}
 
       - name: Test doctest
         run: cabal test doctest
