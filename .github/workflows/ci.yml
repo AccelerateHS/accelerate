@@ -21,7 +21,7 @@ on:
 
 jobs:
   build:
-    name: ${{ runner.os }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
+    name: runner.os ghc-${{ matrix.ghc }} ${{ matrix.mode }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
