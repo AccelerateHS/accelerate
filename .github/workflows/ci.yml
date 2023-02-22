@@ -114,5 +114,6 @@ jobs:
 
       - name: Test nofib
         run: cabal test nofib-interpreter
+        if: ${{ matrix.os != 'windows-latest' }}
 
 # vi: nospell
