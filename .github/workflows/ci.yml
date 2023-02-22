@@ -113,6 +113,6 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
 
       - name: Test nofib
-        run: stack test nofib-interpreter
+        run: cabal test nofib-interpreter
 
 # vi: nospell
