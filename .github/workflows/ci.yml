@@ -77,7 +77,7 @@ jobs:
             elif [ ${{ matrix.os }} == 'macOS-latest' ]; then
               brew install pkg-config capstone freetype glfw
             fi
-            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib --flags=debug --ghc-options=\"-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK\" >> $GITHUB_ENV
+            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib --flags=debug --ghc-options=\"-optc=-DTRACY_TIMER_FALLBACK\" --ghc-options=\"-optcxx=-DTRACY_TIMER_FALLBACK\" >> $GITHUB_ENV
           fi
         shell: bash
 
