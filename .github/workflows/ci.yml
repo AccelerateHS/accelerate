@@ -70,28 +70,20 @@ jobs:
       - name: Set up environment
         run: |
           if [ ${{ matrix.mode }} == 'release' ]; then
-            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=\"+nofib\" >> $GITHUB_ENV
+            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib >> $GITHUB_ENV
           else
             if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
               sudo apt-get -y install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
             elif [ ${{ matrix.os }} == 'macOS-latest' ]; then
               brew install pkg-config capstone freetype glfw
             fi
-            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=\"+nofib +debug\" --ghc-options=\"-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK\" >> $GITHUB_ENV
+            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib --flags=debug --ghc-options=\"-optc=-DTRACY_TIMER_FALLBACK -optcxx=-DTRACY_TIMER_FALLBACK\" >> $GITHUB_ENV
           fi
-        if: ${{ matrix.os != 'windows-latest' }}
-
-      - name: Set up environment
-        run: echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib >> $env:GITHUB_ENV
-        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
 
       - name: Configure
         run: cabal configure $CABAL_FLAGS
-        if: ${{ matrix.os != 'windows-latest' }}
-
-      - name: Configure
-        run: cabal configure $env:CABAL_FLAGS
-        if: ${{ matrix.os == 'windows-latest' }}
+        shell: bash
 
       - name: Freeze
         run: cabal freeze
