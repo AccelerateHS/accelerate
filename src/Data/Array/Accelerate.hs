@@ -470,15 +470,6 @@ import GHC.Generics                                                 ( Generic )
 import GHC.Stack
 
 
--- $setup
--- >>> :seti -XTypeOperators
--- >>> import Data.Array.Accelerate
--- >>> import Data.Array.Accelerate.Interpreter
--- >>> :{
---   let runExp :: Elt e => Exp e -> e
---       runExp e = indexArray (run (unit e)) Z
--- :}
-
 -- Renamings
 -- ---------
 --
