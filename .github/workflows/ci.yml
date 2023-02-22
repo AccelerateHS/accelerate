@@ -105,14 +105,14 @@ jobs:
 
       - name: Haddock
         run: cabal haddock
-        if: ${{ matrix.mode }} == 'release'
+        if: matrix.mode == 'release'
 
       - name: Test doctest
         run: cabal test doctest
-        if: ${{ matrix.os }} == 'ubuntu-latest' && ${{ matrix.mode }} == 'release'
+        if: matrix.os == 'ubuntu-latest' && matrix.mode == 'release'
 
       - name: Test nofib
         run: cabal test nofib-interpreter
-        if: ${{ matrix.os }} != 'windows-latest'
+        if: matrix.os != 'windows-latest'
 
 # vi: nospell
