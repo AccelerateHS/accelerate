@@ -21,8 +21,8 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.os }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
-    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }}-${{ matrix.arch }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
+    runs-on: [ ${{ matrix.os }}, ${{ matrix.arch }} ]
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +30,9 @@ jobs:
           - 'ubuntu-latest'
           - 'macOS-latest'
           - 'windows-latest'
+        arch:
+          - "x64"
+          - "ARM64"
         ghc:
           - 'latest'
           - '9.4'
@@ -42,6 +45,10 @@ jobs:
         exclude:
           - os: 'windows-latest'
             mode: 'debug'
+          - os: 'windows-latest'
+            arch: "ARM64"
+          - os: 'ubuntu-latest'
+            arch: "ARM64"
 
     steps:
       - uses: actions/checkout@v3
@@ -92,10 +99,10 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ matrix.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
           restore-keys: |
-            ${{ matrix.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
-            ${{ matrix.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-
 
       - name: Build dependencies
         run: cabal build --only-dependencies
