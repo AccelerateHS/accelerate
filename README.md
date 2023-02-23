@@ -5,9 +5,9 @@
 
 [![CI](https://github.com/tmcdonell/accelerate/actions/workflows/ci.yml/badge.svg)](https://github.com/tmcdonell/accelerate/actions/workflows/ci.yml)
 [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
-<!-- [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate) -->
-<!-- [![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate) -->
 [![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
+[![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
+[![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
 
 </div>
 
