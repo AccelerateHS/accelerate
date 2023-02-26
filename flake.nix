@@ -44,13 +44,15 @@
 
       # the reason why we have a plainPkgs is that the nixpkgs version used by IOG's haskell.nix is sometimes out of date
       # and the caching of tools is worse than on nixpkgs due to the use of their haskell-nix overlay
-      plainpkgsFor = system: import nixpkgs-upstream {inherit system;};
 
-      # We support a bunch of systems and ghc versions,
-      supportedsystems = systems.flakeExposed;
-
-      # This is should be set to the system that the flake is run on
-      evalSystem = "x86_64-linux";
+      # quick hack to get around nix flake show and nix flake check
+      # not working with IFD, you have to pass --impure for it to
+      # pick up your local system and then the checks (as well as
+      # the show) will go through just fine
+      supportedsystems =
+        if builtins.hasAttr "currentSystem" builtins
+        then [builtins.currentSystem]
+        else nixpkgs.lib.systems.flakeExposed;
 
       # We cannot easily support ghc865 with nix as it's so much out of date
       # that it's not included in nixpkgs anymore
@@ -58,11 +60,8 @@
         [8 8 4]
         [8 10 7]
         [9 0 2]
-        [9 2 4]
-        /*
-        [9 4 2] FIXME: we're waiting for stackage nightly to upgrade to 942 and haskell.nix getting compiler support
-                       for it
-        */
+        [9 2 5]
+        [9 4 4]
       ];
 
       perSystem = genAttrs supportedsystems;
@@ -137,7 +136,7 @@
             shellcheck.enable = true;
           };
 
-          tools = {inherit (toolsForghc ghcversion system plainpkgsFor) fourmolu hlint;};
+          tools = {inherit (toolsForghc ghcversion system pkgsFor) fourmolu hlint;};
         };
 
       # builds, given a ghc version in the list format and a system name, a
@@ -146,13 +145,11 @@
       # ghc version, you need the appropriate resolver
       projectForghc = ghcversion: system: let
         pkgs = pkgsFor system;
-        plainpkgs = plainpkgsFor system;
         gver = ghcVer ghcversion;
-        tools = toolsForghc ghcversion system plainpkgsFor;
+        tools = toolsForghc ghcversion system pkgsFor;
       in
         pkgs.haskell-nix.stackProject' {
           src = ./.;
-          inherit evalSystem;
           inherit (gver) compiler-nix-name;
           stackYaml = "stack-${gver.stack}.yaml";
           shell = {
@@ -161,14 +158,14 @@
             exactDeps = true;
 
             nativeBuildInputs = [
-              plainpkgs.alejandra
-              plainpkgs.cabal-install
-              plainpkgs.stack
-              plainpkgs.fd
-              plainpkgs.ripgrep
+              pkgs.alejandra
+              pkgs.cabal-install
+              pkgs.stack
+              pkgs.fd
+              pkgs.ripgrep
 
-              plainpkgs.haskellPackages.apply-refact
-              plainpkgs.haskellPackages.cabal-fmt
+              pkgs.haskellPackages.apply-refact
+              pkgs.haskellPackages.cabal-fmt
 
               tools.fourmolu
               tools.haskell-language-server
@@ -180,20 +177,20 @@
       # a tooling shell that provides all the necessary stuff to do
       # formatting and quick adjustments, it does not provide a full dev env
       toolingShellFor = ghcversion: system: let
-        plainpkgs = plainpkgsFor system;
-        tools = toolsForghc ghcversion system plainpkgsFor;
+        pkgs = pkgsFor system;
+        tools = toolsForghc ghcversion system pkgsFor;
       in
-        plainpkgs.mkShell {
+        pkgs.mkShell {
           inherit (precommitcheckForghc ghcversion system) shellHook;
           nativeBuildInputs = [
-            plainpkgs.cabal-install
-            plainpkgs.stack
-            plainpkgs.fd
-            plainpkgs.ripgrep
+            pkgs.cabal-install
+            pkgs.stack
+            pkgs.fd
+            pkgs.ripgrep
 
-            plainpkgs.alejandra
-            plainpkgs.haskellPackages.apply-refact
-            plainpkgs.haskellPackages.cabal-fmt
+            pkgs.alejandra
+            pkgs.haskellPackages.apply-refact
+            pkgs.haskellPackages.cabal-fmt
 
             tools.fourmolu
             tools.haskell-language-server
@@ -203,7 +200,7 @@
 
       # utility function that generates flakes and flake outputs based on the ghcVersions
       # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
-      # it provides haskell.nix project and flake, as well as the standard flake outputs
+      # hh provides haskell.nix project and flake, as well as the standard flake outputs
       # packages, checks and devShells
       mkFlakeAttrsFor = ghcversions: projFun: sysFun: let
         ps =
@@ -258,14 +255,13 @@
       inherit (accelerateFlakes) flakes projects packages checks;
 
       pkgs = perSystem pkgsFor;
-      plainpkgs = perSystem plainpkgsFor;
 
       devShells = perSystem (sys:
         accelerateFlakes.devShells.${sys}
         // rec {
           # the default shell is the tooling shell as it loads fastest
           default = tooling;
-          tooling = toolingShellFor [9 2 4] sys;
+          tooling = toolingShellFor [9 2 5] sys;
         });
 
       formatter = perSystem (system: self.pkgs.${system}.alejandra);
