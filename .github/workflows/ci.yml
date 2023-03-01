@@ -156,7 +156,6 @@ jobs:
         with:
           enable-stack: true
           stack-no-global: true
-          stack-setup-ghc: true
 
       - name: actions/cache-always@v3
         uses: ./.github/actions/cache-always
