@@ -1,4 +1,4 @@
-name: ci
+name: CI
 
 # Trigger the workflow on push or pull request
 on:
@@ -20,8 +20,8 @@ on:
     - cron: '0 0 * * 0'
 
 jobs:
-  build:
-    name: ${{ matrix.os }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
+  cabal:
+    name: cabal | ${{ matrix.os }}-${{ matrix.arch }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -45,10 +45,7 @@ jobs:
         exclude:
           - os: 'windows-latest'
             mode: 'debug'
-          - os: 'windows-latest'
-            arch: "ARM64"
-          - os: 'ubuntu-latest'
-            arch: "ARM64"
+          - arch: "ARM64"
 
     steps:
       - uses: actions/checkout@v3
@@ -99,10 +96,10 @@ jobs:
           path: |
             ${{ steps.setup-haskell.outputs.cabal-store }}
             dist-newstyle
-          key: ${{ runner.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
+          key: ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-${{ hashFiles('cabal.project.freeze') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-${{ hashFiles('cabal.project.freeze') }}
-            ${{ runner.os }}-${{ matrix.ghc }}-${{ matrix.mode }}-
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-${{ hashFiles('cabal.project.freeze') }}
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-
 
       - name: Build dependencies
         run: cabal build --only-dependencies
@@ -121,5 +118,64 @@ jobs:
       - name: Test nofib
         run: cabal test nofib-interpreter
         if: matrix.os != 'windows-latest'
+
+  stack:
+    name: stack | ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - 'ubuntu-latest'
+          - 'macOS-latest'
+          - 'windows-latest'
+        arch:
+          - "x64"
+          - "ARM64"
+        exclude:
+          - arch: "ARM64"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: Set up Haskell
+        uses: haskell/actions/setup@v2
+        id: setup-haskell
+        with:
+          enable-stack: true
+          stack-no-global: true
+          stack-setup:ghc: true
+
+      - name: actions/cache-always@v3
+        uses: ./.github/actions/cache-always
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.stack-root }}
+            .stack-work
+          key: ${{ runner.os }}-${{ matrix.arch }}-stack-${{ hashFiles('stack.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-stack-${{ hashFiles('stack.yaml') }}
+            ${{ runner.os }}-${{ matrix.arch }}-stack-
+
+      - name: Setup
+        run: stack setup
+
+      - name: Build dependencies
+        run: stack build --only-dependencies
+
+      - name: Build
+        run: stack build
 
 # vi: nospell
