@@ -12,6 +12,7 @@ on:
       - '.github/workflows/ci.yml'
       - '*.cabal'
       - 'cabal.project'
+      - 'stack.yaml'
       - 'src/**'
       - 'test/**'
       - 'cbits/**'
@@ -35,6 +36,7 @@ jobs:
           - "ARM64"
         ghc:
           - 'latest'
+          - '9.6'
           - '9.4'
           - '9.2'
           - '9.0'
