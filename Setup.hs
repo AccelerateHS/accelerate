@@ -43,7 +43,7 @@ preConfHook args config_flags = do
            then rawSystemExit verbosity "git" ["submodule", "update", "--init", "--recursive"]
            else do
              -- XXX: This must be kept up to date with the git submodule revision
-             let archive = "v0.9.tar.gz"
+             let archive = "v0.9.1.tar.gz"
              createDirectoryIfMissing True "cbits/tracy"
              rawSystemExit verbosity "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
              rawSystemExit verbosity "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
