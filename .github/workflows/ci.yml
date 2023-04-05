@@ -62,7 +62,7 @@ jobs:
       # condition, making it default to `post-if: always ()`.
       - name: Set up actions/cache-always@v3
         run: |
-          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+          sed -i'~' -e '/ post-if: /d' .github/actions/cache-always/action.yml
 
       - name: Set up Haskell
         uses: haskell/actions/setup@v2
@@ -90,9 +90,11 @@ jobs:
         shell: bash
 
       - name: Freeze
-        run: cabal freeze
+        run: |
+          cabal freeze
+          sed -i'~' -e '/^index-state:/d' cabal.project.freeze
 
-      - name: actions/cache-always@v3
+      - name: Run actions/cache-always@v3
         uses: ./.github/actions/cache-always
         with:
           path: |
@@ -150,7 +152,7 @@ jobs:
       # condition, making it default to `post-if: always ()`.
       - name: Set up actions/cache-always@v3
         run: |
-          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+          sed -i'~' -e '/ post-if: /d' .github/actions/cache-always/action.yml
 
       - name: Set up Haskell
         uses: haskell/actions/setup@v2
@@ -159,7 +161,7 @@ jobs:
           enable-stack: true
           stack-no-global: true
 
-      - name: actions/cache-always@v3
+      - name: Run actions/cache-always@v3
         uses: ./.github/actions/cache-always
         with:
           path: |
