@@ -112,7 +112,8 @@ jobs:
         run: cabal build
 
       - name: Haddock
-        run: cabal haddock
+        # Behaviour of cabal haddock has changed for the worse: https://github.com/haskell/cabal/issues/8725
+        run: cabal haddock --disable-documentation
         if: matrix.mode == 'release'
 
       - name: Test doctest
