@@ -20,19 +20,14 @@
 
   inputs = {
     nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
-    nixpkgs-upstream.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     haskell-nix.url = "github:input-output-hk/haskell.nix";
-    pre-commit-hooks = {
-      url = "github:cachix/pre-commit-hooks.nix";
-      inputs.nixpkgs.follows = "nixpkgs-upstream";
-    };
+    pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   };
 
   outputs = {
     self,
     haskell-nix,
     nixpkgs,
-    nixpkgs-upstream,
     pre-commit-hooks,
   }:
     with nixpkgs.lib; let
@@ -60,7 +55,7 @@
         [8 8 4]
         [8 10 7]
         [9 0 2]
-        [9 2 5]
+        [9 2 7]
         [9 4 4]
       ];
 
@@ -97,24 +92,9 @@
       in
         foldr (a: b: a // b) {} (flatten (recurse "" attrs));
 
-      # utility functions that, passed a ghc version in the list format
-      # and a system name returns hls, hlint and fourmolu
-      toolsForghc = ghcversion: system: pkgFun: let
-        gver = ghcVer ghcversion;
-      in
-        {
-          haskell-language-server = (pkgFun system).haskell-language-server.override {supportedGhcVersions = [gver.long];};
-          inherit ((pkgFun system).haskell.packages.${gver.compiler-nix-name}) hlint fourmolu;
-        }
-        //
-        # ghc 8 doesn't build fourmolu 0.4 because it doesn't provide the correct cabal version
-        (
-          if (builtins.head ghcversion) == 8
-          then {
-            inherit ((pkgFun system).haskellPackages) fourmolu;
-          }
-          else {}
-        );
+      tools = {
+        haskell-language-server = "latest";
+      };
 
       # utility function that, passed a ghc version in the list format
       # and a system name returns a pre-commit-check attrset with a shellHook
@@ -135,8 +115,6 @@
             statix.enable = true;
             shellcheck.enable = true;
           };
-
-          tools = {inherit (toolsForghc ghcversion system pkgsFor) fourmolu hlint;};
         };
 
       # builds, given a ghc version in the list format and a system name, a
@@ -146,13 +124,28 @@
       projectForghc = ghcversion: system: let
         pkgs = pkgsFor system;
         gver = ghcVer ghcversion;
-        tools = toolsForghc ghcversion system pkgsFor;
+        # tools = toolsForghc ghcversion system pkgsFor;
       in
         pkgs.haskell-nix.stackProject' {
           src = ./.;
           inherit (gver) compiler-nix-name;
           stackYaml = "stack-${gver.stack}.yaml";
+          modules = [
+            ({config, ...}: {
+              packages."accelerate" = {
+                allComponent.configureFlags = [
+                  "+fdebug"
+                  "-fnofib"
+                ];
+                components.tests."doctest" = {
+                  configureAllComponents = true;
+                  keepSource = true;
+                };
+              };
+            })
+          ];
           shell = {
+            inherit tools;
             inherit (precommitcheckForghc ghcversion system) shellHook;
             withHoogle = true;
             exactDeps = true;
@@ -166,10 +159,6 @@
 
               pkgs.haskellPackages.apply-refact
               pkgs.haskellPackages.cabal-fmt
-
-              tools.fourmolu
-              tools.haskell-language-server
-              tools.hlint
             ];
           };
         };
@@ -178,7 +167,7 @@
       # formatting and quick adjustments, it does not provide a full dev env
       toolingShellFor = ghcversion: system: let
         pkgs = pkgsFor system;
-        tools = toolsForghc ghcversion system pkgsFor;
+        # tools = toolsForghc ghcversion system pkgsFor;
       in
         pkgs.mkShell {
           inherit (precommitcheckForghc ghcversion system) shellHook;
@@ -192,9 +181,9 @@
             pkgs.haskellPackages.apply-refact
             pkgs.haskellPackages.cabal-fmt
 
-            tools.fourmolu
-            tools.haskell-language-server
-            tools.hlint
+            # tools.fourmolu
+            # tools.haskell-language-server
+            # tools.hlint
           ];
         };
 
