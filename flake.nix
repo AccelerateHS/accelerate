@@ -52,11 +52,9 @@
       # We cannot easily support ghc865 with nix as it's so much out of date
       # that it's not included in nixpkgs anymore
       supportedghcs = [
-        [8 8 4]
-        [8 10 7]
-        [9 0 2]
         [9 2 7]
         [9 4 4]
+        # [9 6 1]
       ];
 
       perSystem = genAttrs supportedsystems;
@@ -93,7 +91,7 @@
         foldr (a: b: a // b) {} (flatten (recurse "" attrs));
 
       tools = {
-        haskell-language-server = "latest";
+        haskell-language-server = "1.9.0.0";
       };
 
       # utility function that, passed a ghc version in the list format

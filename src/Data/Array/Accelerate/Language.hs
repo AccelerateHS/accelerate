@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE GADTs               #-}
@@ -119,11 +120,15 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Prelude                                                      ( ($), (.), Maybe(..), Char )
+#if __GLASGOW_HASKELL__ >= 904
+import Data.Type.Equality
+#endif
 
 
 -- $setup
 -- >>> :seti -XFlexibleContexts
 -- >>> :seti -XScopedTypeVariables
+-- >>> :seti -XTypeApplications
 -- >>> :seti -XTypeOperators
 -- >>> :seti -XViewPatterns
 -- >>> import Data.Array.Accelerate
@@ -221,8 +226,8 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- type variable @sh@ takes.
 --
 -- >>> :{
---   let rep0 :: (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
---       rep0 n a = replicate (lift (Any :. n)) a
+--   let rep0 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
+--       rep0 n a = replicate (lift (Any @sh :. n)) a
 -- :}
 --
 -- >>> let x = unit 42 :: Acc (Scalar Int)
@@ -245,8 +250,8 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- Of course, 'Any' and 'All' can be used together.
 --
 -- >>> :{
---   let rep1 :: (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
---       rep1 n a = replicate (lift (Any :. n :. All)) a
+--   let rep1 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
+--       rep1 n a = replicate (lift (Any @sh :. n :. All)) a
 -- :}
 --
 -- >>> run $ rep1 5 (use vec)
@@ -359,8 +364,8 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 --
 -- >>> :{
 --   let
---       sl0 :: (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
---       sl0 a n = slice a (lift (Any :. n))
+--       sl0 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
+--       sl0 a n = slice a (lift (Any @sh :. n))
 -- :}
 --
 -- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
@@ -373,8 +378,8 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- Of course, 'Any' and 'All' can be used together.
 --
 -- >>> :{
---   let sl1 :: (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
---       sl1 a n = slice a (lift (Any :. n :. All))
+--   let sl1 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
+--       sl1 a n = slice a (lift (Any @sh :. n :. All))
 -- :}
 --
 -- >>> run $ sl1 (use mat) 4

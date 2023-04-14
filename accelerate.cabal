@@ -132,39 +132,41 @@ stability:          Experimental
 extra-source-files:
   cbits/*.c
   cbits/*.h
-  cbits/tracy/*.cpp
-  cbits/tracy/*.h
-  cbits/tracy/*.hpp
   cbits/tracy/capture/build/unix/*.mk
   cbits/tracy/capture/build/unix/Makefile
   cbits/tracy/capture/build/win32/capture.vcxproj
   cbits/tracy/capture/build/win32/capture.vcxproj.filters
   cbits/tracy/capture/src/*.cpp
-  cbits/tracy/client/*.cpp
-  cbits/tracy/client/*.h
-  cbits/tracy/client/*.hpp
-  cbits/tracy/common/*.cpp
-  cbits/tracy/common/*.h
-  cbits/tracy/common/*.hpp
   cbits/tracy/common/*.mk
   cbits/tracy/imgui/*.cpp
   cbits/tracy/imgui/*.h
   cbits/tracy/imgui/misc/freetype/*.cpp
   cbits/tracy/imgui/misc/freetype/*.h
-  cbits/tracy/libbacktrace/*.cpp
-  cbits/tracy/libbacktrace/*.h
-  cbits/tracy/libbacktrace/*.hpp
-  cbits/tracy/nfd/*.c
+  cbits/tracy/nfd/*.cpp
   cbits/tracy/nfd/*.h
+  cbits/tracy/nfd/*.m
   cbits/tracy/profiler/build/unix/*.mk
   cbits/tracy/profiler/build/unix/Makefile
   cbits/tracy/profiler/build/win32/Tracy.vcxproj
   cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
-  cbits/tracy/profiler/libs/gl3w/GL/*.c
-  cbits/tracy/profiler/libs/gl3w/GL/*.h
   cbits/tracy/profiler/src/*.cpp
   cbits/tracy/profiler/src/*.h
   cbits/tracy/profiler/src/*.hpp
+  cbits/tracy/profiler/src/font/*.hpp
+  cbits/tracy/profiler/src/imgui/*.cpp
+  cbits/tracy/profiler/src/imgui/*.h
+  cbits/tracy/public/*.cpp
+  cbits/tracy/public/client/*.cpp
+  cbits/tracy/public/client/*.h
+  cbits/tracy/public/client/*.hpp
+  cbits/tracy/public/common/*.cpp
+  cbits/tracy/public/common/*.h
+  cbits/tracy/public/common/*.hpp
+  cbits/tracy/public/libbacktrace/*.cpp
+  cbits/tracy/public/libbacktrace/*.h
+  cbits/tracy/public/libbacktrace/*.hpp
+  cbits/tracy/public/tracy/*.h
+  cbits/tracy/public/tracy/*.hpp
   cbits/tracy/server/*.cpp
   cbits/tracy/server/*.h
   cbits/tracy/server/*.hpp
@@ -175,6 +177,7 @@ extra-source-files:
   cbits/tracy/zstd/compress/*.h
   cbits/tracy/zstd/decompress/*.c
   cbits/tracy/zstd/decompress/*.h
+  cbits/tracy/zstd/decompress/*.S
   cbits/tracy/zstd/dictBuilder/*.c
   cbits/tracy/zstd/dictBuilder/*.h
   cbits/xkcp/*.c
@@ -184,6 +187,12 @@ extra-source-files:
   CHANGELOG.md
   README.md
 
+-- XKCP
+-- TRACY
+-- These are referenced directly using the FFI
+-- These are used to build Tracy's client tools in Setup.hs
+-- The Makefiles fetch the source files from these Visual Studio project files
+-- Used by the Tracy's client tools
 -- XKCP
 -- TRACY
 -- These are referenced directly using the FFI
@@ -329,7 +338,7 @@ flag nofib
 library
   build-depends:
     , ansi-terminal                >=0.6.2
-    , base                         >=4.12   && <4.17.0
+    , base                         >=4.12   && <4.19
     , base-orphans                 >=0.3
     , bytestring                   >=0.10.2
     , containers                   >=0.3

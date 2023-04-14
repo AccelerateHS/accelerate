@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -9,6 +10,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeApplications      #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeSynonymInstances  #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
@@ -67,6 +69,9 @@ import Data.Complex                                                 ( Complex(..
 import Prelude                                                      ( ($) )
 import qualified Data.Complex                                       as C
 import qualified Prelude                                            as P
+#if __GLASGOW_HASKELL__ >= 904
+import Data.Type.Equality
+#endif
 
 
 infix 6 ::+

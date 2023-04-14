@@ -3,14 +3,11 @@
 
 # High-performance parallel arrays for Haskell
 
-[![CI-Linux](https://github.com/tmcdonell/accelerate/workflows/ci-linux/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-linux)
-[![CI-MacOS](https://github.com/tmcdonell/accelerate/workflows/ci-macos/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-macos)
-[![CI-Windows](https://github.com/tmcdonell/accelerate/workflows/ci-windows/badge.svg)](https://github.com/tmcdonell/accelerate/actions?query=workflow%3Aci-windows)
+[![CI](https://github.com/tmcdonell/accelerate/actions/workflows/ci.yml/badge.svg)](https://github.com/tmcdonell/accelerate/actions/workflows/ci.yml)
 [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/AccelerateHS/Lobby)
-<br>
+[![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
 [![Stackage LTS](https://stackage.org/package/accelerate/badge/lts)](https://stackage.org/lts/package/accelerate)
 [![Stackage Nightly](https://stackage.org/package/accelerate/badge/nightly)](https://stackage.org/nightly/package/accelerate)
-[![Hackage](https://img.shields.io/hackage/v/accelerate.svg)](https://hackage.haskell.org/package/accelerate)
 
 </div>
 
@@ -61,10 +58,12 @@ Except for the type, this code is almost the same as the corresponding Haskell c
 Availability
 ------------
 
-Package accelerate is available from
+Package _Accelerate_ is available from:
 
  * Hackage: [accelerate][Hackage] - install with `cabal install accelerate`
- * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git`. The easiest way to compile the source distributions is via the Haskell [stack](https://docs.haskellstack.org/en/stable/README/) tool.
+ * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git` 
+
+To install the Haskell toolchain try [GHCup](https://www.haskell.org/ghcup/).
 
 Additional components
 ---------------------
@@ -105,7 +104,7 @@ Documentation
 -------------
 
   * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
-  * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/).
+  <!-- * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/). -->
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
 
 Examples

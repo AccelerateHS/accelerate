@@ -1,4 +1,4 @@
-name: ci-linux
+name: ci-macos
 
 # Trigger the workflow on push or pull request
 on:
@@ -6,7 +6,7 @@ on:
     # branches: [master]
   push:
     paths:
-      - '.github/workflows/ci-linux.yml'
+      - '.github/workflows/ci-macos.yml'
       - 'stack*.yaml'
       - '*.cabal'
       - 'src/**'
@@ -15,31 +15,46 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
         ghc:
+          - "9.4"
           - "9.2"
           - "9.0"
           - "8.10"
           - "8.8"
           - "8.6"
     env:
-      STACK_FLAGS: "--fast --flag accelerate:nofib"
+      STACK_FLAGS: "--flag accelerate:nofib"
       HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - run: ln -s stack-${{ matrix.ghc }}.yaml stack.yaml
 
-      - uses: actions/cache@v2
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: actions/cache-always@v3
+        uses: ./.github/actions/cache-always
         with:
           path: snapshot.pkgdb
           key: ${{ runner.os }}-${{ matrix.ghc }}-snapshot.pkgdb
 
-      - uses: actions/cache@v2
+      - name: actions/cache-always@v3
+        uses: ./.github/actions/cache-always
         with:
           path: |
             ~/.local/bin
@@ -52,13 +67,20 @@ jobs:
             ${{ runner.os }}-${{ matrix.ghc }}-${{ hashFiles('stack.yaml') }}-
             ${{ runner.os }}-${{ matrix.ghc }}-
 
-      - name: Install stack
+      # - name: Install stack
+      #   run: |
+      #     if [[ ! -x ~/.local/bin/stack ]]; then
+      #       brew install gnu-tar
+      #       curl -sL https://get.haskellstack.org/stable/osx-x86_64.tar.gz | gtar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
+      #       chmod a+x ~/.local/bin/stack
+      #     fi
+
+      - name: Setup stack
         run: |
           mkdir -p ~/.local/bin
-          if [[ ! -x ~/.local/bin/stack ]]; then
-            curl -sL https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-            chmod a+x ~/.local/bin/stack
-          fi
+          mkdir -p ~/.stack/hooks
+          curl https://raw.githubusercontent.com/haskell/ghcup-hs/master/scripts/hooks/stack/ghc-install.sh > ~/.stack/hooks/ghc-install.sh
+          chmod +x ~/.stack/hooks/ghc-install.sh
           echo "~/.local/bin" >> $GITHUB_PATH
 
       - name: Install GHC
@@ -70,9 +92,9 @@ jobs:
       - name: Build
         run: stack build $STACK_FLAGS $HADDOCK_FLAGS --test --no-run-tests
 
-      - name: Test doctest
-        run: stack test accelerate:doctest $STACK_FLAGS
-        if: ${{ matrix.ghc != '9.2' }}
+      # currently broken with linker error -TLM 2021-06-25
+      # - name: Test doctest
+      #   run: stack test accelerate:doctest $STACK_FLAGS
 
       - name: Test nofib
         run: stack test accelerate:nofib-interpreter $STACK_FLAGS

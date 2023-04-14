@@ -10,7 +10,6 @@
 /accelerate-io/dist/
 /.stack-work
 /cabal.project.local*
-/stack.yaml
 /stack.yaml.lock
 .DS_Store
 /docs/_build

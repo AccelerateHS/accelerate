@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE EmptyCase           #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -31,11 +32,12 @@ module Data.Array.Accelerate.AST.Idx (
 
 ) where
 
-import Language.Haskell.TH.Extra
+import Data.Kind
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 #ifndef ACCELERATE_INTERNAL_CHECKS
-import Data.Type.Equality ((:~:)(Refl))
-import Unsafe.Coerce (unsafeCoerce)
+import Data.Type.Equality                                           ( (:~:)(Refl) )
+import Unsafe.Coerce                                                ( unsafeCoerce )
 #endif
 
 
@@ -72,7 +74,8 @@ liftIdx (SuccIdx ix) = [|| SuccIdx $$(liftIdx ix) ||]
 --
 -- For performance, it uses an Int under the hood.
 --
-newtype Idx env t = UnsafeIdxConstructor { unsafeRunIdx :: Int }
+newtype Idx :: Type -> Type -> Type where
+  UnsafeIdxConstructor :: { unsafeRunIdx :: Int } -> Idx env t
 
 {-# COMPLETE ZeroIdx, SuccIdx #-}
 
@@ -107,6 +110,8 @@ liftIdx (UnsafeIdxConstructor i) = [|| UnsafeIdxConstructor i ||]
 --
 pattern VoidIdx :: forall env t a. (env ~ ()) => () => a -> Idx env t
 pattern VoidIdx a <- (\case{} -> a)
+
+{-# COMPLETE VoidIdx #-}
 
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a

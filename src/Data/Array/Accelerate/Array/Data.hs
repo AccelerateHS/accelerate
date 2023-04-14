@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UnboxedTuples        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -73,8 +74,8 @@ import Foreign.ForeignPtr
 import Foreign.Storable
 import Formatting                                                   hiding ( bytes )
 import Language.Haskell.TH.Extra                                    hiding ( Type )
-import Prelude                                                      hiding ( mapM )
 import System.IO.Unsafe
+import Prelude                                                      hiding ( mapM )
 
 import GHC.Exts                                                     hiding ( build )
 import GHC.ForeignPtr
