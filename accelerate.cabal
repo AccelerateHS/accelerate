@@ -543,6 +543,7 @@ library
         Data.Array.Accelerate.Test.NoFib.Issues.Issue436
         Data.Array.Accelerate.Test.NoFib.Issues.Issue437
         Data.Array.Accelerate.Test.NoFib.Issues.Issue439
+        Data.Array.Accelerate.Test.NoFib.Issues.Issue517
 
   else
     cpp-options:

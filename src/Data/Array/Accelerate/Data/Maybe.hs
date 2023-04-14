@@ -135,7 +135,7 @@ instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
   ma <> mb = cond (isNothing ma) mb
-           $ cond (isNothing mb) mb
+           $ cond (isNothing mb) ma
            $ lift (Just (fromJust ma <> fromJust mb))
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
