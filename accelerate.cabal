@@ -199,6 +199,12 @@ extra-source-files:
 -- These are used to build Tracy's client tools in Setup.hs
 -- The Makefiles fetch the source files from these Visual Studio project files
 -- Used by the Tracy's client tools
+-- XKCP
+-- TRACY
+-- These are referenced directly using the FFI
+-- These are used to build Tracy's client tools in Setup.hs
+-- The Makefiles fetch the source files from these Visual Studio project files
+-- Used by the Tracy's client tools
 extra-doc-files:    images/*.png
 
 custom-setup
@@ -523,6 +529,7 @@ library
       Data.Array.Accelerate.Test.NoFib.Issues.Issue436
       Data.Array.Accelerate.Test.NoFib.Issues.Issue437
       Data.Array.Accelerate.Test.NoFib.Issues.Issue439
+      Data.Array.Accelerate.Test.NoFib.Issues.Issue517
       Data.Array.Accelerate.Test.NoFib.Issues.Issue93
       Data.Array.Accelerate.Test.NoFib.Prelude
       Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute
@@ -540,6 +547,7 @@ library
       Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort
       Data.Array.Accelerate.Test.NoFib.Spectral.SMVM
 
+  -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
   -- Data.Array.Accelerate.Test.NoFib.Issues.Issue286
   else
     cpp-options: -DACCELERATE_DISABLE_NOFIB
