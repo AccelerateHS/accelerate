@@ -97,7 +97,7 @@
       # utility function that, passed a ghc version in the list format
       # and a system name returns a pre-commit-check attrset with a shellHook
       # and a formatCheck that can be run
-      precommitcheckForghc = ghcversion: system:
+      precommitcheckForghc = _ghcversion: system:
         pre-commit-hooks.lib.${system}.run
         {
           src = ./.;
@@ -106,12 +106,13 @@
           };
 
           hooks = {
-            cabal-fmt.enable = true;
+            cabal-fmt.enable = false;
             fourmolu.enable = false;
             hlint.enable = false;
+
             alejandra.enable = true;
             statix.enable = true;
-            shellcheck.enable = true;
+            deadnix.enable = true;
           };
         };
 
@@ -129,7 +130,7 @@
           inherit (gver) compiler-nix-name;
           stackYaml = "stack-${gver.stack}.yaml";
           modules = [
-            ({config, ...}: {
+            (_: {
               packages."accelerate" = {
                 allComponent.configureFlags = [
                   "+fdebug"
