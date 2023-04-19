@@ -25,233 +25,111 @@
   };
 
   outputs = {
-    self,
     haskell-nix,
     nixpkgs,
     pre-commit-hooks,
-  }:
-    with nixpkgs.lib; let
-      pkgsFor = system:
-        import nixpkgs {
-          inherit system;
-          overlays = [haskell-nix.overlay];
-        };
+    ...
+  }: let
+    pkgsFor = system: nixpkgs.legacyPackages.${system}.appendOverlays [haskell-nix.overlay];
 
-      # the reason why we have a plainPkgs is that the nixpkgs version used by IOG's haskell.nix is sometimes out of date
-      # and the caching of tools is worse than on nixpkgs due to the use of their haskell-nix overlay
+    # a bit hacky solution to get around nix flake show and nix flake check
+    # not working with IFD, you have to pass --impure for it to
+    # pick up your local system and then the checks (as well as
+    # the show) will go through just fine
+    supportedsystems =
+      if builtins.hasAttr "currentSystem" builtins
+      then [builtins.currentSystem]
+      else nixpkgs.lib.systems.flakeExposed;
 
-      # quick hack to get around nix flake show and nix flake check
-      # not working with IFD, you have to pass --impure for it to
-      # pick up your local system and then the checks (as well as
-      # the show) will go through just fine
-      supportedsystems =
-        if builtins.hasAttr "currentSystem" builtins
-        then [builtins.currentSystem]
-        else nixpkgs.lib.systems.flakeExposed;
+    perSystem = nixpkgs.lib.genAttrs supportedsystems;
 
-      # We cannot easily support ghc865 with nix as it's so much out of date
-      # that it's not included in nixpkgs anymore
-      supportedghcs = [
-        [9 2 7]
-        [9 4 4]
-        # [9 6 1]
-      ];
+    src = ./.;
 
-      perSystem = genAttrs supportedsystems;
+    # the ghc verions supported as shown with the stack files
+    supportedghcs = [
+      [9 2 7]
+      [9 4 4]
+      # [9 6 1]
+    ];
 
-      # Utility function that provides a bunch of useful
-      # representations of ghc versions, receives a list with
-      # three elements that represent a ghc version, e.g. [9 2 4]
-      ghcVer = l: let
-        allstr = builtins.map builtins.toString;
-        shortRaw = take 2 (allstr l);
-      in rec {
-        long = concatStrings (allstr l);
-        short = concatStrings shortRaw;
-        stack = concatStringsSep "." shortRaw;
-        compiler-nix-name = "ghc${long}";
-      };
+    lib = nixpkgs.lib // (import ./nix/lib.nix {inherit (nixpkgs) lib;});
 
-      # Utility function that will take a separator and an attrset and
-      # flatten the attrset until only it's leaves remain, the keys for the
-      # new attrset are sep-separated old keys
-      flattenAttrs = sep: attrs: let
-        recurse = p:
-          mapAttrsToList
-          (n: v: let
-            p' =
-              if p == ""
-              then p
-              else p + sep;
-          in
-            if (isAttrs v && !(isDerivation v))
-            then recurse (p' + n) v
-            else {${p' + n} = v;});
-      in
-        foldr (a: b: a // b) {} (flatten (recurse "" attrs));
-
-      tools = {
-        haskell-language-server = "1.9.0.0";
-      };
-
-      # utility function that, passed a ghc version in the list format
-      # and a system name returns a pre-commit-check attrset with a shellHook
-      # and a formatCheck that can be run
-      precommitcheckForghc = _ghcversion: system:
-        pre-commit-hooks.lib.${system}.run
-        {
-          src = ./.;
-          settings = {
-            ormolu.defaultExtensions = [];
-          };
-
-          hooks = {
-            cabal-fmt.enable = false;
-            fourmolu.enable = false;
-            hlint.enable = false;
-
-            alejandra.enable = true;
-            statix.enable = true;
-            deadnix.enable = true;
-          };
-        };
-
-      # builds, given a ghc version in the list format and a system name, a
-      # haskell.nix stackProject that contains all accelerate libraries and executables
-      # the resolver is chosen based on the ghcVersion passed, i.e. if you want a specific
-      # ghc version, you need the appropriate resolver
-      projectForghc = ghcversion: system: let
-        pkgs = pkgsFor system;
-        gver = ghcVer ghcversion;
-        # tools = toolsForghc ghcversion system pkgsFor;
-      in
-        pkgs.haskell-nix.stackProject' {
-          src = ./.;
-          inherit (gver) compiler-nix-name;
-          stackYaml = "stack-${gver.stack}.yaml";
-          modules = [
-            (_: {
-              packages."accelerate" = {
-                allComponent.configureFlags = [
-                  "+fdebug"
-                  "-fnofib"
-                ];
-                components.tests."doctest" = {
-                  configureAllComponents = true;
-                  keepSource = true;
-                };
-              };
-            })
-          ];
-          shell = {
-            inherit tools;
-            inherit (precommitcheckForghc ghcversion system) shellHook;
-            withHoogle = true;
-            exactDeps = true;
-
-            nativeBuildInputs = [
-              pkgs.alejandra
-              pkgs.cabal-install
-              pkgs.stack
-              pkgs.fd
-              pkgs.ripgrep
-
-              pkgs.haskellPackages.apply-refact
-              pkgs.haskellPackages.cabal-fmt
-            ];
-          };
-        };
-
-      # a tooling shell that provides all the necessary stuff to do
-      # formatting and quick adjustments, it does not provide a full dev env
-      toolingShellFor = ghcversion: system: let
-        pkgs = pkgsFor system;
-        # tools = toolsForghc ghcversion system pkgsFor;
-      in
-        pkgs.mkShell {
-          inherit (precommitcheckForghc ghcversion system) shellHook;
-          nativeBuildInputs = [
-            pkgs.cabal-install
-            pkgs.stack
-            pkgs.fd
-            pkgs.ripgrep
-
-            pkgs.alejandra
-            pkgs.haskellPackages.apply-refact
-            pkgs.haskellPackages.cabal-fmt
-
-            # tools.fourmolu
-            # tools.haskell-language-server
-            # tools.hlint
-          ];
-        };
-
-      # utility function that generates flakes and flake outputs based on the ghcVersions
-      # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
-      # hh provides haskell.nix project and flake, as well as the standard flake outputs
-      # packages, checks and devShells
-      mkFlakeAttrsFor = ghcversions: projFun: sysFun: let
-        ps =
-          map (
-            ver: let
-              gver = ghcVer ver;
-            in {
-              name = "project-${gver.short}";
-              value = sysFun (projFun ver);
-              origVer = ver;
-            }
-          )
-          ghcversions;
-
-        fs =
-          map (p: let
-            gver = ghcVer p.origVer;
-          in {
-            inherit (p) origVer;
-            name = "flake-${gver.short}";
-            value = sysFun (sys: p.value.${sys}.flake {});
-          })
-          ps;
-
-        mkOutput = attrName: sys:
-          map (f: {
-            name = "ghc${(ghcVer f.origVer).short}";
-            value = f.value.${sys}.${attrName};
-          })
-          fs;
-
-        mkChecks = sys:
-          map (f: {
-            name = "ghc${(ghcVer f.origVer).short}";
-            value =
-              f.value.${sys}.checks
-              // {formatCheck = precommitcheckForghc f.origVer sys;};
-          })
-          fs;
-      in {
-        projects = builtins.listToAttrs ps;
-        flakes = builtins.listToAttrs fs;
-        devShells = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "devShell" sys)));
-        packages = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkOutput "packages" sys)));
-        checks = sysFun (sys: flattenAttrs "-" (builtins.listToAttrs (mkChecks sys)));
-      };
-
-      accelerateFlakes = mkFlakeAttrsFor supportedghcs projectForghc perSystem;
-    in {
-      inherit supportedsystems supportedghcs flattenAttrs ghcVer mkFlakeAttrsFor toolingShellFor toolsForghc;
-      # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
-      inherit (accelerateFlakes) flakes projects packages checks;
-
-      pkgs = perSystem pkgsFor;
-
-      devShells = perSystem (sys:
-        accelerateFlakes.devShells.${sys}
-        // rec {
-          # the default shell is the tooling shell as it loads fastest
-          default = tooling;
-          tooling = toolingShellFor [9 2 5] sys;
-        });
-
-      formatter = perSystem (system: self.pkgs.${system}.alejandra);
+    tools = {
+      haskell-language-server = "1.9.0.0";
     };
+
+    # utility function that, passed a system name returns a pre-commit-check attrset
+    # with a shellHook and a formatCheck that can be run
+    precommitcheckForghc = system:
+      pre-commit-hooks.lib.${system}.run (import ./nix/pre-commit-config.nix {inherit src;});
+
+    # builds, given a ghc version in the list format and a system name, a
+    # haskell.nix stackProject that contains all accelerate libraries and executables
+    # the resolver is chosen based on the ghcVersion passed, i.e. if you want a specific
+    # ghc version, you need the appropriate resolver
+    projectForghc = ghcversion: system: let
+      pkgs = pkgsFor system;
+      gver = lib.ghcVer ghcversion;
+    in
+      pkgs.haskell-nix.stackProject' {
+        src = ./.;
+        inherit (gver) compiler-nix-name;
+        stackYaml = "stack-${gver.stack}.yaml";
+        modules = [
+          (_: {
+            packages."accelerate" = {
+              allComponent.configureFlags = [
+                "+fdebug"
+                "-fnofib"
+              ];
+              components.tests."doctest" = {
+                configureAllComponents = true;
+                keepSource = true;
+              };
+            };
+          })
+        ];
+        shell = {
+          inherit tools;
+          inherit (precommitcheckForghc system) shellHook;
+          inputsFrom = [(toolingShellFor system)];
+          withHoogle = true;
+          exactDeps = true;
+        };
+      };
+
+    # a tooling shell that provides all the necessary stuff to do
+    # formatting and quick adjustments, it does not provide a full dev env
+    toolingShellFor = system: let
+      pkgs = pkgsFor system;
+    in
+      pkgs.mkShell {
+        inherit (precommitcheckForghc system) shellHook;
+        nativeBuildInputs = [
+          pkgs.cabal-install
+          pkgs.stack
+        ];
+      };
+
+    accelerateFlakes = lib.mkFlakeAttrsFor {
+      inherit precommitcheckForghc;
+      ghcversions = supportedghcs;
+      projFun = projectForghc;
+      sysFun = perSystem;
+    };
+  in {
+    inherit supportedsystems supportedghcs toolingShellFor lib;
+    # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
+    inherit (accelerateFlakes) flakes projects packages checks;
+
+    pkgs = perSystem pkgsFor;
+
+    devShells = perSystem (system:
+      accelerateFlakes.devShells.${system}
+      // rec {
+        # the default shell is the tooling shell as it loads fastest
+        default = tooling;
+        tooling = toolingShellFor system;
+      });
+  };
 }

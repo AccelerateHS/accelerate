@@ -15,6 +15,7 @@
 /docs/_build
 *.hi
 *.o
+*.o-boot
 .direnv
 .envrc
 result
