@@ -20,17 +20,30 @@
 
   inputs = {
     nixpkgs.follows = "haskell-nix/nixpkgs-unstable";
+    nixpkgs-unstable.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     haskell-nix.url = "github:input-output-hk/haskell.nix";
     pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+
+    # non-nix inputs
+    tracy.url = "github:wolfpld/tracy/v0.9.1";
+    tracy.flake = false;
   };
 
-  outputs = {
+  outputs = inputs @ {
     haskell-nix,
     nixpkgs,
     pre-commit-hooks,
     ...
   }: let
-    pkgsFor = system: nixpkgs.legacyPackages.${system}.appendOverlays [haskell-nix.overlay];
+    pkgsFor = system:
+      nixpkgs.legacyPackages.${system}.appendOverlays [
+        haskell-nix.overlay
+        # always build with the same tracy hat we provision to accelerate itself
+        (_self: super: {
+          tracy =
+            inputs.nixpkgs-unstable.legacyPackages.${super.system}.tracy.overrideAttrs (_old: {src = inputs.tracy;});
+        })
+      ];
 
     # a bit hacky solution to get around nix flake show and nix flake check
     # not working with IFD, you have to pass --impure for it to
@@ -58,6 +71,25 @@
       haskell-language-server = "1.9.0.0";
     };
 
+    additionalBuildDepends = p:
+      with p; [
+        brotli
+        bzip2
+        capstone
+        freetype
+        glfw
+        gtk3
+        libffi
+        libglvnd
+        libpng
+        libxkbcommon
+        pkgconfig
+        rt
+        systemd
+        tracy
+        tbb
+      ];
+
     # utility function that, passed a system name returns a pre-commit-check attrset
     # with a shellHook and a formatCheck that can be run
     precommitcheckForghc = system:
@@ -70,21 +102,45 @@
     projectForghc = ghcversion: system: let
       pkgs = pkgsFor system;
       gver = lib.ghcVer ghcversion;
+      patch = ''
+        flags:
+          accelerate:
+            nofib: true
+            debug: true
+            provisioned_tracy: true
+      '';
+      patchedSrc = pkgs.runCommand "patchStackYaml" {src = ./.;} ''
+        mkdir $out
+        cp -r $src/* $out
+        chmod +w $out/cbits
+        # mkdir $out/cbits/tracy
+        # cp -r ${inputs.tracy}/* $out/cbits/tracy
+        cp -r ${inputs.tracy} $out/cbits/tracy
+        cd $out
+        for stackYaml in stack-*.yaml;
+        do
+          echo "modifying stack file:"
+          echo $stackYaml
+          chmod +w $stackYaml
+          echo "${patch}" >> $stackYaml
+        done
+      '';
     in
       pkgs.haskell-nix.stackProject' {
-        src = ./.;
+        src = patchedSrc;
         inherit (gver) compiler-nix-name;
         stackYaml = "stack-${gver.stack}.yaml";
         modules = [
           (_: {
+            setup-depends = additionalBuildDepends pkgs;
             packages."accelerate" = {
-              allComponent.configureFlags = [
-                "+fdebug"
-                "-fnofib"
-              ];
+              components.library.build-tools = additionalBuildDepends pkgs;
+              components.tests."nofib-interpreter" = {
+                build-tools = additionalBuildDepends pkgs;
+              };
               components.tests."doctest" = {
-                configureAllComponents = true;
-                keepSource = true;
+                build-tools = additionalBuildDepends pkgs;
+                enableShared = true;
               };
             };
           })
@@ -105,6 +161,7 @@
     in
       pkgs.mkShell {
         inherit (precommitcheckForghc system) shellHook;
+        buildInputs = additionalBuildDepends pkgs;
         nativeBuildInputs = [
           pkgs.cabal-install
           pkgs.stack

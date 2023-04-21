@@ -28,9 +28,10 @@ preConfHook :: Args -> ConfigFlags -> IO HookedBuildInfo
 preConfHook args config_flags = do
   let verbosity = fromFlagOrDefault normal $ configVerbosity config_flags
       debugging = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
+      provisionedTracy    = fromMaybe False $ lookupFlagAssignment (mkFlagName "provisioned_tracy") (configConfigurationsFlags config_flags)
 
-  when debugging $ do
-    yes <- doesFileExist "cbits/tracy/TracyClient.cpp"
+  when (debugging && not provisionedTracy) $ do
+    yes <- doesDirectoryExist "cbits/tracy/"
     if yes
       then
         -- Nix (and apparently future versions of stack) automatically update
@@ -61,9 +62,11 @@ postBuildHook args build_flags pkg_desc lbi = do
       debugging     = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
       targets       = [ ("tracy-capture", "capture",  "capture-release")
                       , ("tracy",         "profiler", "Tracy-release") ]
+      provisionedTracy    = fromMaybe False $ lookupFlagAssignment (mkFlagName "provisioned_tracy") (configConfigurationsFlags config_flags)
 
   when debugging $ do
-    case os of
+
+    unless provisionedTracy $ case os of
       Windows -> return ()  -- XXX TODO: Windows users get the dummy executable that just throws an error
       _       ->
         forM_ targets $ \(hs_exe, c_dir, c_exe) -> do

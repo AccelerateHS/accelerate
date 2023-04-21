@@ -326,11 +326,11 @@
     "hackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1681345550,
-        "narHash": "sha256-HYW1b1KSgNfRR8Md/F2TbyuJnFkxSGr+xU4llbNutRE=",
+        "lastModified": 1682036591,
+        "narHash": "sha256-QPrmInnsudgOP+bpJKzosItR0H1C5F54SmPLV8AlFPg=",
         "owner": "input-output-hk",
         "repo": "hackage.nix",
-        "rev": "15eef733e16531da9013c5437db0357e38535a03",
+        "rev": "9d83fdf40d77bc15719c6e498da98dbd0714dfa4",
         "type": "github"
       },
       "original": {
@@ -369,11 +369,11 @@
         "tullia": "tullia"
       },
       "locked": {
-        "lastModified": 1681347051,
-        "narHash": "sha256-69gSPLmS5lTTMueqlL4cuV8obaziIT/+MbsT2cHwiow=",
+        "lastModified": 1682088777,
+        "narHash": "sha256-fV9+8sOoKaegHVt+5qmkhmxjLcjiOwa7QSSOsNJsMrI=",
         "owner": "input-output-hk",
         "repo": "haskell.nix",
-        "rev": "37808bb7adc1693ccd5f4e45ef378a0ebb39f9e8",
+        "rev": "b86290afd886ac40152f094005962c2c997c79cc",
         "type": "github"
       },
       "original": {
@@ -777,6 +777,22 @@
         "type": "github"
       }
     },
+    "nixpkgs-unstable_2": {
+      "locked": {
+        "lastModified": 1682018913,
+        "narHash": "sha256-Eo2ZkWB8+qy8fnmxtJUNJl6HHYYAgXDR29+OwDIzm1Q=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "7048a48bc79b4361f77740420000d2b5454b0df7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nixpkgs_2": {
       "locked": {
         "lastModified": 1653581809,
@@ -826,11 +842,11 @@
     },
     "nixpkgs_5": {
       "locked": {
-        "lastModified": 1678898370,
-        "narHash": "sha256-xTICr1j+uat5hk9FyuPOFGxpWHdJRibwZC+ATi0RbtE=",
+        "lastModified": 1681303793,
+        "narHash": "sha256-JEdQHsYuCfRL2PICHlOiH/2ue3DwoxUX7DJ6zZxZXFk=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "ac718d02867a84b42522a0ece52d841188208f2c",
+        "rev": "fe2ecaf706a5907b5e54d979fbde4924d84b65fc",
         "type": "github"
       },
       "original": {
@@ -881,11 +897,11 @@
         "nixpkgs-stable": "nixpkgs-stable"
       },
       "locked": {
-        "lastModified": 1681227715,
-        "narHash": "sha256-kQZOoTa177VF5uk1JK7bA9ZTU5g6d5IuDp/6YdxUWao=",
+        "lastModified": 1681831107,
+        "narHash": "sha256-pXl3DPhhul9NztSetUJw2fcN+RI3sGOYgKu29xpgnqw=",
         "owner": "cachix",
         "repo": "pre-commit-hooks.nix",
-        "rev": "c77e64a5adab96866ea97449a5a7a327d4629828",
+        "rev": "b7ca8f6fff42f6af75c17f9438fed1686b7d855d",
         "type": "github"
       },
       "original": {
@@ -901,17 +917,19 @@
           "haskell-nix",
           "nixpkgs-unstable"
         ],
-        "pre-commit-hooks": "pre-commit-hooks"
+        "nixpkgs-unstable": "nixpkgs-unstable_2",
+        "pre-commit-hooks": "pre-commit-hooks",
+        "tracy": "tracy"
       }
     },
     "stackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1681085376,
-        "narHash": "sha256-kSg4N5g9Jj8u+G7HdMZR5IIvm40s9EBmkD0pMDTJTLc=",
+        "lastModified": 1682035745,
+        "narHash": "sha256-sQqPKXGi5vpLGEF1hAdvr2YJNXzqRVBpyqeVGJrNsV8=",
         "owner": "input-output-hk",
         "repo": "stackage.nix",
-        "rev": "2f9242acfd8fbbc4bbdc5e5504ac8e5b36839b7f",
+        "rev": "2863ba40a0be8ba0229cf99b0f309ada740d54af",
         "type": "github"
       },
       "original": {
@@ -962,6 +980,23 @@
       "original": {
         "owner": "divnix",
         "repo": "std",
+        "type": "github"
+      }
+    },
+    "tracy": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1677421803,
+        "narHash": "sha256-K1lQNRS8+ju9HyKNVXtHqslrPWcPgazzTitvwkIO3P4=",
+        "owner": "wolfpld",
+        "repo": "tracy",
+        "rev": "897aec5b062664d2485f4f9a213715d2e527e0ca",
+        "type": "github"
+      },
+      "original": {
+        "owner": "wolfpld",
+        "ref": "v0.9.1",
+        "repo": "tracy",
         "type": "github"
       }
     },

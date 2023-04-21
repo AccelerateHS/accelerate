@@ -207,6 +207,13 @@ custom-setup
     , directory         >= 1.0
     , filepath          >= 1.0
 
+flag provisioned_tracy
+  manual: True
+  default: False 
+  description: 
+    Build with a provisioned tracy. This is used by the nix setup to circumvent
+    building tracy as part of the Haskell build
+
 flag debug
   manual:               True
   default:              False
@@ -762,7 +769,7 @@ executable tracy-capture
         capstone
 
   cpp-options:
-        -DEXECUTABLE="tracy-capure"
+        -DEXECUTABLE="tracy-capture"
 
   ghc-options:
         -O0
