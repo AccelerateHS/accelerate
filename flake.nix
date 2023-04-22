@@ -113,9 +113,9 @@
         mkdir $out
         cp -r $src/* $out
         chmod +w $out/cbits
-        # mkdir $out/cbits/tracy
-        # cp -r ${inputs.tracy}/* $out/cbits/tracy
-        cp -r ${inputs.tracy} $out/cbits/tracy
+        mkdir $out/cbits/tracy
+        cp -r ${inputs.tracy}/* $out/cbits/tracy
+        # cp -r ${inputs.tracy} $out/cbits/tracy
         cd $out
         for stackYaml in stack-*.yaml;
         do
