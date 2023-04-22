@@ -110,12 +110,12 @@
             provisioned_tracy: true
       '';
       patchedSrc = pkgs.runCommand "patchStackYaml" {src = ./.;} ''
+        set -x
         mkdir $out
         cp -r $src/* $out
-        chmod +w $out/cbits
-        mkdir $out/cbits/tracy
-        cp -r ${inputs.tracy}/* $out/cbits/tracy
-        # cp -r ${inputs.tracy} $out/cbits/tracy
+        chmod -R +w $out/cbits
+        mkdir -p $out/cbits/tracy
+        cp -rf ${inputs.tracy}/* $out/cbits/tracy/
         cd $out
         for stackYaml in stack-*.yaml;
         do
@@ -124,6 +124,7 @@
           chmod +w $stackYaml
           echo "${patch}" >> $stackYaml
         done
+        set +x
       '';
     in
       pkgs.haskell-nix.stackProject' {
