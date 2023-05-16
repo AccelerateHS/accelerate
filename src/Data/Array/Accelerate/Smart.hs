@@ -130,7 +130,7 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
 import qualified Data.Primitive.Vec                                 as Prim
 
-import Data.Bits                                                    ( Bits, unsafeShiftL )
+import Data.Bits                                                    ( Bits, unsafeShiftL, countLeadingZeros )
 import Data.Kind
 import Data.Text.Lazy.Builder
 import Formatting                                                   hiding ( splat )
@@ -1237,14 +1237,21 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
 --
 vand :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
 vand v =
-  let n :: Int
+  let n, m :: Int
       n = fromInteger $ natVal' (proxy# :: Proxy# n)
+      m = max 8 (1 `unsafeShiftL` (64 - countLeadingZeros (n-1)))
       --
-      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
+      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsNum (EltR t), BitOrMask (EltR t) ~ Bit)
           => Exp Bool
-      cmp = mkEq (constant ((1 `unsafeShiftL` n) - 1))
-                 (mkPrimUnary (PrimFromBool bitType integralType) v :: Exp t)
+      cmp = let w = SingleIntegralType (TypeWord n)
+                b = mkExp $ Bitcast (BitScalarType bitType) (NumScalarType (IntegralNumType w)) (unExp v)
+            in
+            mkEq (constant ((1 `unsafeShiftL` n) - 1)) $
+              if n == m
+                 then b
+                 else mkPrimUnary (PrimFromIntegral w numType) b :: Exp t
   in
+  if n == 1   then mkExp (Bitcast scalarType scalarType (unExp v)) else
   if n <= 8   then cmp @Word8   else
   if n <= 16  then cmp @Word16  else
   if n <= 32  then cmp @Word32  else
@@ -1258,13 +1265,21 @@ vand v =
 --
 vor :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
 vor v =
-  let n :: Int
+  let n, m :: Int
       n = fromInteger $ natVal' (proxy# :: Proxy# n)
+      m = max 8 (1 `unsafeShiftL` (64 - countLeadingZeros (n-1)))
       --
-      cmp :: forall t. (Elt t, Num t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit)
+      cmp :: forall t. (Elt t, Num t, IsScalar (EltR t), IsNum (EltR t), BitOrMask (EltR t) ~ Bit)
           => Exp Bool
-      cmp = mkNEq (constant 0) (mkPrimUnary (PrimFromBool bitType integralType) v :: Exp t)
+      cmp = let w = SingleIntegralType (TypeWord n)
+                b = mkExp $ Bitcast (BitScalarType bitType) (NumScalarType (IntegralNumType w)) (unExp v)
+            in
+            mkNEq (constant 0) $
+              if n == m
+                 then b
+                 else mkPrimUnary (PrimFromIntegral w numType) b :: Exp t
   in
+  if n == 1   then mkExp (Bitcast scalarType scalarType (unExp v)) else
   if n <= 8   then cmp @Word8   else
   if n <= 16  then cmp @Word16  else
   if n <= 32  then cmp @Word32  else
