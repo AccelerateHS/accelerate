@@ -7,6 +7,7 @@
 {-# LANGUAGE MagicHash           #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE RoleAnnotations     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
@@ -66,14 +67,16 @@ import Data.Numeric.Float128
 
 import Data.Bits
 import Data.Int
+import Data.Kind
 import Data.Type.Equality
 import Data.WideWord.Int128
 import Data.WideWord.Word128
 import Data.Word
 import Formatting
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 import Numeric.Half
 import Text.Printf
+import Unsafe.Coerce
 
 import GHC.Prim
 import GHC.TypeNats
@@ -105,17 +108,14 @@ data IntegralType a where
   SingleIntegralType ::                           SingleIntegralType a -> IntegralType a
   VectorIntegralType :: KnownNat n => Proxy# n -> SingleIntegralType a -> IntegralType (Vec n a)
 
-data SingleIntegralType a where
-  TypeInt8    :: SingleIntegralType Int8
-  TypeInt16   :: SingleIntegralType Int16
-  TypeInt32   :: SingleIntegralType Int32
-  TypeInt64   :: SingleIntegralType Int64
-  TypeInt128  :: SingleIntegralType Int128
-  TypeWord8   :: SingleIntegralType Word8
-  TypeWord16  :: SingleIntegralType Word16
-  TypeWord32  :: SingleIntegralType Word32
-  TypeWord64  :: SingleIntegralType Word64
-  TypeWord128 :: SingleIntegralType Word128
+-- Note: [Arbitrary width integers]
+--
+-- We support arbitrary width signed and unsigned integers, but for almost all
+-- cases you should use the type synonyms generated below.
+--
+data SingleIntegralType :: Type -> Type where
+  TypeInt  :: {-# UNPACK #-} !Int -> SingleIntegralType a
+  TypeWord :: {-# UNPACK #-} !Int -> SingleIntegralType a
 
 data FloatingType a where
   SingleFloatingType ::                           SingleFloatingType a -> FloatingType a
@@ -129,6 +129,44 @@ data SingleFloatingType a where
   TypeFloat64  :: SingleFloatingType Float64
   TypeFloat128 :: SingleFloatingType Float128
 
+
+typeIntBits :: SingleIntegralType a -> Maybe Int
+typeIntBits (TypeInt x) = Just x
+typeIntBits _           = Nothing
+
+typeWordBits :: SingleIntegralType a -> Maybe Int
+typeWordBits (TypeWord x) = Just x
+typeWordBits _            = Nothing
+
+-- Generate pattern synonyms for fixed sized signed and unsigned integers. In
+-- practice this is what we'll use most of the time, but occasionally we need to
+-- convert via an arbitrary width integer (e.g. coercing between a BitMask and
+-- an integral value).
+--
+-- SEE: [Arbitrary width integers]
+--
+runQ $ do
+  let
+      integralTypes :: [Integer]
+      integralTypes = [8,16,32,64,128]
+
+      mkIntegral :: String -> Integer -> Q [Dec]
+      mkIntegral name bits = do
+        let t = conT $ mkName $ printf "%s%d" name bits
+            e = varE $ mkName $ printf "type%sBits" name
+            c = mkName $ printf "Type%s%d" name bits
+         --
+        a <- newName "a"
+        sequence [ patSynSigD c (forallT [plainInvisTV a specifiedSpec] (return [TupleT 0]) [t| () => ($(varT a) ~ $t) => SingleIntegralType $(varT a) |])
+                 , patSynD c (prefixPatSyn []) (explBidir [clause [] (normalB [| $(conE (mkName (printf "Type%s" name))) $(litE (integerL bits)) |]) [] ])
+                     [p| (\x -> ($e x, unsafeCoerce Refl) -> (Just $(litP (integerL bits)), Refl :: $(varT a) :~: $t)) |]
+                 ]
+  --
+  cs <- pragCompleteD [ mkName (printf "Type%s%d" name bits) | name <- ["Int", "Word" :: String], bits <- integralTypes ] Nothing
+  ss <- mapM (mkIntegral "Int") integralTypes
+  us <- mapM (mkIntegral "Word") integralTypes
+  return (cs : concat ss ++ concat us)
+
 instance Show (IntegralType a) where
   show (SingleIntegralType t)   = show t
   show (VectorIntegralType n t) = printf "<%d x %s>" (natVal' n) (show t)
@@ -138,16 +176,8 @@ instance Show (FloatingType a) where
   show (VectorFloatingType n t) = printf "<%d x %s>" (natVal' n) (show t)
 
 instance Show (SingleIntegralType a) where
-  show TypeInt8    = "Int8"
-  show TypeInt16   = "Int16"
-  show TypeInt32   = "Int32"
-  show TypeInt64   = "Int64"
-  show TypeInt128  = "Int128"
-  show TypeWord8   = "Word8"
-  show TypeWord16  = "Word16"
-  show TypeWord32  = "Word32"
-  show TypeWord64  = "Word64"
-  show TypeWord128 = "Word128"
+  show (TypeInt  n) = printf "Int%d" n
+  show (TypeWord n) = printf "Word%d" n
 
 instance Show (SingleFloatingType a) where
   show TypeFloat16  = "Float16"
@@ -174,16 +204,8 @@ formatIntegralType = later $ \case
 
 formatSingleIntegralType :: Format r (SingleIntegralType a -> r)
 formatSingleIntegralType = later $ \case
-  TypeInt8    -> "Int8"
-  TypeInt16   -> "Int16"
-  TypeInt32   -> "Int32"
-  TypeInt64   -> "Int64"
-  TypeInt128  -> "Int128"
-  TypeWord8   -> "Word8"
-  TypeWord16  -> "Word16"
-  TypeWord32  -> "Word32"
-  TypeWord64  -> "Word64"
-  TypeWord128 -> "Word128"
+  TypeInt  n -> bformat ("Int" % int) n
+  TypeWord n -> bformat ("Word" % int) n
 
 formatFloatingType :: Format r (FloatingType a -> r)
 formatFloatingType = later $ \case
@@ -230,16 +252,8 @@ rnfIntegralType (SingleIntegralType t)    = rnfSingleIntegralType t
 rnfIntegralType (VectorIntegralType !_ t) = rnfSingleIntegralType t
 
 rnfSingleIntegralType :: SingleIntegralType t -> ()
-rnfSingleIntegralType TypeInt8    = ()
-rnfSingleIntegralType TypeInt16   = ()
-rnfSingleIntegralType TypeInt32   = ()
-rnfSingleIntegralType TypeInt64   = ()
-rnfSingleIntegralType TypeInt128  = ()
-rnfSingleIntegralType TypeWord8   = ()
-rnfSingleIntegralType TypeWord16  = ()
-rnfSingleIntegralType TypeWord32  = ()
-rnfSingleIntegralType TypeWord64  = ()
-rnfSingleIntegralType TypeWord128 = ()
+rnfSingleIntegralType (TypeInt  !_) = ()
+rnfSingleIntegralType (TypeWord !_) = ()
 
 rnfFloatingType :: FloatingType t -> ()
 rnfFloatingType (SingleFloatingType t)    = rnfSingleFloatingType t
@@ -308,16 +322,8 @@ liftIntegralType (SingleIntegralType t)   = [|| SingleIntegralType $$(liftSingle
 liftIntegralType (VectorIntegralType _ t) = [|| VectorIntegralType proxy# $$(liftSingleIntegralType t) ||]
 
 liftSingleIntegralType :: SingleIntegralType t -> CodeQ (SingleIntegralType t)
-liftSingleIntegralType TypeInt8    = [|| TypeInt8 ||]
-liftSingleIntegralType TypeInt16   = [|| TypeInt16 ||]
-liftSingleIntegralType TypeInt32   = [|| TypeInt32 ||]
-liftSingleIntegralType TypeInt64   = [|| TypeInt64 ||]
-liftSingleIntegralType TypeInt128  = [|| TypeInt128 ||]
-liftSingleIntegralType TypeWord8   = [|| TypeWord8 ||]
-liftSingleIntegralType TypeWord16  = [|| TypeWord16 ||]
-liftSingleIntegralType TypeWord32  = [|| TypeWord32 ||]
-liftSingleIntegralType TypeWord64  = [|| TypeWord64 ||]
-liftSingleIntegralType TypeWord128 = [|| TypeWord128 ||]
+liftSingleIntegralType (TypeInt  n) = [|| TypeInt n ||]
+liftSingleIntegralType (TypeWord n) = [|| TypeWord n ||]
 
 liftFloatingType :: FloatingType t -> CodeQ (FloatingType t)
 liftFloatingType (SingleFloatingType t)   = [|| SingleFloatingType $$(liftSingleFloatingType t) ||]
@@ -354,23 +360,10 @@ class IsSingleIntegral a where
 class IsSingleFloating a where
   singleFloatingType :: SingleFloatingType a
 
--- Type-level bit sizes
--- --------------------
-
 -- | Constraint that values of these two types have the same bit width
 --
 type BitSizeEq a b = (BitSize a == BitSize b) ~ 'True
 type family BitSize a :: Nat
-
-
--- Instances
--- ---------
---
--- Generate instances for the IsX classes. It would be preferable to do this
--- automatically based on the members of the IntegralType (etc.) representations
--- (see for example FromIntegral.hs) but TH phase restrictions would require us
--- to split this into a separate module.
---
 
 runQ $ do
   let
@@ -465,7 +458,6 @@ instance IsBit Bit where
 
 instance KnownNat n => IsBit (Vec n Bit) where
   bitType = TypeMask proxy#
-
 
 -- Determine the underlying type of a Haskell Int and Word
 --

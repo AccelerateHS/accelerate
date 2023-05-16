@@ -498,16 +498,8 @@ encodeIntegralType (SingleIntegralType t)   = encodeSingleIntegralType t
 encodeIntegralType (VectorIntegralType n t) = intHost $(hashQ "Vec") <> int8 (fromIntegral (natVal' n)) <> encodeSingleIntegralType t
 
 encodeSingleIntegralType :: SingleIntegralType t -> Builder
-encodeSingleIntegralType TypeInt8    = intHost $(hashQ "Int8")
-encodeSingleIntegralType TypeInt16   = intHost $(hashQ "Int16")
-encodeSingleIntegralType TypeInt32   = intHost $(hashQ "Int32")
-encodeSingleIntegralType TypeInt64   = intHost $(hashQ "Int64")
-encodeSingleIntegralType TypeInt128  = intHost $(hashQ "Int128")
-encodeSingleIntegralType TypeWord8   = intHost $(hashQ "Word8")
-encodeSingleIntegralType TypeWord16  = intHost $(hashQ "Word16")
-encodeSingleIntegralType TypeWord32  = intHost $(hashQ "Word32")
-encodeSingleIntegralType TypeWord64  = intHost $(hashQ "Word64")
-encodeSingleIntegralType TypeWord128 = intHost $(hashQ "Word128")
+encodeSingleIntegralType (TypeInt n)  = intHost $(hashQ "Int")  <> intHost n
+encodeSingleIntegralType (TypeWord n) = intHost $(hashQ "Word") <> intHost n
 
 encodeFloatingType :: FloatingType t -> Builder
 encodeFloatingType (SingleFloatingType t)   = encodeSingleFloatingType t

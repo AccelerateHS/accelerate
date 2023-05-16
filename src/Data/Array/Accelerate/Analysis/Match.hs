@@ -943,17 +943,9 @@ matchIntegralType _ _ = Nothing
 
 {-# INLINEABLE matchSingleIntegralType #-}
 matchSingleIntegralType :: SingleIntegralType s -> SingleIntegralType t -> Maybe (s :~: t)
-matchSingleIntegralType TypeInt8    TypeInt8    = Just Refl
-matchSingleIntegralType TypeInt64   TypeInt64   = Just Refl
-matchSingleIntegralType TypeInt32   TypeInt32   = Just Refl
-matchSingleIntegralType TypeInt16   TypeInt16   = Just Refl
-matchSingleIntegralType TypeInt128  TypeInt128  = Just Refl
-matchSingleIntegralType TypeWord8   TypeWord8   = Just Refl
-matchSingleIntegralType TypeWord64  TypeWord64  = Just Refl
-matchSingleIntegralType TypeWord32  TypeWord32  = Just Refl
-matchSingleIntegralType TypeWord16  TypeWord16  = Just Refl
-matchSingleIntegralType TypeWord128 TypeWord128 = Just Refl
-matchSingleIntegralType _           _           = Nothing
+matchSingleIntegralType (TypeInt  n) (TypeInt  m) | m == n = Just (unsafeCoerce Refl)
+matchSingleIntegralType (TypeWord n) (TypeWord m) | m == n = Just (unsafeCoerce Refl)
+matchSingleIntegralType _            _                     = Nothing
 
 {-# INLINEABLE matchFloatingType #-}
 matchFloatingType :: FloatingType s -> FloatingType t -> Maybe (s :~: t)
