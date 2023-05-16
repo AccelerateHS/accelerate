@@ -33,7 +33,6 @@ module Data.Array.Accelerate.Classes.Eq (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pattern.Bool
 import Data.Array.Accelerate.Pattern.Tuple
@@ -45,14 +44,12 @@ import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.VEq
 
-import Data.Bits
 import Text.Printf
 import Prelude                                                      ( ($), String, Num(..), Ordering(..), show, error, return, concat, map, zipWith, foldr1, mapM )
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import qualified Prelude                                            as P
 
 import GHC.Exts
-import GHC.TypeLits
 
 
 infix 4 ==
