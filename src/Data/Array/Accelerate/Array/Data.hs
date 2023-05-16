@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeFamilies         #-}
+{-# LANGUAGE TypeOperators        #-}
 {-# LANGUAGE UnboxedTuples        #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -66,7 +67,7 @@ import Data.Bits                                                    ( testBit, s
 import Data.IORef
 import Foreign.ForeignPtr
 import Formatting                                                   hiding ( bytes )
-import Language.Haskell.TH.Extra
+import Language.Haskell.TH.Extra                                    hiding ( Type )
 import System.IO.Unsafe
 import Prelude                                                      hiding ( mapM )
 

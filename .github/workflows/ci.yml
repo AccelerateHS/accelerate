@@ -1,0 +1,185 @@
+name: CI
+
+# Trigger the workflow on push or pull request
+on:
+  # workflow_dispatch:
+  pull_request:
+    # branches: [master]
+    types: [synchronize, opened, reopened]
+  push:
+    # branches: [main]
+    paths:
+      - '.github/workflows/ci.yml'
+      - '*.cabal'
+      - 'cabal.project'
+      - 'stack.yaml'
+      - 'src/**'
+      - 'test/**'
+      - 'cbits/**'
+  schedule:
+    # additionally run once per week (At 00:00 on Sunday) to maintain cache
+    - cron: '0 0 * * 0'
+
+jobs:
+  cabal:
+    name: cabal | ${{ matrix.os }}-${{ matrix.arch }} ghc-${{ matrix.ghc }} ${{ matrix.mode }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - 'ubuntu-latest'
+          - 'macOS-latest'
+          - 'windows-latest'
+        arch:
+          - "x64"
+          - "ARM64"
+        ghc:
+          - 'latest'
+          - '9.6'
+          - '9.4'
+          - '9.2'
+          - '9.0'
+          - '8.10'
+        mode:
+          - 'debug'
+          - 'release'
+        exclude:
+          - os: 'windows-latest'
+            mode: 'debug'
+          - arch: "ARM64"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i'~' -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: Set up Haskell
+        uses: haskell/actions/setup@v2
+        id: setup-haskell
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: latest
+
+      - name: Set up environment
+        run: |
+          if [ ${{ matrix.mode }} == 'release' ]; then
+            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib >> $GITHUB_ENV
+          else
+            if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
+              sudo apt-get -y install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+            elif [ ${{ matrix.os }} == 'macOS-latest' ]; then
+              brew install pkg-config capstone freetype glfw
+            fi
+            echo CABAL_FLAGS=--enable-tests --test-show-details=direct --flags=nofib --flags=debug --ghc-options=\"-optc=-DTRACY_TIMER_FALLBACK\" --ghc-options=\"-optcxx=-DTRACY_TIMER_FALLBACK\" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Configure
+        run: cabal configure $CABAL_FLAGS
+        shell: bash
+
+      - name: Freeze
+        run: |
+          cabal freeze
+          sed -i'~' -e '/^index-state:/d' cabal.project.freeze
+
+      - name: Run actions/cache-always@v3
+        uses: ./.github/actions/cache-always
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.cabal-store }}
+            dist-newstyle
+          key: ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-${{ hashFiles('cabal.project.freeze') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-${{ hashFiles('cabal.project.freeze') }}
+            ${{ runner.os }}-${{ matrix.arch }}-${{ matrix.ghc }}-${{ matrix.mode }}-cabal-
+
+      - name: Build dependencies
+        run: cabal build --only-dependencies
+
+      - name: Build
+        run: cabal build
+
+      - name: Haddock
+        # Behaviour of cabal haddock has changed for the worse: https://github.com/haskell/cabal/issues/8725
+        run: cabal haddock --disable-documentation
+        if: matrix.mode == 'release'
+
+      - name: Test doctest
+        run: cabal test doctest
+        if: matrix.os == 'ubuntu-latest' && matrix.mode == 'release'
+
+      - name: Test nofib
+        run: cabal test nofib-interpreter
+        if: matrix.os != 'windows-latest'
+
+  stack:
+    name: stack | ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - 'ubuntu-latest'
+          - 'macOS-latest'
+          - 'windows-latest'
+        arch:
+          - "x64"
+          - "ARM64"
+        exclude:
+          - arch: "ARM64"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/checkout@v3
+        with:
+          repository: actions/cache
+          path: .github/actions/cache-always
+          ref: v3
+
+      # Tweak `action.yml` of `actions/cache@v3` to remove the `post-if`
+      # condition, making it default to `post-if: always ()`.
+      - name: Set up actions/cache-always@v3
+        run: |
+          sed -i'~' -e '/ post-if: /d' .github/actions/cache-always/action.yml
+
+      - name: Set up Haskell
+        uses: haskell/actions/setup@v2
+        id: setup-haskell
+        with:
+          enable-stack: true
+          stack-no-global: true
+
+      - name: Run actions/cache-always@v3
+        uses: ./.github/actions/cache-always
+        with:
+          path: |
+            ${{ steps.setup-haskell.outputs.stack-root }}
+            .stack-work
+          key: ${{ runner.os }}-${{ matrix.arch }}-stack-${{ hashFiles('stack.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-stack-${{ hashFiles('stack.yaml') }}
+            ${{ runner.os }}-${{ matrix.arch }}-stack-
+
+      - name: Setup
+        run: stack setup
+
+      - name: Build dependencies
+        run: stack build --only-dependencies
+
+      - name: Build
+        run: stack build
+
+# vi: nospell

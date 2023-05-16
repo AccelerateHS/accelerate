@@ -141,6 +141,9 @@ import Data.Array.Accelerate.Data.Bits
 
 import Lens.Micro                                                   ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
 import Prelude                                                      ( (.), ($), const, id, flip )
+#if __GLASGOW_HASKELL__ >= 904
+import Data.Type.Equality
+#endif
 
 
 -- $setup

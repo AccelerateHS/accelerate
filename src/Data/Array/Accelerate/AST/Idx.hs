@@ -36,7 +36,7 @@ import Data.Kind
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 #ifndef ACCELERATE_INTERNAL_CHECKS
-import Data.Type.Equality                                           ( (:~:)(..) )
+import Data.Type.Equality                                           ( (:~:)(Refl) )
 import Unsafe.Coerce                                                ( unsafeCoerce )
 #endif
 
@@ -110,6 +110,8 @@ liftIdx (UnsafeIdxConstructor i) = [|| UnsafeIdxConstructor i ||]
 --
 pattern VoidIdx :: forall env t a. (env ~ ()) => () => a -> Idx env t
 pattern VoidIdx a <- (\case{} -> a)
+
+{-# COMPLETE VoidIdx #-}
 
 data PairIdx p a where
   PairIdxLeft  :: PairIdx (a, b) a

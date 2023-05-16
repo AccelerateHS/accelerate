@@ -98,8 +98,8 @@ timed_gc fmt action = do
   rts1  <- liftIO getRTSStats
   --
   let
-      w64 (W64# w#) = D# (word2Double# w#)
-      i64 (I64# i#) = D# (int2Double# i#)
+      w64 (W64# w#) = D# (word2Double# (word64ToWord# w#))
+      i64 (I64# i#) = D# (int2Double# (int64ToInt# i#))
       --
       allocated   = w64 (allocated_bytes rts1 - allocated_bytes rts0)
       copied      = w64 (copied_bytes rts1 - copied_bytes rts0)
@@ -123,6 +123,14 @@ timed_gc fmt action = do
     gcWall gcCPU
 
   return res
+
+#if __GLASGOW_HASKELL__ < 904
+word64ToWord# :: Word# -> Word#
+word64ToWord# x = x
+
+int64ToInt# :: Int# -> Int#
+int64ToInt# x = x
+#endif
 #endif
 
 {-# INLINE elapsed #-}
