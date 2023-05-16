@@ -535,7 +535,7 @@ matchOpenExp (Case eR1 e1 rhs1 def1) (Case eR2 e2 rhs2 def2)
   where
     matchCaseEqs :: TagType tag -> [(tag, OpenExp env aenv a)] -> [(tag, OpenExp env aenv b)] -> Maybe (a :~: b)
     matchCaseEqs _ [] []
-      = unsafeCoerce Refl
+      = Just (unsafeCoerce Refl)
     matchCaseEqs tR ((s,x):xs) ((t,y):ys)
       | TagDict <- tagDict tR
       , s == t
@@ -546,7 +546,7 @@ matchOpenExp (Case eR1 e1 rhs1 def1) (Case eR2 e2 rhs2 def2)
       = Nothing
 
     matchCaseDef :: Maybe (OpenExp env aenv a) -> Maybe (OpenExp env aenv b) -> Maybe (a :~: b)
-    matchCaseDef Nothing  Nothing  = unsafeCoerce Refl
+    matchCaseDef Nothing  Nothing  = Just (unsafeCoerce Refl)
     matchCaseDef (Just x) (Just y) = matchOpenExp x y
     matchCaseDef _        _        = Nothing
 
