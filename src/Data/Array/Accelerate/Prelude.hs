@@ -2270,19 +2270,17 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
 
-data Args f where
-  (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
-  Result :: Args (Exp a)
-
 class Matching a where
   type ResultT a
-  mkMatch :: a -> Args a -> Exp (ResultT a)
-  mkFun   :: (Args f -> Exp (ResultT a))
-          -> (Args a -> Args f)
+  data ArgsR a
+  mkMatch :: a -> ArgsR a -> Exp (ResultT a)
+  mkFun   :: (ArgsR f -> Exp (ResultT a))
+          -> (ArgsR a -> ArgsR f)
           -> a
 
 instance Elt a => Matching (Exp a) where
   type ResultT (Exp a) = a
+  data ArgsR (Exp a) = Result
 
   mkFun f k = f (k Result)
   mkMatch (Exp e) Result =
@@ -2292,6 +2290,7 @@ instance Elt a => Matching (Exp a) where
 
 instance (Elt e, Matching r) => Matching (Exp e -> r) where
   type ResultT (Exp e -> r) = ResultT r
+  data ArgsR (Exp e -> r) = Exp e :-> ArgsR r
 
   mkFun f k x = mkFun f (\xs -> k (x :-> xs))
   mkMatch f (x@(Exp p) :-> xs) =
