@@ -773,7 +773,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Shape _ a             -> AST.Shape (cvtAvar a)
           ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
           Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
-          Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
+          Bitcast t1 t2 e       -> AST.Bitcast t1 t2 (cvt e)
 
     cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
     cvtPrj PairIdxLeft  (AST.Pair a _) = a
@@ -1906,7 +1906,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Foreign tp ff f e      -> do
                                          (e', h) <- travE lvl e
                                          return  (Foreign tp ff f e', h+1)
-            Coerce t1 t2 e         -> travE1 (Coerce t1 t2) e
+            Bitcast t1 t2 e        -> travE1 (Bitcast t1 t2) e
 
       where
         traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
@@ -2809,7 +2809,7 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Shape shr a           -> travA (Shape shr) a
           ShapeSize shr e       -> travE1 (ShapeSize shr) e
           Foreign tp ff f e     -> travE1 (Foreign tp ff f) e
-          Coerce t1 t2 e        -> travE1 (Coerce t1 t2) e
+          Bitcast t1 t2 e       -> travE1 (Bitcast t1 t2) e
       where
         travE1 :: HasCallStack
                => (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t)

@@ -653,7 +653,7 @@ data OpenExp env aenv t where
   -- The types must have the same bit size, but that constraint is not include
   -- at this point because GHC's typelits solver is often not powerful enough to
   -- discharge that constraint. ---TLM 2022-09-20
-  Coerce        :: ScalarType a
+  Bitcast       :: ScalarType a
                 -> ScalarType b
                 -> OpenExp env aenv a
                 -> OpenExp env aenv b
@@ -862,7 +862,7 @@ expType = \case
   Shape (Var repr _)           -> shapeType $ arrayRshape repr
   ShapeSize{}                  -> TupRsingle (scalarType @INT)
   Undef tR                     -> TupRsingle tR
-  Coerce _ tR _                -> TupRsingle tR
+  Bitcast _ tR _               -> TupRsingle tR
 
 
 primFunType :: PrimFun (a -> b) -> (TypeR a, TypeR b)
@@ -1140,7 +1140,7 @@ rnfOpenExp topExp =
     LinearIndex a ix          -> rnfArrayVar a `seq` rnfE ix
     Shape a                   -> rnfArrayVar a
     ShapeSize shr sh          -> rnfShapeR shr `seq` rnfE sh
-    Coerce t1 t2 e            -> rnfScalarType t1 `seq` rnfScalarType t2 `seq` rnfE e
+    Bitcast t1 t2 e           -> rnfScalarType t1 `seq` rnfScalarType t2 `seq` rnfE e
 
 rnfExpVar :: ExpVar env t -> ()
 rnfExpVar = rnfVar rnfScalarType
@@ -1358,7 +1358,7 @@ liftOpenExp pexp =
     LinearIndex a ix          -> [|| LinearIndex $$(liftArrayVar a) $$(liftE ix) ||]
     Shape a                   -> [|| Shape $$(liftArrayVar a) ||]
     ShapeSize shr ix          -> [|| ShapeSize $$(liftShapeR shr) $$(liftE ix) ||]
-    Coerce t1 t2 e            -> [|| Coerce $$(liftScalarType t1) $$(liftScalarType t2) $$(liftE e) ||]
+    Bitcast t1 t2 e           -> [|| Bitcast $$(liftScalarType t1) $$(liftScalarType t2) $$(liftE e) ||]
 
 liftELeftHandSide :: ELeftHandSide t env env' -> CodeQ (ELeftHandSide t env env')
 liftELeftHandSide = liftLeftHandSide liftScalarType
@@ -1503,5 +1503,5 @@ formatExpOp = later $ \case
   LinearIndex{}   -> "LinearIndex"
   Shape{}         -> "Shape"
   ShapeSize{}     -> "ShapeSize"
-  Coerce{}        -> "Coerce"
+  Bitcast{}       -> "Coerce"
 

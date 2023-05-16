@@ -240,13 +240,13 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT = 1
 
     cheap :: OpenExp env aenv t -> Bool
-    cheap (Evar _)       = True
-    cheap (Pair e1 e2)   = cheap e1 && cheap e2
-    cheap Nil            = True
-    cheap Const{}        = True
-    cheap Undef{}        = True
-    cheap (Coerce _ _ e) = cheap e
-    cheap _              = False
+    cheap (Evar _)        = True
+    cheap (Pair e1 e2)    = cheap e1 && cheap e2
+    cheap Nil             = True
+    cheap Const{}         = True
+    cheap Undef{}         = True
+    cheap (Bitcast _ _ e) = cheap e
+    cheap _               = False
 
     shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
@@ -307,7 +307,7 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Shape a                   -> pure (Shape a)
       ShapeSize shr sh          -> ShapeSize shr <$> shrinkE sh
       Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
+      Bitcast t1 t2 e           -> Bitcast t1 t2 <$> shrinkE e
 
     shrinkF :: HasCallStack => OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
@@ -455,7 +455,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
       Union sh sz               -> Union (shrinkE sh) (shrinkE sz)
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
-      Coerce e                  -> Coerce (shrinkE e)
+      Bitcast e                 -> Bitcast (shrinkE e)
 
     shrinkF :: OpenFun env aenv' f -> OpenFun env aenv' f
     shrinkF (Lam f)  = Lam (shrinkF f)
@@ -508,7 +508,7 @@ usesOfExp range = countE
       Shape _                   -> Finite 0
       ShapeSize _ sh            -> countE sh
       Foreign _ _ _ e           -> countE e
-      Coerce _ _ e              -> countE e
+      Bitcast _ _ e             -> countE e
 
 usesOfFun :: VarsRange env -> OpenFun env aenv f -> Count
 usesOfFun range (Lam lhs f) = usesOfFun (weakenVarsRange lhs range) f
@@ -598,7 +598,7 @@ usesOfPreAcc withShape countAcc idx = count
         | withShape              -> countAvar a
         | otherwise              -> 0
       Foreign _ _ _ e            -> countE e
-      Coerce _ _ e               -> countE e
+      Bitcast _ _ e              -> countE e
 
     countME :: Maybe (OpenExp env aenv e) -> Int
     countME = maybe 0 countE

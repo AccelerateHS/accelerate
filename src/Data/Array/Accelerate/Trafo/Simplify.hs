@@ -296,7 +296,7 @@ simplifyOpenExp env = first getAny . cvtE
       ShapeSize shr sh          -> shapeSize shr (cvtE sh)
       Foreign tp ff f e         -> Foreign tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
+      Bitcast t1 t2 e           -> Bitcast t1 t2 <$> cvtE e
 
     cvtE' :: Gamma env' env' aenv -> OpenExp env' aenv e' -> (Any, OpenExp env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
@@ -604,7 +604,7 @@ summariseOpenExp = (terms +~ 1) . goE
         Shape a               -> travA a
         ShapeSize _ sh        -> travE sh
         PrimApp f x           -> travPrimFun f +++ travE x
-        Coerce _ _ e          -> travE e
+        Bitcast _ _ e         -> travE e
 
     travPrimFun :: PrimFun f -> Stats
     travPrimFun = (ops +~ 1) . goF

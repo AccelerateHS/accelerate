@@ -309,7 +309,7 @@ mkBitcast'
     :: forall b a n. (IsScalar (VecR n a), IsScalar (VecR n b), BitSizeEq (EltR a) (EltR b))
     => Exp (Vec n a)
     -> Exp (Vec n b)
-mkBitcast' (Exp a) = mkExp $ Coerce (scalarType @(VecR n a)) (scalarType @(VecR n b)) a
+mkBitcast' (Exp a) = mkExp $ Bitcast (scalarType @(VecR n a)) (scalarType @(VecR n b)) a
 
 defaultFloatRadix :: forall a. P.RealFloat a => Exp a -> Exp Int
 defaultFloatRadix _ = P.fromInteger (P.floatRadix (undefined::a))

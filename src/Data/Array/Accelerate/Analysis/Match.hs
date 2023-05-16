@@ -598,7 +598,7 @@ matchOpenExp (ShapeSize _ sh1) (ShapeSize _ sh2)
 
 matchOpenExp (Undef t1) (Undef t2) = matchScalarType t1 t2
 
-matchOpenExp (Coerce _ t1 e1) (Coerce _ t2 e2)
+matchOpenExp (Bitcast _ t1 e1) (Bitcast _ t2 e2)
   | Just Refl <- matchScalarType t1 t2
   , Just Refl <- matchOpenExp e1 e2
   = Just Refl

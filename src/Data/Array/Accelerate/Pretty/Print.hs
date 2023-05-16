@@ -444,7 +444,7 @@ prettyOpenExp ctx env aenv exp =
     ShapeSize _ sh        -> ppF1 "shapeSize"   (ppE sh)
     Index arr ix          -> ppF2 (Operator (pretty '!') Infix L 9) (ppA arr) (ppE ix)
     LinearIndex arr ix    -> ppF2 (Operator "!!"         Infix L 9) (ppA arr) (ppE ix)
-    Coerce _ tp x         -> ppF1 (Operator (withTypeRep tp "coerce") App L 10) (ppE x)
+    Bitcast _ tp x        -> ppF1 (Operator (withTypeRep tp "bitcast") App L 10) (ppE x)
     Undef tp              -> withTypeRep tp "undef"
 
   where

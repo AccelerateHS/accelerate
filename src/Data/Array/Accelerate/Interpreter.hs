@@ -40,7 +40,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalCoerceScalar, atraceOp,
+  evalPrim, evalBitcastScalar, atraceOp,
 
 ) where
 
@@ -986,7 +986,7 @@ evalOpenExp pexp env aenv =
     Shape acc                   -> shape $ snd $ evalA acc
     ShapeSize shr sh            -> size shr (evalE sh)
     Foreign _ _ f e             -> evalOpenFun f Empty Empty $ evalE e
-    Coerce t1 t2 e              -> evalCoerceScalar t1 t2 (evalE e)
+    Bitcast t1 t2 e             -> evalBitcastScalar t1 t2 (evalE e)
 
 
 -- Coercions
@@ -995,8 +995,8 @@ evalOpenExp pexp env aenv =
 -- Coercion between two scalar types. We require that the size of the source and
 -- destination values are equal (this is not checked at this point).
 --
-evalCoerceScalar :: ScalarType a -> ScalarType b -> a -> b
-evalCoerceScalar = scalar
+evalBitcastScalar :: ScalarType a -> ScalarType b -> a -> b
+evalBitcastScalar = scalar
   where
     scalar :: ScalarType a -> ScalarType b -> a -> b
     scalar (NumScalarType a) = num a
@@ -1005,14 +1005,14 @@ evalCoerceScalar = scalar
     bit :: BitType a -> ScalarType b -> a -> b
     bit TypeBit = \case
       BitScalarType TypeBit -> id
-      _                     -> internalError "evalCoerceScalar @Bit"
+      _                     -> internalError "evalBitcastScalar @Bit"
     bit (TypeMask _) = \case
       NumScalarType b -> num' b
       BitScalarType b -> bit' b
       where
         bit' :: BitType b -> Vec n Bit -> b
         bit' TypeMask{} = unsafeCoerce
-        bit' TypeBit    = internalError "evalCoerceScalar @Bit"
+        bit' TypeBit    = internalError "evalBitcastScalar @Bit"
 
         num' :: NumType b -> Vec n Bit -> b
         num' (IntegralNumType b) = integral' b

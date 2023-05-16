@@ -172,7 +172,7 @@ inlineVars lhsBound expr bound
       Shape a               -> Just $ Shape a
       ShapeSize shr e1      -> ShapeSize shr <$> travE e1
       Undef t               -> Just $ Undef t
-      Coerce t1 t2 e1       -> Coerce t1 t2 <$> travE e1
+      Bitcast t1 t2 e1      -> Bitcast t1 t2 <$> travE e1
 
       where
         travE :: OpenExp env1 aenv s -> Maybe (OpenExp env2 aenv s)
@@ -572,7 +572,7 @@ rebuildOpenExp v av@(ReindexAvar reindex) exp =
     Shape a               -> Shape           <$> reindex a
     ShapeSize shr sh      -> ShapeSize shr   <$> rebuildOpenExp v av sh
     Foreign tp ff f e     -> Foreign tp ff f <$> rebuildOpenExp v av e
-    Coerce t1 t2 e        -> Coerce t1 t2    <$> rebuildOpenExp v av e
+    Bitcast t1 t2 e       -> Bitcast t1 t2   <$> rebuildOpenExp v av e
 
 {-# INLINEABLE rebuildFun #-}
 rebuildFun

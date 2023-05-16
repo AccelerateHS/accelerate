@@ -618,7 +618,7 @@ data PreSmartExp acc exp t where
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
 
-  Coerce        :: ScalarType a
+  Bitcast       :: ScalarType a
                 -> ScalarType b
                 -> exp a
                 -> PreSmartExp acc exp b
@@ -925,7 +925,7 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
     ShapeSize _ _                   -> TupRsingle (scalarType @INT)
     Foreign tR _ _ _                -> tR
     Undef tR                        -> TupRsingle tR
-    Coerce _ tR _                   -> TupRsingle tR
+    Bitcast _ tR _                  -> TupRsingle tR
 
 
 -- Smart constructors
@@ -1497,7 +1497,7 @@ mkFromBool = mkPrimUnary $ PrimFromBool bitType integralType
 -- Other conversions
 
 mkBitcast :: forall b a. (IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
-mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
+mkBitcast (Exp a) = mkExp $ Bitcast (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
 mkCoerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
 mkCoerce (Exp a) = Exp $ mkCoerce' a
@@ -1506,7 +1506,7 @@ class Coerce a b where
   mkCoerce' :: SmartExp a -> SmartExp b
 
 instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
-  mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
+  mkCoerce' = SmartExp . Bitcast (scalarType @a) (scalarType @b)
 
 instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
   mkCoerce' a = SmartExp $ Pair (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
@@ -1669,5 +1669,5 @@ formatPreExpOp = later $ \case
   Shape{}       -> "Shape"
   ShapeSize{}   -> "ShapeSize"
   Foreign{}     -> "Foreign"
-  Coerce{}      -> "Coerce"
+  Bitcast{}     -> "Bitcast"
 

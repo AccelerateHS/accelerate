@@ -1485,7 +1485,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize shR' sh               -> ShapeSize shR' (cvtE sh)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
-        Coerce t1 t2 e                  -> Coerce t1 t2 (cvtE e)
+        Bitcast t1 t2 e                 -> Bitcast t1 t2 (cvtE e)
 
         Shape a
           | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" sh'
