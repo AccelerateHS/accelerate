@@ -62,13 +62,20 @@
     supportedghcs = [
       [9 2 7]
       [9 4 4]
-      # [9 6 1]
+      [9 6 1]
     ];
+
+    # what stack yaml to use if the ghc version
+    # used doesn't have a stack file
+    stackYamlModifier = ver:
+      if ver == [9 6 1]
+      then [9 4 4]
+      else ver;
 
     lib = nixpkgs.lib // (import ./nix/lib.nix {inherit (nixpkgs) lib;});
 
     tools = {
-      haskell-language-server = "1.9.0.0";
+      haskell-language-server = "1.10.0.0";
     };
 
     additionalBuildDepends = p:
@@ -110,7 +117,6 @@
             provisioned_tracy: true
       '';
       patchedSrc = pkgs.runCommand "patchStackYaml" {src = ./.;} ''
-        set -x
         mkdir $out
         cp -r $src/* $out
         chmod -R +w $out/cbits
@@ -124,13 +130,12 @@
           chmod +w $stackYaml
           echo "${patch}" >> $stackYaml
         done
-        set +x
       '';
     in
       pkgs.haskell-nix.stackProject' {
         src = patchedSrc;
         inherit (gver) compiler-nix-name;
-        stackYaml = "stack-${gver.stack}.yaml";
+        stackYaml = "stack-${(lib.ghcVer (stackYamlModifier ghcversion)).stack}.yaml";
         modules = [
           (_: {
             setup-depends = additionalBuildDepends pkgs;
@@ -150,7 +155,7 @@
           inherit tools;
           inherit (precommitcheckForghc system) shellHook;
           inputsFrom = [(toolingShellFor system)];
-          withHoogle = true;
+          withHoogle = false;
           exactDeps = true;
         };
       };
@@ -162,7 +167,7 @@
     in
       pkgs.mkShell {
         inherit (precommitcheckForghc system) shellHook;
-        buildInputs = additionalBuildDepends pkgs;
+        buildInputs = []; # additionalBuildDepends pkgs;
         nativeBuildInputs = [
           pkgs.cabal-install
           pkgs.stack
@@ -177,10 +182,12 @@
     };
   in {
     inherit supportedsystems supportedghcs toolingShellFor lib;
-    # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
-    inherit (accelerateFlakes) flakes projects packages checks;
+    inherit (accelerateFlakes) flakes projects packages;
 
     pkgs = perSystem pkgsFor;
+
+    # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
+    checks = perSystem (system: accelerateFlakes.checks.${system} // (lib.extendAttrName ":devShell" accelerateFlakes.devShells.${system}));
 
     devShells = perSystem (system:
       accelerateFlakes.devShells.${system}

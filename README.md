@@ -106,6 +106,8 @@ Documentation
   * Haddock documentation is included and linked with the individual package releases on [Hackage][Hackage].
   <!-- * Haddock documentation for in-development components can be found [here](http://tmcdonell-bot.github.io/accelerate-travis-buildbot/). -->
   * The idea behind the HOAS (higher-order abstract syntax) to de-Bruijn conversion used in the library is [described separately][HOAS-conv].
+  * This project provides a [`nix`](https://nixos.org/) flake to both build the project but also allow for simple provisioning of development 
+    environments. You can find documentation for the nix code in [the nix folder](./nix/README.md)
 
 Examples
 --------

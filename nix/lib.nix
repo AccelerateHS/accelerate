@@ -31,6 +31,11 @@ with lib; rec {
   in
     foldr (a: b: a // b) {} (flatten (recurse "" attrs));
 
+  extendAttrName = more: (lib.mapAttrs' (attr: value: {
+    name = attr + more;
+    inherit value;
+  }));
+
   # utility function that generates flakes and flake outputs based on the ghcVersions
   # you pass it, it receives them in the format [[8 10 7] [9 0 2]]
   # hh provides haskell.nix project and flake, as well as the standard flake outputs

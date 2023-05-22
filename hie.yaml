@@ -1,0 +1,16 @@
+cradle:
+  cabal:
+    - path: "./src"
+      component: "lib:accelerate"
+
+    - path: "./test/doctest"
+      component: "accelerate:test:doctest"
+
+    - path: "./test/nofib"
+      component: "accelerate:test:nofib-interpreter"
+
+    - path: "./app/Main.hs"
+      component: "accelerate:exe:tracy"
+
+    - path: "./app/Main.hs"
+      component: "accelerate:exe:tracy-capture"
