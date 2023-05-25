@@ -42,6 +42,17 @@
         (_self: super: {
           tracy =
             inputs.nixpkgs-unstable.legacyPackages.${super.system}.tracy.overrideAttrs (_old: {src = inputs.tracy;});
+          stack = super.symlinkJoin {
+            name = "stack-haskell-nix";
+            nativeBuildInputs = [super.makeWrapper];
+            paths = [super.stack];
+            postBuild = ''
+              wrapProgram "$out/bin/stack" \
+                --add-flags "--no-nix" \
+                --add-flags "--system-ghc" \
+                --add-flags "--no-install-ghc"
+            '';
+          };
         })
       ];
 
@@ -75,7 +86,12 @@
     lib = nixpkgs.lib // (import ./nix/lib.nix {inherit (nixpkgs) lib;});
 
     tools = {
-      haskell-language-server = "1.10.0.0";
+      haskell-language-server = {
+        cabalProjectLocal = ''
+          flags:
+            -stylishHaskell
+        '';
+      };
     };
 
     additionalBuildDepends = p:
@@ -132,7 +148,7 @@
         done
       '';
     in
-      pkgs.haskell-nix.stackProject' {
+      pkgs.haskell-nix.stackProject' rec {
         src = patchedSrc;
         inherit (gver) compiler-nix-name;
         stackYaml = "stack-${(lib.ghcVer (stackYamlModifier ghcversion)).stack}.yaml";
@@ -153,7 +169,14 @@
         ];
         shell = {
           inherit tools;
-          inherit (precommitcheckForghc system) shellHook;
+          shellHook = ''
+            ${(precommitcheckForghc system).shellHook}
+            if test -f "${stackYaml}"; then
+              echo "linking stack file ${stackYaml} to stack.yaml"
+              rm stack.yaml
+              ln -s ${stackYaml} stack.yaml
+            fi
+          '';
           inputsFrom = [(toolingShellFor system)];
           withHoogle = false;
           exactDeps = true;
