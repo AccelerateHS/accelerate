@@ -35,25 +35,26 @@
     pre-commit-hooks,
     ...
   }: let
+    accelerate-overlay = _self: super: {
+      tracy =
+        inputs.nixpkgs-unstable.legacyPackages.${super.system}.tracy.overrideAttrs (_old: {src = inputs.tracy;});
+      stack = super.symlinkJoin {
+        name = "stack-haskell-nix";
+        nativeBuildInputs = [super.makeWrapper];
+        paths = [super.stack];
+        postBuild = ''
+          wrapProgram "$out/bin/stack" \
+            --add-flags "--no-nix" \
+            --add-flags "--system-ghc" \
+            --add-flags "--no-install-ghc"
+        '';
+      };
+    };
     pkgsFor = system:
       nixpkgs.legacyPackages.${system}.appendOverlays [
         haskell-nix.overlay
         # always build with the same tracy hat we provision to accelerate itself
-        (_self: super: {
-          tracy =
-            inputs.nixpkgs-unstable.legacyPackages.${super.system}.tracy.overrideAttrs (_old: {src = inputs.tracy;});
-          stack = super.symlinkJoin {
-            name = "stack-haskell-nix";
-            nativeBuildInputs = [super.makeWrapper];
-            paths = [super.stack];
-            postBuild = ''
-              wrapProgram "$out/bin/stack" \
-                --add-flags "--no-nix" \
-                --add-flags "--system-ghc" \
-                --add-flags "--no-install-ghc"
-            '';
-          };
-        })
+        accelerate-overlay
       ];
 
     # a bit hacky solution to get around nix flake show and nix flake check
@@ -211,6 +212,8 @@
 
     # FIXME: checks have to be fixed; checks pass with stack --nix test but not with cabal test
     checks = perSystem (system: accelerateFlakes.checks.${system} // (lib.extendAttrName ":devShell" accelerateFlakes.devShells.${system}));
+
+    overlays = {inherit accelerate-overlay;};
 
     devShells = perSystem (system:
       accelerateFlakes.devShells.${system}
