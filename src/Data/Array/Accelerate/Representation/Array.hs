@@ -74,11 +74,6 @@ formatArrayR :: Format r (ArrayR a -> r)
 formatArrayR = later $ \case
   ArrayR shR eR -> bformat ("Array DIM" % int % " " % formatTypeR) (rank shR) eR
 
-instance Show (TupR ArrayR e) where
-  show TupRunit           = "()"
-  show (TupRsingle aR)    = show aR
-  show (TupRpair aR1 aR2) = "(" ++ show aR1 ++ "," ++ show aR2 ++ ")"
-
 formatArraysR :: Format r (TupR ArrayR e -> r)
 formatArraysR = later $ \case
   TupRunit         -> "()"
