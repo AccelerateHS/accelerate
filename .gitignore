@@ -12,7 +12,11 @@
 /cabal.project.local*
 /stack.yaml.lock
 .DS_Store
-*.lock
 /docs/_build
 *.hi
 *.o
+*.o-boot
+.direnv
+.envrc
+result
+.pre-commit-config.yaml
