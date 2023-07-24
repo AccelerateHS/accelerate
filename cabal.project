@@ -1,6 +1,1 @@
 packages: .
-
--- XXX: awaiting new release for ghc-9.6
-allow-newer:
-  hedgehog:template-haskell
-

@@ -1,9 +1,11 @@
-{-# LANGUAGE GADTs           #-}
-{-# LANGUAGE KindSignatures  #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RankNTypes      #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeOperators   #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE PatternSynonyms       #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.AST.LeftHandSide
@@ -39,6 +41,8 @@ data LeftHandSide s v env env' where
     :: LeftHandSide s v1       env  env'
     -> LeftHandSide s v2       env' env''
     -> LeftHandSide s (v1, v2) env  env''
+
+deriving instance (forall a. Show (s a)) => Show (LeftHandSide s v env env')
 
 pattern LeftHandSideUnit
     :: ()                   -- required
