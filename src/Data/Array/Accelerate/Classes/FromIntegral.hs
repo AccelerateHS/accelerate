@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -105,11 +106,16 @@ runQ $ do
 
       thToBool :: Name -> Q [Dec]
       thToBool a =
-        [d| -- | @since 1.4.0.0
+        [d|
+#if __GLASGOW_HASKELL__ >= 900
+            -- | @since 1.4.0.0
+#endif
             instance FromIntegral $(conT a) Bool where
               fromIntegral = mkToBool
 
+#if __GLASGOW_HASKELL__ >= 900
             -- | @since 1.4.0.0
+#endif
             instance KnownNat n => FromIntegral (Vec n $(conT a)) (Vec n Bool) where
               fromIntegral = mkToBool
           |]
