@@ -586,6 +586,7 @@ library
   cc-options:
         -O3
         -Wall
+        -std=c11
 
   cxx-options:
         -O3
