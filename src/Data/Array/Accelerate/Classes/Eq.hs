@@ -45,11 +45,10 @@ import Data.Array.Accelerate.Type
 import {-# SOURCE #-} Data.Array.Accelerate.Classes.VEq
 
 import Text.Printf
+import Data.Char
 import Prelude                                                      ( ($), String, Num(..), Ordering(..), show, error, return, concat, map, zipWith, foldr1, mapM )
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import qualified Prelude                                            as P
-
-import GHC.Exts
 
 
 infix 4 ==

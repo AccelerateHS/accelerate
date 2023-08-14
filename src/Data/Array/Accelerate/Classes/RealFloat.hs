@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_HADDOCK hide #-}
@@ -49,6 +50,7 @@ import Data.Array.Accelerate.Classes.VOrd
 
 import Data.Coerce
 import Data.Kind
+import Data.Type.Equality
 import Text.Printf
 import Prelude                                                      ( (.), ($), String, error, undefined, unlines )
 import qualified Prelude                                            as P

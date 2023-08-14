@@ -109,7 +109,7 @@ import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
 import Prelude                                                      ( ($), (.), Char )
-#if __GLASGOW_HASKELL__ >= 904
+#if __GLASGOW_HASKELL__ == 904
 import Data.Type.Equality
 #endif
 

@@ -17,12 +17,14 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue517 (
 
 ) where
 
-import Data.Array.Accelerate                              as A
-import Data.Array.Accelerate.Data.Semigroup               as A
+import Data.Array.Accelerate                                        as A
+import Data.Array.Accelerate.Data.Semigroup                         as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
 import Test.Tasty.HUnit
+
+import Prelude                                                      hiding ( Maybe(..) )
 
 
 test_issue517 :: RunN -> TestTree
@@ -37,9 +39,9 @@ e1 = fromList Z [(Nothing, Just 2, Just 3, Just 5, Just 7)]
 
 t1 :: Acc (Scalar (Tup5 (Maybe (Max Float))))
 t1 = unit $
-  T5 (Nothing_ <> Nothing_)
-     (Nothing_ <> Just_ 2)
-     (Just_ 3 <> Nothing_)
-     (Just_ 4 <> Just_ 5)
-     (Just_ 7 <> Just_ 6)
+  T5 (Nothing <> Nothing)
+     (Nothing <> Just 2)
+     (Just 3  <> Nothing)
+     (Just 4  <> Just 5)
+     (Just 7  <> Just 6)
 

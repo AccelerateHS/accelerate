@@ -9,6 +9,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
 -- |
 -- Module      : Data.Array.Accelerate.Data.Bits
@@ -45,12 +46,13 @@ import Data.Array.Accelerate.Classes.VEq
 import Data.Array.Accelerate.Classes.VOrd
 
 import Data.Kind
+import Data.Type.Equality
 import Language.Haskell.TH                                          hiding ( Exp, Type )
 import Prelude                                                      ( ($), (<$>), undefined, otherwise, concat, mapM, toInteger )
 import qualified Prelude                                            as P
 import qualified Data.Bits                                          as B
 
-import GHC.Exts
+import GHC.Prim                                                     ( Proxy#, proxy# )
 import GHC.TypeLits
 
 infixl 8 `shiftL`, `shiftR`, `rotateL`, `rotateR`
