@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE UnboxedTuples              #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Primitive.Bit
 -- Copyright   : [2008..2022] The Accelerate Team
