@@ -1,11 +1,12 @@
-{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -208,18 +209,19 @@ strengthenShrunkLHS
     -> env1 :?> env1'
     -> env2 :?> env2'
 strengthenShrunkLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \case
   ZeroIdx     -> Just ZeroIdx
   SuccIdx ix' -> SuccIdx <$> k ix'
-strengthenShrunkLHS (LeftHandSidePair lA hA) (LeftHandSidePair lB hB) k = strengthenShrunkLHS hA hB $ strengthenShrunkLHS lA lB k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSidePair lA hA) (LeftHandSidePair lB hB) k =
+  strengthenShrunkLHS hA hB $ strengthenShrunkLHS lA lB k
+strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \case
   ZeroIdx     -> Nothing
   SuccIdx ix' -> k ix'
-strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = strengthenShrunkLHS h (LeftHandSideWildcard t2) $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
-  where
-    TupRpair t1 t2 = t
-strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = internalError "Second LHS defines more variables"
-strengthenShrunkLHS _                        _                        _ = internalError "Mismatch LHS single with LHS pair"
+strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard (TupRpair t1 t2)) k
+  = strengthenShrunkLHS h (LeftHandSideWildcard t2)
+  $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
+strengthenShrunkLHS (LeftHandSideWildcard _) _ _ = internalError "Second LHS defines more variables"
+strengthenShrunkLHS _                        _ _ = internalError "Mismatch LHS single with LHS pair"
 
 
 -- Shrinking

@@ -216,9 +216,10 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
       p'    <- prettyDelayedAfun detail aenv p
       f'    <- prettyDelayedAfun detail aenv f
       --
-      let PNode _ (Leaf (Nothing,xb)) fvs = x'
-          loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
-      return $ PNode ident (Leaf (Nothing,loop)) fvs
+      case x' of
+        PNode _ (Leaf (Nothing,xb)) fvs -> let loop = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
+                                            in return $ PNode ident (Leaf (Nothing,loop)) fvs
+        _                               -> internalError "unexpected node"
 
     Apair a1 a2              -> genNodeId >>= prettyDelayedApair detail aenv a1 a2
 

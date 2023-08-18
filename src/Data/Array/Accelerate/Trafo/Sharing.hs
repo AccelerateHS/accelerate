@@ -1278,7 +1278,7 @@ instance HasTypeR UnscopedExp where
   typeR (UnscopedExp _ exp) = Smart.typeR exp
 
 -- Specifies a scalar expression AST with sharing. For expressions rooted in functions the list
--- holds a sorted environment corresponding to the variables bound in the immediate surounding
+-- holds a sorted environment corresponding to the variables bound in the immediate surrounding
 -- lambdas.
 data ScopedExp t = ScopedExp [StableSharingExp] (SharingExp ScopedAcc ScopedExp t)
 
@@ -2653,12 +2653,14 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         :: HasCallStack
         => (SmartAcc a1 -> UnscopedAcc a2)
         -> (SmartAcc a1 -> ScopedAcc a2, NodeCounts)
-    scopesAfun1 f = (const (ScopedAcc ssa body'), (counts', graph))
+    scopesAfun1 f
+      | not (null env) = internalError "unexpected unbound variables"
+      | otherwise      = (const (ScopedAcc ssa body'), (counts', graph))
       where
-        body@(UnscopedAcc fvs _)             = f undefined
-        (ScopedAcc [] body', (counts,graph)) = scopesAcc body
-        (freeCounts, counts')                = partition isBoundHere counts
-        ssa                                  = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        body@(UnscopedAcc fvs _)            = f undefined
+        (ScopedAcc env body', (counts,graph)) = scopesAcc body
+        (freeCounts, counts')               = partition isBoundHere counts
+        ssa                                 = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag _ i))) _) = i `elem` fvs
         isBoundHere _                                                               = False
@@ -2731,14 +2733,19 @@ determineScopesExp
     -> RootExp t
     -> (ScopedExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
 determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
-  = let
-        (ScopedExp [] expWithScopes, (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
-        (expCounts, accCounts)                           = partition isExpNodeCount nodeCounts
+  | not (null env)
+  = internalError "unexpected unbound variables"
+  --
+  | otherwise
+  = ( ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes
+    , cleanCounts (accCounts,graph)
+    )
+  where
+    (ScopedExp env expWithScopes, (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
+    (expCounts, accCounts)                            = partition isExpNodeCount nodeCounts
 
-        isExpNodeCount ExpNodeCount{} = True
-        isExpNodeCount _              = False
-    in
-    (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, cleanCounts (accCounts,graph))
+    isExpNodeCount ExpNodeCount{} = True
+    isExpNodeCount _              = False
 
 
 determineScopesSharingExp
@@ -2760,12 +2767,18 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure (bformat ("LAMBDA " % list formatStableSharingExp) ssa) (bformat (list formatNodeCount) counts) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f
+      | not (null env)
+      = internalError "unexpected unbound variables"
+      --
+      | otherwise
+      = tracePure (bformat ("LAMBDA " % list formatStableSharingExp) ssa) (bformat (list formatNodeCount) counts)
+      $ (const (ScopedExp ssa body'), (counts',graph))
       where
-        body@(UnscopedExp fvs _)              = f undefined
-        (ScopedExp [] body', (counts, graph)) = scopesExp body
-        (freeCounts, counts')                 = partition isBoundHere counts
-        ssa                                   = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
+        body@(UnscopedExp fvs _)               = f undefined
+        (ScopedExp env body', (counts, graph)) = scopesExp body
+        (freeCounts, counts')                  = partition isBoundHere counts
+        ssa                                    = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
 
         isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag _ i))) _) = i `elem` fvs
         isBoundHere _                                                              = False
