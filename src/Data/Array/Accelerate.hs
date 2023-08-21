@@ -323,6 +323,7 @@ module Data.Array.Accelerate (
 
   -- *** Numeric type classes
   Num, (+), (-), (*), negate, abs, signum, fromInteger,
+  VNum(..),
   Integral, quot, rem, div, mod, quotRem, divMod,
   Rational(..),
   Fractional, (/), recip, fromRational,
@@ -452,6 +453,7 @@ import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
 import Data.Array.Accelerate.Classes.VEq
+import Data.Array.Accelerate.Classes.VNum
 import Data.Array.Accelerate.Classes.VOrd
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe

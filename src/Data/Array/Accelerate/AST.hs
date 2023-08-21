@@ -676,6 +676,8 @@ data PrimFun sig where
   PrimNeg  :: NumType a -> PrimFun (a      -> a)
   PrimAbs  :: NumType a -> PrimFun (a      -> a)
   PrimSig  :: NumType a -> PrimFun (a      -> a)
+  PrimVAdd :: NumType (Vec n a) -> PrimFun (Vec n a -> a)
+  PrimVMul :: NumType (Vec n a) -> PrimFun (Vec n a -> a)
 
   -- operators from Integral
   PrimQuot     :: IntegralType a -> PrimFun ((a, a)   -> a)
@@ -697,6 +699,11 @@ data PrimFun sig where
   PrimPopCount           :: IntegralType a -> PrimFun (a -> a)
   PrimCountLeadingZeros  :: IntegralType a -> PrimFun (a -> a)
   PrimCountTrailingZeros :: IntegralType a -> PrimFun (a -> a)
+  PrimBReverse           :: IntegralType a -> PrimFun (a -> a)
+  PrimBSwap              :: IntegralType a -> PrimFun (a -> a)  -- prerequisite: BitSize a % 16 == 0
+  PrimVBAnd              :: IntegralType (Vec n a) -> PrimFun (Vec n a -> a)
+  PrimVBOr               :: IntegralType (Vec n a) -> PrimFun (Vec n a -> a)
+  PrimVBXor              :: IntegralType (Vec n a) -> PrimFun (Vec n a -> a)
 
   -- operators from Fractional and Floating
   PrimFDiv        :: FloatingType a -> PrimFun ((a, a) -> a)
@@ -732,14 +739,16 @@ data PrimFun sig where
   PrimIsInfinite :: FloatingType a -> PrimFun (a -> BitOrMask a)
 
   -- relational and equality operators
-  PrimLt   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimGt   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimLtEq :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimGtEq :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimEq   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimNEq  :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
-  PrimMax  :: ScalarType a -> PrimFun ((a, a) -> a)
-  PrimMin  :: ScalarType a -> PrimFun ((a, a) -> a)
+  PrimLt    :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimGt    :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimLtEq  :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimGtEq  :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimEq    :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimNEq   :: ScalarType a -> PrimFun ((a, a) -> BitOrMask a)
+  PrimMin   :: ScalarType a -> PrimFun ((a, a) -> a)
+  PrimMax   :: ScalarType a -> PrimFun ((a, a) -> a)
+  PrimVMin  :: ScalarType (Vec n a) -> PrimFun (Vec n a -> a)
+  PrimVMax  :: ScalarType (Vec n a) -> PrimFun (Vec n a -> a)
 
   -- logical operators
   --
@@ -751,9 +760,11 @@ data PrimFun sig where
   -- short-circuiting, while (&&!) and (||!) are strict versions of these
   -- operators, which are defined using PrimLAnd and PrimLOr.
   --
-  PrimLAnd :: BitType a -> PrimFun ((a, a) -> a)
-  PrimLOr  :: BitType a -> PrimFun ((a, a) -> a)
-  PrimLNot :: BitType a -> PrimFun (a      -> a)
+  PrimLAnd  :: BitType a -> PrimFun ((a, a) -> a)
+  PrimLOr   :: BitType a -> PrimFun ((a, a) -> a)
+  PrimLNot  :: BitType a -> PrimFun (a      -> a)
+  PrimVLAnd :: BitType (Vec n a) -> PrimFun (Vec n a -> a)
+  PrimVLOr  :: BitType (Vec n a) -> PrimFun (Vec n a -> a)
 
   -- general conversion between types
   PrimFromIntegral :: IntegralType a -> NumType b -> PrimFun (a -> b)
@@ -874,27 +885,34 @@ primFunType = \case
   PrimNeg t                 -> unary'  $ num t
   PrimAbs t                 -> unary'  $ num t
   PrimSig t                 -> unary'  $ num t
+  PrimVAdd t                -> unary (num t) (scalar_num t)
+  PrimVMul t                -> unary (num t) (scalar_num t)
 
   -- Integral
   PrimQuot t                -> binary' $ integral t
   PrimRem  t                -> binary' $ integral t
-  PrimQuotRem t             -> unary' $ integral t `TupRpair` integral t
+  PrimQuotRem t             -> unary'  $ integral t `TupRpair` integral t
   PrimIDiv t                -> binary' $ integral t
   PrimMod  t                -> binary' $ integral t
-  PrimDivMod t              -> unary' $ integral t `TupRpair` integral t
+  PrimDivMod t              -> unary'  $ integral t `TupRpair` integral t
 
   -- Bits & FiniteBits
   PrimBAnd t                -> binary' $ integral t
   PrimBOr t                 -> binary' $ integral t
   PrimBXor t                -> binary' $ integral t
-  PrimBNot t                -> unary' $ integral t
-  PrimBShiftL t             -> (integral t `TupRpair` integral t, integral t)
-  PrimBShiftR t             -> (integral t `TupRpair` integral t, integral t)
-  PrimBRotateL t            -> (integral t `TupRpair` integral t, integral t)
-  PrimBRotateR t            -> (integral t `TupRpair` integral t, integral t)
-  PrimPopCount t            -> unary (integral t) (integral t)
-  PrimCountLeadingZeros t   -> unary (integral t) (integral t)
-  PrimCountTrailingZeros t  -> unary (integral t) (integral t)
+  PrimBNot t                -> unary'  $ integral t
+  PrimBShiftL t             -> binary' $ integral t
+  PrimBShiftR t             -> binary' $ integral t
+  PrimBRotateL t            -> binary' $ integral t
+  PrimBRotateR t            -> binary' $ integral t
+  PrimPopCount t            -> unary'  $ integral t
+  PrimCountLeadingZeros t   -> unary'  $ integral t
+  PrimCountTrailingZeros t  -> unary'  $ integral t
+  PrimBSwap t               -> unary'  $ integral t
+  PrimBReverse t            -> unary'  $ integral t
+  PrimVBAnd t               -> unary (integral t) (scalar_integral t)
+  PrimVBOr t                -> unary (integral t) (scalar_integral t)
+  PrimVBXor t               -> unary (integral t) (scalar_integral t)
 
   -- Fractional, Floating
   PrimFDiv t                -> binary' $ floating t
@@ -925,8 +943,8 @@ primFunType = \case
 
   -- RealFloat
   PrimAtan2 t               -> binary' $ floating t
-  PrimIsNaN t               -> unary (floating t) (floating_mask t)
-  PrimIsInfinite t          -> unary (floating t) (floating_mask t)
+  PrimIsNaN t               -> unary (floating t) (mask_floating t)
+  PrimIsInfinite t          -> unary (floating t) (mask_floating t)
 
   -- Relational and equality
   PrimLt t                  -> compare' t
@@ -935,13 +953,17 @@ primFunType = \case
   PrimGtEq t                -> compare' t
   PrimEq t                  -> compare' t
   PrimNEq t                 -> compare' t
-  PrimMax t                 -> binary' $ single t
   PrimMin t                 -> binary' $ single t
+  PrimMax t                 -> binary' $ single t
+  PrimVMin t                -> unary (single t) (scalar_scalar t)
+  PrimVMax t                -> unary (single t) (scalar_scalar t)
 
   -- Logical
   PrimLAnd t                -> binary' (bit t)
   PrimLOr t                 -> binary' (bit t)
   PrimLNot t                -> unary' (bit t)
+  PrimVLAnd t               -> unary (bit t) (scalar_bit t)
+  PrimVLOr t                -> unary (bit t) (scalar_bit t)
 
   -- general conversion between types
   PrimFromIntegral a b      -> unary (integral a) (num b)
@@ -954,7 +976,7 @@ primFunType = \case
     unary' a   = unary a a
     binary a b = (a `TupRpair` a, b)
     binary' a  = binary a a
-    compare' a = binary (single a) (scalar_mask a)
+    compare' a = binary (single a) (mask_scalar a)
 
     single     = TupRsingle
     num        = single . NumScalarType
@@ -962,21 +984,21 @@ primFunType = \case
     integral   = num . IntegralNumType
     floating   = num . FloatingNumType
 
-    scalar_mask :: ScalarType t -> TypeR (BitOrMask t)
-    scalar_mask (NumScalarType t) = num_mask t
-    scalar_mask (BitScalarType t) = bit_mask t
+    mask_scalar :: ScalarType t -> TypeR (BitOrMask t)
+    mask_scalar (NumScalarType t) = mask_num t
+    mask_scalar (BitScalarType t) = mask_bit t
 
-    bit_mask :: BitType t -> TypeR (BitOrMask t)
-    bit_mask TypeBit      = bit TypeBit
-    bit_mask (TypeMask n) = bit (TypeMask n)
+    mask_bit :: BitType t -> TypeR (BitOrMask t)
+    mask_bit TypeBit      = bit TypeBit
+    mask_bit (TypeMask n) = bit (TypeMask n)
 
-    num_mask :: NumType t -> TypeR (BitOrMask t)
-    num_mask (IntegralNumType t) = integral_mask t
-    num_mask (FloatingNumType t) = floating_mask t
+    mask_num :: NumType t -> TypeR (BitOrMask t)
+    mask_num (IntegralNumType t) = mask_integral t
+    mask_num (FloatingNumType t) = mask_floating t
 
-    integral_mask :: IntegralType t -> TypeR (BitOrMask t)
-    integral_mask (VectorIntegralType n _) = single (BitScalarType (TypeMask n))
-    integral_mask (SingleIntegralType   t) = case t of
+    mask_integral :: IntegralType t -> TypeR (BitOrMask t)
+    mask_integral (VectorIntegralType n _) = single (BitScalarType (TypeMask n))
+    mask_integral (SingleIntegralType   t) = case t of
       TypeInt8    -> single (scalarType @Bit)
       TypeInt16   -> single (scalarType @Bit)
       TypeInt32   -> single (scalarType @Bit)
@@ -988,13 +1010,34 @@ primFunType = \case
       TypeWord64  -> single (scalarType @Bit)
       TypeWord128 -> single (scalarType @Bit)
 
-    floating_mask :: FloatingType t -> TypeR (BitOrMask t)
-    floating_mask (VectorFloatingType n _) = single (BitScalarType (TypeMask n))
-    floating_mask (SingleFloatingType   t) = case t of
+    mask_floating :: FloatingType t -> TypeR (BitOrMask t)
+    mask_floating (VectorFloatingType n _) = single (BitScalarType (TypeMask n))
+    mask_floating (SingleFloatingType   t) = case t of
       TypeFloat16  -> single (scalarType @Bit)
       TypeFloat32  -> single (scalarType @Bit)
       TypeFloat64  -> single (scalarType @Bit)
       TypeFloat128 -> single (scalarType @Bit)
+
+    scalar_scalar :: ScalarType (Vec n a) -> TypeR a
+    scalar_scalar (NumScalarType t) = scalar_num t
+    scalar_scalar (BitScalarType t) = scalar_bit t
+
+    scalar_bit :: BitType (Vec n a) -> TypeR a
+    scalar_bit TypeMask{} = bit TypeBit
+
+    scalar_num :: NumType (Vec n a) -> TypeR a
+    scalar_num (IntegralNumType t) = scalar_integral t
+    scalar_num (FloatingNumType t) = scalar_floating t
+
+    scalar_integral :: IntegralType (Vec n a) -> TypeR a
+    scalar_integral = \case
+      SingleIntegralType t   -> case t of
+      VectorIntegralType _ t -> integral (SingleIntegralType t)
+
+    scalar_floating :: FloatingType (Vec n a) -> TypeR a
+    scalar_floating = \case
+      SingleFloatingType t   -> case t of
+      VectorFloatingType _ t -> floating (SingleFloatingType t)
 
 
 -- Normal form data
@@ -1154,70 +1197,82 @@ rnfConst (TupRsingle t)    !_    = rnfScalarType t  -- scalars should have (nf =
 rnfConst (TupRpair ta tb)  (a,b) = rnfConst ta a `seq` rnfConst tb b
 
 rnfPrimFun :: PrimFun f -> ()
-rnfPrimFun (PrimAdd t)                = rnfNumType t
-rnfPrimFun (PrimSub t)                = rnfNumType t
-rnfPrimFun (PrimMul t)                = rnfNumType t
-rnfPrimFun (PrimNeg t)                = rnfNumType t
-rnfPrimFun (PrimAbs t)                = rnfNumType t
-rnfPrimFun (PrimSig t)                = rnfNumType t
-rnfPrimFun (PrimQuot t)               = rnfIntegralType t
-rnfPrimFun (PrimRem t)                = rnfIntegralType t
-rnfPrimFun (PrimQuotRem t)            = rnfIntegralType t
-rnfPrimFun (PrimIDiv t)               = rnfIntegralType t
-rnfPrimFun (PrimMod t)                = rnfIntegralType t
-rnfPrimFun (PrimDivMod t)             = rnfIntegralType t
-rnfPrimFun (PrimBAnd t)               = rnfIntegralType t
-rnfPrimFun (PrimBOr t)                = rnfIntegralType t
-rnfPrimFun (PrimBXor t)               = rnfIntegralType t
-rnfPrimFun (PrimBNot t)               = rnfIntegralType t
-rnfPrimFun (PrimBShiftL t)            = rnfIntegralType t
-rnfPrimFun (PrimBShiftR t)            = rnfIntegralType t
-rnfPrimFun (PrimBRotateL t)           = rnfIntegralType t
-rnfPrimFun (PrimBRotateR t)           = rnfIntegralType t
-rnfPrimFun (PrimPopCount t)           = rnfIntegralType t
-rnfPrimFun (PrimCountLeadingZeros t)  = rnfIntegralType t
-rnfPrimFun (PrimCountTrailingZeros t) = rnfIntegralType t
-rnfPrimFun (PrimFDiv t)               = rnfFloatingType t
-rnfPrimFun (PrimRecip t)              = rnfFloatingType t
-rnfPrimFun (PrimSin t)                = rnfFloatingType t
-rnfPrimFun (PrimCos t)                = rnfFloatingType t
-rnfPrimFun (PrimTan t)                = rnfFloatingType t
-rnfPrimFun (PrimAsin t)               = rnfFloatingType t
-rnfPrimFun (PrimAcos t)               = rnfFloatingType t
-rnfPrimFun (PrimAtan t)               = rnfFloatingType t
-rnfPrimFun (PrimSinh t)               = rnfFloatingType t
-rnfPrimFun (PrimCosh t)               = rnfFloatingType t
-rnfPrimFun (PrimTanh t)               = rnfFloatingType t
-rnfPrimFun (PrimAsinh t)              = rnfFloatingType t
-rnfPrimFun (PrimAcosh t)              = rnfFloatingType t
-rnfPrimFun (PrimAtanh t)              = rnfFloatingType t
-rnfPrimFun (PrimExpFloating t)        = rnfFloatingType t
-rnfPrimFun (PrimSqrt t)               = rnfFloatingType t
-rnfPrimFun (PrimLog t)                = rnfFloatingType t
-rnfPrimFun (PrimFPow t)               = rnfFloatingType t
-rnfPrimFun (PrimLogBase t)            = rnfFloatingType t
-rnfPrimFun (PrimTruncate f i)         = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimRound f i)            = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimFloor f i)            = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimCeiling f i)          = rnfFloatingType f `seq` rnfIntegralType i
-rnfPrimFun (PrimIsNaN t)              = rnfFloatingType t
-rnfPrimFun (PrimIsInfinite t)         = rnfFloatingType t
-rnfPrimFun (PrimAtan2 t)              = rnfFloatingType t
-rnfPrimFun (PrimLt t)                 = rnfScalarType t
-rnfPrimFun (PrimGt t)                 = rnfScalarType t
-rnfPrimFun (PrimLtEq t)               = rnfScalarType t
-rnfPrimFun (PrimGtEq t)               = rnfScalarType t
-rnfPrimFun (PrimEq t)                 = rnfScalarType t
-rnfPrimFun (PrimNEq t)                = rnfScalarType t
-rnfPrimFun (PrimMax t)                = rnfScalarType t
-rnfPrimFun (PrimMin t)                = rnfScalarType t
-rnfPrimFun (PrimLAnd t)               = rnfBitType t
-rnfPrimFun (PrimLOr t)                = rnfBitType t
-rnfPrimFun (PrimLNot t)               = rnfBitType t
-rnfPrimFun (PrimFromIntegral i n)     = rnfIntegralType i `seq` rnfNumType n
-rnfPrimFun (PrimToFloating n f)       = rnfNumType n `seq` rnfFloatingType f
-rnfPrimFun (PrimToBool i b)           = rnfIntegralType i `seq` rnfBitType b
-rnfPrimFun (PrimFromBool b i)         = rnfBitType b `seq` rnfIntegralType i
+rnfPrimFun = \case
+  PrimAdd t                -> rnfNumType t
+  PrimSub t                -> rnfNumType t
+  PrimMul t                -> rnfNumType t
+  PrimNeg t                -> rnfNumType t
+  PrimAbs t                -> rnfNumType t
+  PrimSig t                -> rnfNumType t
+  PrimVAdd t               -> rnfNumType t
+  PrimVMul t               -> rnfNumType t
+  PrimQuot t               -> rnfIntegralType t
+  PrimRem t                -> rnfIntegralType t
+  PrimQuotRem t            -> rnfIntegralType t
+  PrimIDiv t               -> rnfIntegralType t
+  PrimMod t                -> rnfIntegralType t
+  PrimDivMod t             -> rnfIntegralType t
+  PrimBAnd t               -> rnfIntegralType t
+  PrimBOr t                -> rnfIntegralType t
+  PrimBXor t               -> rnfIntegralType t
+  PrimBNot t               -> rnfIntegralType t
+  PrimBShiftL t            -> rnfIntegralType t
+  PrimBShiftR t            -> rnfIntegralType t
+  PrimBRotateL t           -> rnfIntegralType t
+  PrimBRotateR t           -> rnfIntegralType t
+  PrimPopCount t           -> rnfIntegralType t
+  PrimCountLeadingZeros t  -> rnfIntegralType t
+  PrimCountTrailingZeros t -> rnfIntegralType t
+  PrimBReverse t           -> rnfIntegralType t
+  PrimBSwap t              -> rnfIntegralType t
+  PrimVBAnd t              -> rnfIntegralType t
+  PrimVBOr t               -> rnfIntegralType t
+  PrimVBXor t              -> rnfIntegralType t
+  PrimFDiv t               -> rnfFloatingType t
+  PrimRecip t              -> rnfFloatingType t
+  PrimSin t                -> rnfFloatingType t
+  PrimCos t                -> rnfFloatingType t
+  PrimTan t                -> rnfFloatingType t
+  PrimAsin t               -> rnfFloatingType t
+  PrimAcos t               -> rnfFloatingType t
+  PrimAtan t               -> rnfFloatingType t
+  PrimSinh t               -> rnfFloatingType t
+  PrimCosh t               -> rnfFloatingType t
+  PrimTanh t               -> rnfFloatingType t
+  PrimAsinh t              -> rnfFloatingType t
+  PrimAcosh t              -> rnfFloatingType t
+  PrimAtanh t              -> rnfFloatingType t
+  PrimExpFloating t        -> rnfFloatingType t
+  PrimSqrt t               -> rnfFloatingType t
+  PrimLog t                -> rnfFloatingType t
+  PrimFPow t               -> rnfFloatingType t
+  PrimLogBase t            -> rnfFloatingType t
+  PrimTruncate f i         -> rnfFloatingType f `seq` rnfIntegralType i
+  PrimRound f i            -> rnfFloatingType f `seq` rnfIntegralType i
+  PrimFloor f i            -> rnfFloatingType f `seq` rnfIntegralType i
+  PrimCeiling f i          -> rnfFloatingType f `seq` rnfIntegralType i
+  PrimAtan2 t              -> rnfFloatingType t
+  PrimIsNaN t              -> rnfFloatingType t
+  PrimIsInfinite t         -> rnfFloatingType t
+  PrimLt t                 -> rnfScalarType t
+  PrimGt t                 -> rnfScalarType t
+  PrimLtEq t               -> rnfScalarType t
+  PrimGtEq t               -> rnfScalarType t
+  PrimEq t                 -> rnfScalarType t
+  PrimNEq t                -> rnfScalarType t
+  PrimMin t                -> rnfScalarType t
+  PrimMax t                -> rnfScalarType t
+  PrimVMin t               -> rnfScalarType t
+  PrimVMax t               -> rnfScalarType t
+  PrimLAnd t               -> rnfBitType t
+  PrimLOr t                -> rnfBitType t
+  PrimLNot t               -> rnfBitType t
+  PrimVLAnd t              -> rnfBitType t
+  PrimVLOr t               -> rnfBitType t
+  PrimFromIntegral i n     -> rnfIntegralType i `seq` rnfNumType n
+  PrimToFloating n f       -> rnfNumType n `seq` rnfFloatingType f
+  PrimToBool i b           -> rnfIntegralType i `seq` rnfBitType b
+  PrimFromBool b i         -> rnfBitType b `seq` rnfIntegralType i
 
 
 -- Template Haskell
@@ -1371,77 +1426,90 @@ liftBoundary
        ArrayR (Array sh e)
     -> Boundary aenv (Array sh e)
     -> CodeQ (Boundary aenv (Array sh e))
-liftBoundary _             Clamp        = [|| Clamp ||]
-liftBoundary _             Mirror       = [|| Mirror ||]
-liftBoundary _             Wrap         = [|| Wrap ||]
-liftBoundary (ArrayR _ tp) (Constant v) = [|| Constant $$(liftElt tp v) ||]
-liftBoundary _             (Function f) = [|| Function $$(liftOpenFun f) ||]
+liftBoundary (ArrayR _ tR) = \case
+  Clamp      -> [|| Clamp ||]
+  Mirror     -> [|| Mirror ||]
+  Wrap       -> [|| Wrap ||]
+  Constant v -> [|| Constant $$(liftElt tR v) ||]
+  Function f -> [|| Function $$(liftOpenFun f) ||]
 
 liftPrimFun :: PrimFun f -> CodeQ (PrimFun f)
-liftPrimFun (PrimAdd t)                = [|| PrimAdd $$(liftNumType t) ||]
-liftPrimFun (PrimSub t)                = [|| PrimSub $$(liftNumType t) ||]
-liftPrimFun (PrimMul t)                = [|| PrimMul $$(liftNumType t) ||]
-liftPrimFun (PrimNeg t)                = [|| PrimNeg $$(liftNumType t) ||]
-liftPrimFun (PrimAbs t)                = [|| PrimAbs $$(liftNumType t) ||]
-liftPrimFun (PrimSig t)                = [|| PrimSig $$(liftNumType t) ||]
-liftPrimFun (PrimQuot t)               = [|| PrimQuot $$(liftIntegralType t) ||]
-liftPrimFun (PrimRem t)                = [|| PrimRem $$(liftIntegralType t) ||]
-liftPrimFun (PrimQuotRem t)            = [|| PrimQuotRem $$(liftIntegralType t) ||]
-liftPrimFun (PrimIDiv t)               = [|| PrimIDiv $$(liftIntegralType t) ||]
-liftPrimFun (PrimMod t)                = [|| PrimMod $$(liftIntegralType t) ||]
-liftPrimFun (PrimDivMod t)             = [|| PrimDivMod $$(liftIntegralType t) ||]
-liftPrimFun (PrimBAnd t)               = [|| PrimBAnd $$(liftIntegralType t) ||]
-liftPrimFun (PrimBOr t)                = [|| PrimBOr $$(liftIntegralType t) ||]
-liftPrimFun (PrimBXor t)               = [|| PrimBXor $$(liftIntegralType t) ||]
-liftPrimFun (PrimBNot t)               = [|| PrimBNot $$(liftIntegralType t) ||]
-liftPrimFun (PrimBShiftL t)            = [|| PrimBShiftL $$(liftIntegralType t) ||]
-liftPrimFun (PrimBShiftR t)            = [|| PrimBShiftR $$(liftIntegralType t) ||]
-liftPrimFun (PrimBRotateL t)           = [|| PrimBRotateL $$(liftIntegralType t) ||]
-liftPrimFun (PrimBRotateR t)           = [|| PrimBRotateR $$(liftIntegralType t) ||]
-liftPrimFun (PrimPopCount t)           = [|| PrimPopCount $$(liftIntegralType t) ||]
-liftPrimFun (PrimCountLeadingZeros t)  = [|| PrimCountLeadingZeros $$(liftIntegralType t) ||]
-liftPrimFun (PrimCountTrailingZeros t) = [|| PrimCountTrailingZeros $$(liftIntegralType t) ||]
-liftPrimFun (PrimFDiv t)               = [|| PrimFDiv $$(liftFloatingType t) ||]
-liftPrimFun (PrimRecip t)              = [|| PrimRecip $$(liftFloatingType t) ||]
-liftPrimFun (PrimSin t)                = [|| PrimSin $$(liftFloatingType t) ||]
-liftPrimFun (PrimCos t)                = [|| PrimCos $$(liftFloatingType t) ||]
-liftPrimFun (PrimTan t)                = [|| PrimTan $$(liftFloatingType t) ||]
-liftPrimFun (PrimAsin t)               = [|| PrimAsin $$(liftFloatingType t) ||]
-liftPrimFun (PrimAcos t)               = [|| PrimAcos $$(liftFloatingType t) ||]
-liftPrimFun (PrimAtan t)               = [|| PrimAtan $$(liftFloatingType t) ||]
-liftPrimFun (PrimSinh t)               = [|| PrimSinh $$(liftFloatingType t) ||]
-liftPrimFun (PrimCosh t)               = [|| PrimCosh $$(liftFloatingType t) ||]
-liftPrimFun (PrimTanh t)               = [|| PrimTanh $$(liftFloatingType t) ||]
-liftPrimFun (PrimAsinh t)              = [|| PrimAsinh $$(liftFloatingType t) ||]
-liftPrimFun (PrimAcosh t)              = [|| PrimAcosh $$(liftFloatingType t) ||]
-liftPrimFun (PrimAtanh t)              = [|| PrimAtanh $$(liftFloatingType t) ||]
-liftPrimFun (PrimExpFloating t)        = [|| PrimExpFloating $$(liftFloatingType t) ||]
-liftPrimFun (PrimSqrt t)               = [|| PrimSqrt $$(liftFloatingType t) ||]
-liftPrimFun (PrimLog t)                = [|| PrimLog $$(liftFloatingType t) ||]
-liftPrimFun (PrimFPow t)               = [|| PrimFPow $$(liftFloatingType t) ||]
-liftPrimFun (PrimLogBase t)            = [|| PrimLogBase $$(liftFloatingType t) ||]
-liftPrimFun (PrimTruncate ta tb)       = [|| PrimTruncate $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
-liftPrimFun (PrimRound ta tb)          = [|| PrimRound $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
-liftPrimFun (PrimFloor ta tb)          = [|| PrimFloor $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
-liftPrimFun (PrimCeiling ta tb)        = [|| PrimCeiling $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
-liftPrimFun (PrimIsNaN t)              = [|| PrimIsNaN $$(liftFloatingType t) ||]
-liftPrimFun (PrimIsInfinite t)         = [|| PrimIsInfinite $$(liftFloatingType t) ||]
-liftPrimFun (PrimAtan2 t)              = [|| PrimAtan2 $$(liftFloatingType t) ||]
-liftPrimFun (PrimLt t)                 = [|| PrimLt $$(liftScalarType t) ||]
-liftPrimFun (PrimGt t)                 = [|| PrimGt $$(liftScalarType t) ||]
-liftPrimFun (PrimLtEq t)               = [|| PrimLtEq $$(liftScalarType t) ||]
-liftPrimFun (PrimGtEq t)               = [|| PrimGtEq $$(liftScalarType t) ||]
-liftPrimFun (PrimEq t)                 = [|| PrimEq $$(liftScalarType t) ||]
-liftPrimFun (PrimNEq t)                = [|| PrimNEq $$(liftScalarType t) ||]
-liftPrimFun (PrimMax t)                = [|| PrimMax $$(liftScalarType t) ||]
-liftPrimFun (PrimMin t)                = [|| PrimMin $$(liftScalarType t) ||]
-liftPrimFun (PrimLAnd t)               = [|| PrimLAnd $$(liftBitType t) ||]
-liftPrimFun (PrimLOr t)                = [|| PrimLOr $$(liftBitType t) ||]
-liftPrimFun (PrimLNot t)               = [|| PrimLNot $$(liftBitType t) ||]
-liftPrimFun (PrimFromIntegral ta tb)   = [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
-liftPrimFun (PrimToFloating ta tb)     = [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
-liftPrimFun (PrimToBool ta tb)         = [|| PrimToBool $$(liftIntegralType ta) $$(liftBitType tb) ||]
-liftPrimFun (PrimFromBool ta tb)       = [|| PrimFromBool $$(liftBitType ta) $$(liftIntegralType tb) ||]
+liftPrimFun = \case
+  PrimAdd t                -> [|| PrimAdd $$(liftNumType t) ||]
+  PrimSub t                -> [|| PrimSub $$(liftNumType t) ||]
+  PrimMul t                -> [|| PrimMul $$(liftNumType t) ||]
+  PrimNeg t                -> [|| PrimNeg $$(liftNumType t) ||]
+  PrimAbs t                -> [|| PrimAbs $$(liftNumType t) ||]
+  PrimSig t                -> [|| PrimSig $$(liftNumType t) ||]
+  PrimVAdd t               -> [|| PrimVAdd $$(liftNumType t) ||]
+  PrimVMul t               -> [|| PrimVMul $$(liftNumType t) ||]
+  PrimQuot t               -> [|| PrimQuot $$(liftIntegralType t) ||]
+  PrimRem t                -> [|| PrimRem $$(liftIntegralType t) ||]
+  PrimQuotRem t            -> [|| PrimQuotRem $$(liftIntegralType t) ||]
+  PrimIDiv t               -> [|| PrimIDiv $$(liftIntegralType t) ||]
+  PrimMod t                -> [|| PrimMod $$(liftIntegralType t) ||]
+  PrimDivMod t             -> [|| PrimDivMod $$(liftIntegralType t) ||]
+  PrimBAnd t               -> [|| PrimBAnd $$(liftIntegralType t) ||]
+  PrimBOr t                -> [|| PrimBOr $$(liftIntegralType t) ||]
+  PrimBXor t               -> [|| PrimBXor $$(liftIntegralType t) ||]
+  PrimBNot t               -> [|| PrimBNot $$(liftIntegralType t) ||]
+  PrimBShiftL t            -> [|| PrimBShiftL $$(liftIntegralType t) ||]
+  PrimBShiftR t            -> [|| PrimBShiftR $$(liftIntegralType t) ||]
+  PrimBRotateL t           -> [|| PrimBRotateL $$(liftIntegralType t) ||]
+  PrimBRotateR t           -> [|| PrimBRotateR $$(liftIntegralType t) ||]
+  PrimPopCount t           -> [|| PrimPopCount $$(liftIntegralType t) ||]
+  PrimCountLeadingZeros t  -> [|| PrimCountLeadingZeros $$(liftIntegralType t) ||]
+  PrimCountTrailingZeros t -> [|| PrimCountTrailingZeros $$(liftIntegralType t) ||]
+  PrimBReverse t           -> [|| PrimBReverse $$(liftIntegralType t) ||]
+  PrimBSwap t              -> [|| PrimBSwap $$(liftIntegralType t) ||]
+  PrimVBAnd t              -> [|| PrimVBAnd $$(liftIntegralType t) ||]
+  PrimVBOr t               -> [|| PrimVBOr $$(liftIntegralType t) ||]
+  PrimVBXor t              -> [|| PrimVBXor $$(liftIntegralType t) ||]
+  PrimFDiv t               -> [|| PrimFDiv $$(liftFloatingType t) ||]
+  PrimRecip t              -> [|| PrimRecip $$(liftFloatingType t) ||]
+  PrimSin t                -> [|| PrimSin $$(liftFloatingType t) ||]
+  PrimCos t                -> [|| PrimCos $$(liftFloatingType t) ||]
+  PrimTan t                -> [|| PrimTan $$(liftFloatingType t) ||]
+  PrimAsin t               -> [|| PrimAsin $$(liftFloatingType t) ||]
+  PrimAcos t               -> [|| PrimAcos $$(liftFloatingType t) ||]
+  PrimAtan t               -> [|| PrimAtan $$(liftFloatingType t) ||]
+  PrimSinh t               -> [|| PrimSinh $$(liftFloatingType t) ||]
+  PrimCosh t               -> [|| PrimCosh $$(liftFloatingType t) ||]
+  PrimTanh t               -> [|| PrimTanh $$(liftFloatingType t) ||]
+  PrimAsinh t              -> [|| PrimAsinh $$(liftFloatingType t) ||]
+  PrimAcosh t              -> [|| PrimAcosh $$(liftFloatingType t) ||]
+  PrimAtanh t              -> [|| PrimAtanh $$(liftFloatingType t) ||]
+  PrimExpFloating t        -> [|| PrimExpFloating $$(liftFloatingType t) ||]
+  PrimSqrt t               -> [|| PrimSqrt $$(liftFloatingType t) ||]
+  PrimLog t                -> [|| PrimLog $$(liftFloatingType t) ||]
+  PrimFPow t               -> [|| PrimFPow $$(liftFloatingType t) ||]
+  PrimLogBase t            -> [|| PrimLogBase $$(liftFloatingType t) ||]
+  PrimTruncate ta tb       -> [|| PrimTruncate $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+  PrimRound ta tb          -> [|| PrimRound $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+  PrimFloor ta tb          -> [|| PrimFloor $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+  PrimCeiling ta tb        -> [|| PrimCeiling $$(liftFloatingType ta) $$(liftIntegralType tb) ||]
+  PrimIsNaN t              -> [|| PrimIsNaN $$(liftFloatingType t) ||]
+  PrimIsInfinite t         -> [|| PrimIsInfinite $$(liftFloatingType t) ||]
+  PrimAtan2 t              -> [|| PrimAtan2 $$(liftFloatingType t) ||]
+  PrimLt t                 -> [|| PrimLt $$(liftScalarType t) ||]
+  PrimGt t                 -> [|| PrimGt $$(liftScalarType t) ||]
+  PrimLtEq t               -> [|| PrimLtEq $$(liftScalarType t) ||]
+  PrimGtEq t               -> [|| PrimGtEq $$(liftScalarType t) ||]
+  PrimEq t                 -> [|| PrimEq $$(liftScalarType t) ||]
+  PrimNEq t                -> [|| PrimNEq $$(liftScalarType t) ||]
+  PrimMin t                -> [|| PrimMin $$(liftScalarType t) ||]
+  PrimMax t                -> [|| PrimMax $$(liftScalarType t) ||]
+  PrimVMin t               -> [|| PrimVMin $$(liftScalarType t) ||]
+  PrimVMax t               -> [|| PrimVMax $$(liftScalarType t) ||]
+  PrimLAnd t               -> [|| PrimLAnd $$(liftBitType t) ||]
+  PrimLOr t                -> [|| PrimLOr $$(liftBitType t) ||]
+  PrimLNot t               -> [|| PrimLNot $$(liftBitType t) ||]
+  PrimVLAnd t              -> [|| PrimVLAnd $$(liftBitType t) ||]
+  PrimVLOr t               -> [|| PrimVLOr $$(liftBitType t) ||]
+  PrimFromIntegral ta tb   -> [|| PrimFromIntegral $$(liftIntegralType ta) $$(liftNumType tb) ||]
+  PrimToFloating ta tb     -> [|| PrimToFloating $$(liftNumType ta) $$(liftFloatingType tb) ||]
+  PrimToBool ta tb         -> [|| PrimToBool $$(liftIntegralType ta) $$(liftBitType tb) ||]
+  PrimFromBool ta tb       -> [|| PrimFromBool $$(liftBitType ta) $$(liftIntegralType tb) ||]
 
 
 formatDirection :: Format r (Direction -> r)

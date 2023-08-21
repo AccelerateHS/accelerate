@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -56,6 +57,8 @@ class VEq n a => VOrd n a where
   (>=*)    :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   vmin     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
   vmax     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
+  vminimum :: Exp (Vec n a) -> Exp a
+  vmaximum :: Exp (Vec n a) -> Exp a
   vcompare :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Ordering)
 
   x <*  y  = select (vcompare x y ==* vlt) vtrue vfalse
@@ -65,6 +68,11 @@ class VEq n a => VOrd n a where
 
   vmin x y = select (x <=* y) x y
   vmax x y = select (x <=* y) y x
+
+  default vminimum :: Ord a => Exp (Vec n a) -> Exp a
+  default vmaximum :: Ord a => Exp (Vec n a) -> Exp a
+  vminimum x = P.minimum (unpack x)
+  vmaximum x = P.maximum (unpack x)
 
   vcompare x y
     = select (x ==* y) veq
@@ -122,6 +130,8 @@ runQ $ do
               (>=*)    = mkPrimBinary $ PrimGtEq scalarType
               vmin     = mkPrimBinary $ PrimMin scalarType
               vmax     = mkPrimBinary $ PrimMax scalarType
+              vminimum = mkPrimUnary $ PrimVMin scalarType
+              vmaximum = mkPrimUnary $ PrimVMax scalarType
           |]
 
       mkTup :: Word8 -> Q Dec

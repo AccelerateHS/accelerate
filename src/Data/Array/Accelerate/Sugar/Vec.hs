@@ -63,7 +63,7 @@ type V4  = Vec 4
 type V8  = Vec 8
 type V16 = Vec 16
 
-instance (Show a, Elt a, SIMD n a) => Show (Vec n a) where
+instance (Show a, SIMD n a) => Show (Vec n a) where
   show = vec . toList
     where
       vec :: [a] -> String
@@ -128,15 +128,15 @@ instance (Eq a, SIMD n a) => Eq (Vec n a) where
         TypeFloat128 -> (==)
 
 
-instance (Elt a, SIMD n a) => GHC.IsList (Vec n a) where
+instance SIMD n a => GHC.IsList (Vec n a) where
   type Item (Vec n a) = a
   toList   = toList
   fromList = fromList
 
-toList :: forall n a. (Elt a, SIMD n a) => Vec n a -> [a]
+toList :: forall n a. SIMD n a => Vec n a -> [a]
 toList (Vec vs) = map toElt $ R.toList (vecR @n @a) (eltR @a) vs
 
-fromList :: forall n a. (Elt a, SIMD n a) => [a] -> Vec n a
+fromList :: forall n a. SIMD n a => [a] -> Vec n a
 fromList = Vec . R.fromList (vecR @n @a) (eltR @a) . map fromElt
 
 instance SIMD n a => Elt (Vec n a) where
@@ -151,7 +151,7 @@ instance SIMD n a => Elt (Vec n a) where
 --
 -- @since 1.4.0.0
 --
-class KnownNat n => SIMD n a where
+class (KnownNat n, Elt a) => SIMD n a where
   type VecR n a :: Type
   type VecR n a = GVecR () n (Rep a)
 

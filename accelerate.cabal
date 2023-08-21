@@ -473,6 +473,7 @@ library
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
         Data.Array.Accelerate.Classes.VEq
+        Data.Array.Accelerate.Classes.VNum
         Data.Array.Accelerate.Classes.VOrd
         Data.Array.Accelerate.Debug.Internal.Clock
         Data.Array.Accelerate.Debug.Internal.Flags

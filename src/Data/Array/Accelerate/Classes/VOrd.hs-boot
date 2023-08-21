@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.VOrd
@@ -15,9 +16,12 @@ module Data.Array.Accelerate.Classes.VOrd (
 
 ) where
 
+import Data.Array.Accelerate.Classes.VEq
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
-import Data.Array.Accelerate.Classes.VEq
+import {-# SOURCE #-} Data.Array.Accelerate.Classes.Ord
+
+import Prelude                                                      hiding ( Ord(..), Ordering(..), (<*) )
 
 
 class VEq n a => VOrd n a where
@@ -28,19 +32,22 @@ class VEq n a => VOrd n a where
   (>=*)    :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   vmin     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
   vmax     :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n a)
+  vminimum :: Exp (Vec n a) -> Exp a
+  vmaximum :: Exp (Vec n a) -> Exp a
   vcompare :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Ordering)
 
-  x <*  y  = select (vcompare x y ==* vlt) vtrue vfalse
-  x <=* y  = select (vcompare x y ==* vgt) vfalse vtrue
-  x >*  y  = select (vcompare x y ==* vgt) vtrue vfalse
-  x >=* y  = select (vcompare x y ==* vlt) vfalse vtrue
+  (<*)  = undefined
+  (<=*) = undefined
+  (>*)  = undefined
+  (>=*) = undefined
 
-  vmin x y = select (x <=* y) x y
-  vmax x y = select (x <=* y) y x
+  vmin = undefined
+  vmax = undefined
 
-  vcompare x y
-    = select (x ==* y) veq
-    $ select (x <=* y) vlt vgt
+  default vminimum :: Ord a => Exp (Vec n a) -> Exp a
+  default vmaximum :: Ord a => Exp (Vec n a) -> Exp a
+  vminimum = undefined
+  vmaximum = undefined
 
-vtrue, vfalse :: KnownNat n => Exp (Vec n Bool)
+  vcompare = undefined
 

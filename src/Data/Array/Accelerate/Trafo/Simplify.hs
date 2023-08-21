@@ -618,6 +618,8 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimNeg t                -> travNumType t
             PrimAbs t                -> travNumType t
             PrimSig t                -> travNumType t
+            PrimVAdd t               -> travNumType t
+            PrimVMul t               -> travNumType t
             PrimQuot t               -> travIntegralType t
             PrimRem t                -> travIntegralType t
             PrimQuotRem t            -> travIntegralType t
@@ -635,6 +637,11 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimPopCount t           -> travIntegralType t
             PrimCountLeadingZeros t  -> travIntegralType t
             PrimCountTrailingZeros t -> travIntegralType t
+            PrimBReverse t           -> travIntegralType t
+            PrimBSwap t              -> travIntegralType t
+            PrimVBAnd t              -> travIntegralType t
+            PrimVBOr t               -> travIntegralType t
+            PrimVBXor t              -> travIntegralType t
             PrimFDiv t               -> travFloatingType t
             PrimRecip t              -> travFloatingType t
             PrimSin t                -> travFloatingType t
@@ -667,11 +674,15 @@ summariseOpenExp = (terms +~ 1) . goE
             PrimGtEq t               -> travScalarType t
             PrimEq t                 -> travScalarType t
             PrimNEq t                -> travScalarType t
-            PrimMax t                -> travScalarType t
             PrimMin t                -> travScalarType t
-            PrimLAnd _               -> zero & types +~ 1
-            PrimLOr _                -> zero & types +~ 1
-            PrimLNot _               -> zero & types +~ 1
+            PrimMax t                -> travScalarType t
+            PrimVMin t               -> travScalarType t
+            PrimVMax t               -> travScalarType t
+            PrimLAnd t               -> travBitType t
+            PrimLOr t                -> travBitType t
+            PrimLNot t               -> travBitType t
+            PrimVLAnd t              -> travBitType t
+            PrimVLOr t               -> travBitType t
             PrimFromIntegral i n     -> travIntegralType i +++ travNumType n
             PrimToFloating n f       -> travNumType n +++ travFloatingType f
             PrimToBool i b           -> travIntegralType i +++ travBitType b

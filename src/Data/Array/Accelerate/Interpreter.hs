@@ -1246,70 +1246,82 @@ evalCoerceScalar VectorScalarType{} (SingleScalarType tb) a = scalar tb a
 -- -----------------
 
 evalPrim :: PrimFun (a -> r) -> (a -> r)
-evalPrim (PrimAdd t)                = A.add t
-evalPrim (PrimSub t)                = A.sub t
-evalPrim (PrimMul t)                = A.mul t
-evalPrim (PrimNeg t)                = A.negate t
-evalPrim (PrimAbs t)                = A.abs t
-evalPrim (PrimSig t)                = A.signum t
-evalPrim (PrimQuot t)               = A.quot t
-evalPrim (PrimRem t)                = A.rem t
-evalPrim (PrimQuotRem t)            = A.quotRem t
-evalPrim (PrimIDiv t)               = A.div t
-evalPrim (PrimMod t)                = A.mod t
-evalPrim (PrimDivMod t)             = A.divMod t
-evalPrim (PrimBAnd t)               = A.band t
-evalPrim (PrimBOr t)                = A.bor t
-evalPrim (PrimBXor t)               = A.xor t
-evalPrim (PrimBNot t)               = A.complement t
-evalPrim (PrimBShiftL t)            = A.shiftL t
-evalPrim (PrimBShiftR t)            = A.shiftR t
-evalPrim (PrimBRotateL t)           = A.rotateL t
-evalPrim (PrimBRotateR t)           = A.rotateR t
-evalPrim (PrimPopCount t)           = A.popCount t
-evalPrim (PrimCountLeadingZeros t)  = A.countLeadingZeros t
-evalPrim (PrimCountTrailingZeros t) = A.countTrailingZeros t
-evalPrim (PrimFDiv t)               = A.fdiv t
-evalPrim (PrimRecip t)              = A.recip t
-evalPrim (PrimSin t)                = A.sin t
-evalPrim (PrimCos t)                = A.cos t
-evalPrim (PrimTan t)                = A.tan t
-evalPrim (PrimAsin t)               = A.asin t
-evalPrim (PrimAcos t)               = A.acos t
-evalPrim (PrimAtan t)               = A.atan t
-evalPrim (PrimSinh t)               = A.sinh t
-evalPrim (PrimCosh t)               = A.cosh t
-evalPrim (PrimTanh t)               = A.tanh t
-evalPrim (PrimAsinh t)              = A.asinh t
-evalPrim (PrimAcosh t)              = A.acosh t
-evalPrim (PrimAtanh t)              = A.atanh t
-evalPrim (PrimExpFloating t)        = A.exp t
-evalPrim (PrimSqrt t)               = A.sqrt t
-evalPrim (PrimLog t)                = A.log t
-evalPrim (PrimFPow t)               = A.pow t
-evalPrim (PrimLogBase t)            = A.logBase t
-evalPrim (PrimTruncate ta tb)       = A.truncate ta tb
-evalPrim (PrimRound ta tb)          = A.round ta tb
-evalPrim (PrimFloor ta tb)          = A.floor ta tb
-evalPrim (PrimCeiling ta tb)        = A.ceiling ta tb
-evalPrim (PrimAtan2 t)              = A.atan2 t
-evalPrim (PrimIsNaN t)              = A.isNaN t
-evalPrim (PrimIsInfinite t)         = A.isInfinite t
-evalPrim (PrimLt t)                 = A.lt t
-evalPrim (PrimGt t)                 = A.gt t
-evalPrim (PrimLtEq t)               = A.lte t
-evalPrim (PrimGtEq t)               = A.gte t
-evalPrim (PrimEq t)                 = A.eq t
-evalPrim (PrimNEq t)                = A.neq t
-evalPrim (PrimMax t)                = A.max t
-evalPrim (PrimMin t)                = A.min t
-evalPrim (PrimLAnd t)               = A.land t
-evalPrim (PrimLOr t)                = A.lor t
-evalPrim (PrimLNot t)               = A.lnot t
-evalPrim (PrimFromIntegral ta tb)   = A.fromIntegral ta tb
-evalPrim (PrimToFloating ta tb)     = A.toFloating ta tb
-evalPrim (PrimToBool i b)           = A.toBool i b
-evalPrim (PrimFromBool b i)         = A.fromBool b i
+evalPrim = \case
+  PrimAdd t                -> A.add t
+  PrimSub t                -> A.sub t
+  PrimMul t                -> A.mul t
+  PrimNeg t                -> A.negate t
+  PrimAbs t                -> A.abs t
+  PrimSig t                -> A.signum t
+  PrimVAdd t               -> A.vadd t
+  PrimVMul t               -> A.vmul t
+  PrimQuot t               -> A.quot t
+  PrimRem t                -> A.rem t
+  PrimQuotRem t            -> A.quotRem t
+  PrimIDiv t               -> A.div t
+  PrimMod t                -> A.mod t
+  PrimDivMod t             -> A.divMod t
+  PrimBAnd t               -> A.band t
+  PrimBOr t                -> A.bor t
+  PrimBXor t               -> A.xor t
+  PrimBNot t               -> A.complement t
+  PrimBShiftL t            -> A.shiftL t
+  PrimBShiftR t            -> A.shiftR t
+  PrimBRotateL t           -> A.rotateL t
+  PrimBRotateR t           -> A.rotateR t
+  PrimPopCount t           -> A.popCount t
+  PrimCountLeadingZeros t  -> A.countLeadingZeros t
+  PrimCountTrailingZeros t -> A.countTrailingZeros t
+  PrimBReverse t           -> A.bitreverse t
+  PrimBSwap t              -> A.byteswap t
+  PrimVBAnd t              -> A.vband t
+  PrimVBOr t               -> A.vbor t
+  PrimVBXor t              -> A.vbxor t
+  PrimFDiv t               -> A.fdiv t
+  PrimRecip t              -> A.recip t
+  PrimSin t                -> A.sin t
+  PrimCos t                -> A.cos t
+  PrimTan t                -> A.tan t
+  PrimAsin t               -> A.asin t
+  PrimAcos t               -> A.acos t
+  PrimAtan t               -> A.atan t
+  PrimSinh t               -> A.sinh t
+  PrimCosh t               -> A.cosh t
+  PrimTanh t               -> A.tanh t
+  PrimAsinh t              -> A.asinh t
+  PrimAcosh t              -> A.acosh t
+  PrimAtanh t              -> A.atanh t
+  PrimExpFloating t        -> A.exp t
+  PrimSqrt t               -> A.sqrt t
+  PrimLog t                -> A.log t
+  PrimFPow t               -> A.pow t
+  PrimLogBase t            -> A.logBase t
+  PrimTruncate ta tb       -> A.truncate ta tb
+  PrimRound ta tb          -> A.round ta tb
+  PrimFloor ta tb          -> A.floor ta tb
+  PrimCeiling ta tb        -> A.ceiling ta tb
+  PrimAtan2 t              -> A.atan2 t
+  PrimIsNaN t              -> A.isNaN t
+  PrimIsInfinite t         -> A.isInfinite t
+  PrimLt t                 -> A.lt t
+  PrimGt t                 -> A.gt t
+  PrimLtEq t               -> A.lte t
+  PrimGtEq t               -> A.gte t
+  PrimEq t                 -> A.eq t
+  PrimNEq t                -> A.neq t
+  PrimMin t                -> A.min t
+  PrimMax t                -> A.max t
+  PrimVMin t               -> A.vmin t
+  PrimVMax t               -> A.vmax t
+  PrimLAnd t               -> A.land t
+  PrimLOr t                -> A.lor t
+  PrimLNot t               -> A.lnot t
+  PrimVLAnd t              -> A.vland t
+  PrimVLOr t               -> A.vlor t
+  PrimFromIntegral ta tb   -> A.fromIntegral ta tb
+  PrimToFloating ta tb     -> A.toFloating ta tb
+  PrimToBool i b           -> A.toBool i b
+  PrimFromBool b i         -> A.fromBool b i
 
 
 -- Vector primitives

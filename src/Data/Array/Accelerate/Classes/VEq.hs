@@ -24,6 +24,8 @@ module Data.Array.Accelerate.Classes.VEq (
   (&&*),
   (||*),
   vnot,
+  vand,
+  vor,
 
 ) where
 
@@ -69,6 +71,20 @@ infixr 2 ||*
 --
 vnot :: KnownNat n => Exp (Vec n Bool) -> Exp (Vec n Bool)
 vnot = mkPrimUnary $ PrimLNot bitType
+
+-- | Return 'True' if all lanes of the vector are 'True'
+--
+-- @since 1.4.0.0
+--
+vand :: KnownNat n => Exp (Vec n Bool) -> Exp Bool
+vand = mkPrimUnary $ PrimVLAnd bitType
+
+-- | Return 'True' if any lane of the vector is 'True'
+--
+-- @since 1.4.0.0
+--
+vor :: KnownNat n => Exp (Vec n Bool) -> Exp Bool
+vor = mkPrimUnary $ PrimVLOr bitType
 
 
 infix 4 ==*

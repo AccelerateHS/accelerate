@@ -30,7 +30,6 @@ module Data.Array.Accelerate.Data.Bits (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( BitOrMask )
 import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
@@ -163,6 +162,18 @@ class Bits a => FiniteBits a where
   --
   countTrailingZeros :: Exp a -> Exp a
 
+  -- | Reverse the order of bits
+  --
+  -- @since 1.4.0.0
+  --
+  bitreverse :: Exp a -> Exp a
+
+  -- | Reverse the order of bytes
+  --
+  -- @since 1.4.0.0
+  --
+  byteswap :: Exp a -> Exp a
+
 
 -- Instances for Bits
 -- ------------------
@@ -187,6 +198,8 @@ instance FiniteBits Bool where
   finiteBitSize _      = fromInteger (toInteger (B.finiteBitSize (undefined::Bool)))
   countLeadingZeros  x = x
   countTrailingZeros x = x
+  bitreverse x         = x
+  byteswap x           = x
 
 
 -- Default implementations
@@ -370,6 +383,13 @@ mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
 mkCountTrailingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
 mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
 
+mkBReverse :: IsIntegral (EltR t) => Exp t -> Exp t
+mkBReverse = mkPrimUnary $ PrimBReverse integralType
+
+mkBSwap :: IsIntegral (EltR t) => Exp t -> Exp t
+mkBSwap = mkPrimUnary $ PrimBSwap integralType
+
+
 runQ $
   let
       integralTypes :: [Name]
@@ -430,11 +450,15 @@ runQ $
               finiteBitSize _    = fromInteger (toInteger (B.finiteBitSize (undefined :: $(conT a))))
               countLeadingZeros  = mkCountLeadingZeros
               countTrailingZeros = mkCountTrailingZeros
+              bitreverse         = mkBReverse
+              byteswap           = mkBSwap
 
             instance KnownNat n => FiniteBits (Vec n $(conT a)) where
               finiteBitSize _    = fromInteger (natVal' (proxy# :: Proxy# n) * toInteger (B.finiteBitSize (undefined :: $(conT a))))
               countLeadingZeros  = mkCountLeadingZeros
               countTrailingZeros = mkCountTrailingZeros
+              bitreverse         = mkBReverse
+              byteswap           = mkBSwap
           |]
   in
   concat <$> mapM thBits integralTypes

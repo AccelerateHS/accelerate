@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE EmptyCase           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MagicHash           #-}
@@ -19,14 +20,14 @@
 
 module Data.Array.Accelerate.Interpreter.Arithmetic (
 
-  add, sub, mul, negate, abs, signum,
+  add, sub, mul, negate, abs, signum, vadd, vmul,
   quot, rem, quotRem, div, mod, divMod,
-  band, bor, xor, complement, shiftL, shiftR, rotateL, rotateR, popCount, countLeadingZeros, countTrailingZeros,
+  band, bor, xor, complement, shiftL, shiftR, rotateL, rotateR, popCount, countLeadingZeros, countTrailingZeros, bitreverse, byteswap, vband, vbor, vbxor,
   fdiv, recip, sin, cos, tan, asin, acos, atan, sinh, cosh, tanh, asinh, acosh, atanh, exp, sqrt, log, pow, logBase,
   truncate, round, floor, ceiling,
   atan2, isNaN, isInfinite,
-  lt, gt, lte, gte, eq, neq, min, max,
-  land, lor, lnot, lall, lany,
+  lt, gt, lte, gte, eq, neq, min, max, vmin, vmax,
+  land, lor, lnot, vland, vlor,
   fromIntegral, toFloating, toBool, fromBool,
 
 ) where
@@ -36,6 +37,8 @@ import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Type
 
 import Data.Primitive.Bit                                           ( BitMask(..) )
+import Data.Primitive.Vec                                           ( Vec )
+import qualified Data.Primitive.Bit                                 as Bit
 import qualified Data.Primitive.Vec                                 as Vec
 
 import Data.Primitive.Types
@@ -49,6 +52,8 @@ import Prelude                                                      ( ($), (.) )
 import qualified Data.Bits                                          as P
 import qualified Prelude                                            as P
 
+import GHC.Int
+import GHC.Word
 import GHC.Exts
 import GHC.TypeLits
 import GHC.TypeLits.Extra
@@ -74,6 +79,12 @@ abs = num1 P.abs
 
 signum :: NumType a -> (a -> a)
 signum = num1 P.signum
+
+vadd :: NumType (Vec n a) -> (Vec n a -> a)
+vadd = vnum2 (P.+)
+
+vmul :: NumType (Vec n a) -> (Vec n a -> a)
+vmul = vnum2 (P.*)
 
 num1 :: (forall t. P.Num t => t -> t) -> NumType a -> (a -> a)
 num1 f = \case
@@ -101,6 +112,20 @@ num2 f = \case
     floating (SingleFloatingType   t) | FloatingDict <- floatingDict t = P.uncurry f
     floating (VectorFloatingType _ t) | FloatingDict <- floatingDict t = P.uncurry (zipWith f)
 
+vnum2 :: (forall t. P.Num t => t -> t -> t) -> NumType (Vec n a) -> (Vec n a -> a)
+vnum2 f = \case
+  IntegralNumType t -> integral t
+  FloatingNumType t -> floating t
+  where
+    integral :: IntegralType (Vec n t) -> (Vec n t -> t)
+    integral = \case
+      SingleIntegralType   t                                  -> case t of
+      VectorIntegralType _ t | IntegralDict <- integralDict t -> P.foldl1 f . Vec.toList
+
+    floating :: FloatingType (Vec n t) -> (Vec n t -> t)
+    floating = \case
+      SingleFloatingType   t                                  -> case t of
+      VectorFloatingType _ t | FloatingDict <- floatingDict t -> P.foldl1 f . Vec.toList
 
 -- Operators from Integral
 -- -----------------------
@@ -168,6 +193,49 @@ countLeadingZeros = bits1 (P.fromIntegral . P.countLeadingZeros)
 countTrailingZeros :: IntegralType a -> (a -> a)
 countTrailingZeros = bits1 (P.fromIntegral . P.countTrailingZeros)
 
+bitreverse :: IntegralType a -> (a -> a)
+bitreverse = \case
+  VectorIntegralType _ t | IntegralDict <- integralDict t -> Vec.fromList . P.map (bitreverse (SingleIntegralType t)) . Vec.toList
+  SingleIntegralType   t                                  -> single t
+  where
+    single :: SingleIntegralType t -> t -> t
+    single TypeInt8    (I8#  i#)     = I8#  (word8ToInt8#   (wordToWord8#  (bitReverse8#  (word8ToWord#  (int8ToWord8# i#)))))
+    single TypeInt16   (I16# i#)     = I16# (word16ToInt16# (wordToWord16# (bitReverse16# (word16ToWord# (int16ToWord16# i#)))))
+    single TypeInt32   (I32# i#)     = I32# (word32ToInt32# (wordToWord32# (bitReverse32# (word32ToWord# (int32ToWord32# i#)))))
+    single TypeInt64   (I64# i#)     = I64# (word64ToInt64# (bitReverse64# (int64ToWord64# i#)))
+    single TypeInt128  (Int128 h l)  = Int128 (bitreverse integralType l) (bitreverse integralType h)
+    single TypeWord8   (W8#  w#)     = W8#  (wordToWord8#  (bitReverse8#  (word8ToWord#  w#)))
+    single TypeWord16  (W16# w#)     = W16# (wordToWord16# (bitReverse16# (word16ToWord# w#)))
+    single TypeWord32  (W32# w#)     = W32# (wordToWord32# (bitReverse32# (word32ToWord# w#)))
+    single TypeWord64  (W64# w#)     = W64# (bitReverse64# w#)
+    single TypeWord128 (Word128 h l) = Word128 (bitreverse integralType l) (bitreverse integralType h)
+
+byteswap :: IntegralType a -> (a -> a)
+byteswap = \case
+  VectorIntegralType _ t | IntegralDict <- integralDict t -> Vec.fromList . P.map (byteswap (SingleIntegralType t)) . Vec.toList
+  SingleIntegralType   t                                  -> single t
+  where
+    single :: SingleIntegralType t -> t -> t
+    single TypeInt8    x             = x
+    single TypeInt16   (I16# i#)     = I16# (word16ToInt16# (wordToWord16# (byteSwap16# (word16ToWord# (int16ToWord16# i#)))))
+    single TypeInt32   (I32# i#)     = I32# (word32ToInt32# (wordToWord32# (byteSwap32# (word32ToWord# (int32ToWord32# i#)))))
+    single TypeInt64   (I64# i#)     = I64# (word64ToInt64# (byteSwap64# (int64ToWord64# i#)))
+    single TypeInt128  (Int128 h l)  = Int128 (byteswap integralType l) (byteswap integralType h)
+    single TypeWord8   x             = x
+    single TypeWord16  (W16# w#)     = W16# (wordToWord16# (byteSwap16# (word16ToWord# w#)))
+    single TypeWord32  (W32# w#)     = W32# (wordToWord32# (byteSwap32# (word32ToWord# w#)))
+    single TypeWord64  (W64# w#)     = W64# (byteSwap64# w#)
+    single TypeWord128 (Word128 h l) = Word128 (byteswap integralType l) (byteswap integralType h)
+
+vband :: IntegralType (Vec n a) -> (Vec n a -> a)
+vband = vbits2 (.&.)
+
+vbor :: IntegralType (Vec n a) -> (Vec n a -> a)
+vbor = vbits2 (.|.)
+
+vbxor :: IntegralType (Vec n a) -> (Vec n a -> a)
+vbxor = vbits2 P.xor
+
 bits1 :: (forall t. (P.Integral t, P.FiniteBits t) => t -> t) -> IntegralType a -> (a -> a)
 bits1 f (SingleIntegralType   t) | IntegralDict <- integralDict t = f
 bits1 f (VectorIntegralType _ t) | IntegralDict <- integralDict t = map f
@@ -175,6 +243,10 @@ bits1 f (VectorIntegralType _ t) | IntegralDict <- integralDict t = map f
 bits2 :: (forall t. (P.Integral t, P.FiniteBits t) => t -> t -> t) -> IntegralType a -> ((a, a) -> a)
 bits2 f (SingleIntegralType   t) | IntegralDict <- integralDict t = P.uncurry f
 bits2 f (VectorIntegralType _ t) | IntegralDict <- integralDict t = P.uncurry (zipWith f)
+
+vbits2 :: (forall t. P.FiniteBits t => t -> t -> t) -> IntegralType (Vec n a) -> (Vec n a -> a)
+vbits2 _ (SingleIntegralType   t)                                  = case t of
+vbits2 f (VectorIntegralType _ t) | IntegralDict <- integralDict t = P.foldl1 f . Vec.toList
 
 
 -- Operators from Fractional and Floating
@@ -367,47 +439,61 @@ cmp f = \case
     floating (VectorFloatingType _ t) | FloatingDict <- floatingDict t = P.uncurry (unMask $$ zipWith (Bit $$ f))
 
 min :: ScalarType a -> ((a, a) -> a)
-min = \case
-  NumScalarType t -> num t
-  BitScalarType t -> bit t
-  where
-    bit :: BitType t -> ((t, t) -> t)
-    bit TypeBit    = P.uncurry P.min
-    bit TypeMask{} = \(x,y) -> unMask (zipWith P.min (BitMask x) (BitMask y))
-
-    num :: NumType t -> ((t, t) -> t)
-    num (IntegralNumType t) = integral t
-    num (FloatingNumType t) = floating t
-
-    integral :: IntegralType t -> ((t, t) -> t)
-    integral (SingleIntegralType   t) | IntegralDict <- integralDict t = P.uncurry P.min
-    integral (VectorIntegralType _ t) | IntegralDict <- integralDict t = P.uncurry (zipWith P.min)
-
-    floating :: FloatingType t -> ((t, t) -> t)
-    floating (SingleFloatingType   t) | FloatingDict <- floatingDict t = P.uncurry P.min
-    floating (VectorFloatingType _ t) | FloatingDict <- floatingDict t = P.uncurry (zipWith P.min)
+min = ord2 P.min
 
 max :: ScalarType a -> ((a, a) -> a)
-max = \case
+max = ord2 P.max
+
+vmin :: ScalarType (Vec n a) -> (Vec n a -> a)
+vmin = vord2 P.min
+
+vmax :: ScalarType (Vec n a) -> (Vec n a -> a)
+vmax = vord2 P.max
+
+ord2 :: (forall t. P.Ord t => t -> t -> t) -> ScalarType a -> ((a, a) -> a)
+ord2 f = \case
   NumScalarType t -> num t
   BitScalarType t -> bit t
   where
     bit :: BitType t -> ((t, t) -> t)
-    bit TypeBit    = P.uncurry P.max
-    bit TypeMask{} = \(x,y) -> unMask (zipWith P.max (BitMask x) (BitMask y))
+    bit TypeBit    = P.uncurry f
+    bit TypeMask{} = \(x,y) -> unMask (zipWith f (BitMask x) (BitMask y))
 
     num :: NumType t -> ((t, t) -> t)
     num (IntegralNumType t) = integral t
     num (FloatingNumType t) = floating t
 
     integral :: IntegralType t -> ((t, t) -> t)
-    integral (SingleIntegralType   t) | IntegralDict <- integralDict t = P.uncurry P.max
-    integral (VectorIntegralType _ t) | IntegralDict <- integralDict t = P.uncurry (zipWith P.max)
+    integral (SingleIntegralType   t) | IntegralDict <- integralDict t = P.uncurry f
+    integral (VectorIntegralType _ t) | IntegralDict <- integralDict t = P.uncurry (zipWith f)
 
     floating :: FloatingType t -> ((t, t) -> t)
-    floating (SingleFloatingType   t) | FloatingDict <- floatingDict t = P.uncurry P.max
-    floating (VectorFloatingType _ t) | FloatingDict <- floatingDict t = P.uncurry (zipWith P.max)
+    floating (SingleFloatingType   t) | FloatingDict <- floatingDict t = P.uncurry f
+    floating (VectorFloatingType _ t) | FloatingDict <- floatingDict t = P.uncurry (zipWith f)
 
+
+vord2 :: (forall t. P.Ord t => t -> t -> t) -> ScalarType (Vec n a) -> (Vec n a -> a)
+vord2 f = \case
+  NumScalarType t -> num t
+  BitScalarType t -> bit t
+  where
+    bit :: BitType (Vec n t) -> (Vec n t -> t)
+    bit TypeMask{} = P.foldl1 f . Bit.toList . BitMask
+
+    num :: NumType (Vec n t) -> (Vec n t -> t)
+    num = \case
+      IntegralNumType t -> integral t
+      FloatingNumType t -> floating t
+
+    integral :: IntegralType (Vec n t) -> (Vec n t -> t)
+    integral = \case
+      SingleIntegralType   t                                  -> case t of
+      VectorIntegralType _ t | IntegralDict <- integralDict t -> P.foldl1 f . Vec.toList
+
+    floating :: FloatingType (Vec n t) -> (Vec n t -> t)
+    floating = \case
+      SingleFloatingType   t                                  -> case t of
+      VectorFloatingType _ t | FloatingDict <- floatingDict t -> P.foldl1 f . Vec.toList
 
 -- Logical operators
 -- -----------------
@@ -433,13 +519,11 @@ lnot = \case
   where
     not' (Bit x) = Bit (not x)
 
-lall :: BitType a -> a -> Bool
-lall TypeBit    x = unBit x
-lall TypeMask{} x = P.all unBit (toList (BitMask x))
+vland :: BitType (Vec n a) -> (Vec n a -> a)
+vland TypeMask{} x = Bit $ P.all unBit (toList (BitMask x))
 
-lany :: BitType a -> a -> Bool
-lany TypeBit    x = unBit x
-lany TypeMask{} x = P.any unBit (toList (BitMask x))
+vlor :: BitType (Vec n a) -> (Vec n a -> a)
+vlor TypeMask{} x = Bit $ P.any unBit (toList (BitMask x))
 
 
 -- Conversion

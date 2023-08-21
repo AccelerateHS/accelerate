@@ -630,41 +630,41 @@ matchConst (TupRsingle ty)  a       b       = evalEq ty (a,b)
 matchConst (TupRpair ta tb) (a1,b1) (a2,b2) = matchConst ta a1 a2 && matchConst tb b1 b2
 
 evalEq :: ScalarType a -> (a, a) -> Bool
-evalEq t x = lall (scalar t) (eq t x)
+evalEq t x = unBit $ scalar t (eq t x)
   where
-    scalar :: ScalarType s -> BitType (BitOrMask s)
+    scalar :: ScalarType s -> BitOrMask s -> PrimBool
     scalar (NumScalarType s) = num s
     scalar (BitScalarType s) = bit s
 
-    bit :: BitType s -> BitType (BitOrMask s)
-    bit TypeBit      = TypeBit
-    bit (TypeMask n) = TypeMask n
+    bit :: BitType s -> BitOrMask s -> PrimBool
+    bit TypeBit    = id
+    bit TypeMask{} = vland bitType
 
-    num :: NumType s -> BitType (BitOrMask s)
+    num :: NumType s -> BitOrMask s -> PrimBool
     num (IntegralNumType s) = integral s
     num (FloatingNumType s) = floating s
 
-    integral :: IntegralType s -> BitType (BitOrMask s)
-    integral (VectorIntegralType n _) = TypeMask n
+    integral :: IntegralType s -> BitOrMask s -> PrimBool
+    integral (VectorIntegralType n _) = vland (TypeMask n)
     integral (SingleIntegralType s)   = case s of
-      TypeInt8    -> TypeBit
-      TypeInt16   -> TypeBit
-      TypeInt32   -> TypeBit
-      TypeInt64   -> TypeBit
-      TypeInt128  -> TypeBit
-      TypeWord8   -> TypeBit
-      TypeWord16  -> TypeBit
-      TypeWord32  -> TypeBit
-      TypeWord64  -> TypeBit
-      TypeWord128 -> TypeBit
+      TypeInt8    -> id
+      TypeInt16   -> id
+      TypeInt32   -> id
+      TypeInt64   -> id
+      TypeInt128  -> id
+      TypeWord8   -> id
+      TypeWord16  -> id
+      TypeWord32  -> id
+      TypeWord64  -> id
+      TypeWord128 -> id
 
-    floating :: FloatingType s -> BitType (BitOrMask s)
-    floating (VectorFloatingType n _) = TypeMask n
+    floating :: FloatingType s -> BitOrMask s -> PrimBool
+    floating (VectorFloatingType n _) = vland (TypeMask n)
     floating (SingleFloatingType s)   = case s of
-      TypeFloat16  -> TypeBit
-      TypeFloat32  -> TypeBit
-      TypeFloat64  -> TypeBit
-      TypeFloat128 -> TypeBit
+      TypeFloat16  -> id
+      TypeFloat32  -> id
+      TypeFloat64  -> id
+      TypeFloat128 -> id
 
 
 -- Environment projection indices

@@ -704,70 +704,82 @@ isInfix :: Operator -> Bool
 isInfix Operator{..}  = opFixity == Infix
 
 primOperator :: PrimFun a -> Operator
-primOperator PrimAdd{}                = Operator (pretty '+')         Infix  L 6
-primOperator PrimSub{}                = Operator (pretty '-')         Infix  L 6
-primOperator PrimMul{}                = Operator (pretty '*')         Infix  L 7
-primOperator PrimNeg{}                = Operator (pretty '-')         Prefix L 6  -- Haskell's only prefix operator
-primOperator PrimAbs{}                = Operator "abs"                App    L 10
-primOperator PrimSig{}                = Operator "signum"             App    L 10
-primOperator PrimQuot{}               = Operator "quot"               App    L 10
-primOperator PrimRem{}                = Operator "rem"                App    L 10
-primOperator PrimQuotRem{}            = Operator "quotRem"            App    L 10
-primOperator PrimIDiv{}               = Operator "div"                App    L 10
-primOperator PrimMod{}                = Operator "mod"                App    L 10
-primOperator PrimDivMod{}             = Operator "divMod"             App    L 10
-primOperator PrimBAnd{}               = Operator ".&."                Infix  L 7
-primOperator PrimBOr{}                = Operator ".|."                Infix  L 5
-primOperator PrimBXor{}               = Operator "xor"                App    L 10
-primOperator PrimBNot{}               = Operator "complement"         App    L 10
-primOperator PrimBShiftL{}            = Operator "shiftL"             App    L 10
-primOperator PrimBShiftR{}            = Operator "shiftR"             App    L 10
-primOperator PrimBRotateL{}           = Operator "rotateL"            App    L 10
-primOperator PrimBRotateR{}           = Operator "rotateR"            App    L 10
-primOperator PrimPopCount{}           = Operator "popCount"           App    L 10
-primOperator PrimCountLeadingZeros{}  = Operator "countLeadingZeros"  App    L 10
-primOperator PrimCountTrailingZeros{} = Operator "countTrailingZeros" App    L 10
-primOperator PrimFDiv{}               = Operator (pretty '/')         Infix  L 7
-primOperator PrimRecip{}              = Operator "recip"              App    L 10
-primOperator PrimSin{}                = Operator "sin"                App    L 10
-primOperator PrimCos{}                = Operator "cos"                App    L 10
-primOperator PrimTan{}                = Operator "tan"                App    L 10
-primOperator PrimAsin{}               = Operator "asin"               App    L 10
-primOperator PrimAcos{}               = Operator "acos"               App    L 10
-primOperator PrimAtan{}               = Operator "atan"               App    L 10
-primOperator PrimSinh{}               = Operator "sinh"               App    L 10
-primOperator PrimCosh{}               = Operator "cosh"               App    L 10
-primOperator PrimTanh{}               = Operator "tanh"               App    L 10
-primOperator PrimAsinh{}              = Operator "asinh"              App    L 10
-primOperator PrimAcosh{}              = Operator "acosh"              App    L 10
-primOperator PrimAtanh{}              = Operator "atanh"              App    L 10
-primOperator PrimExpFloating{}        = Operator "exp"                App    L 10
-primOperator PrimSqrt{}               = Operator "sqrt"               App    L 10
-primOperator PrimLog{}                = Operator "log"                App    L 10
-primOperator PrimFPow{}               = Operator "**"                 Infix  R 8
-primOperator PrimLogBase{}            = Operator "logBase"            App    L 10
-primOperator PrimTruncate{}           = Operator "truncate"           App    L 10
-primOperator PrimRound{}              = Operator "round"              App    L 10
-primOperator PrimFloor{}              = Operator "floor"              App    L 10
-primOperator PrimCeiling{}            = Operator "ceiling"            App    L 10
-primOperator PrimAtan2{}              = Operator "atan2"              App    L 10
-primOperator PrimIsNaN{}              = Operator "isNaN"              App    L 10
-primOperator PrimIsInfinite{}         = Operator "isInfinite"         App    L 10
-primOperator PrimLt{}                 = Operator "<"                  Infix  N 4
-primOperator PrimGt{}                 = Operator ">"                  Infix  N 4
-primOperator PrimLtEq{}               = Operator "<="                 Infix  N 4
-primOperator PrimGtEq{}               = Operator ">="                 Infix  N 4
-primOperator PrimEq{}                 = Operator "=="                 Infix  N 4
-primOperator PrimNEq{}                = Operator "/="                 Infix  N 4
-primOperator PrimMax{}                = Operator "max"                App    L 10
-primOperator PrimMin{}                = Operator "min"                App    L 10
-primOperator PrimLAnd{}               = Operator "&&"                 Infix  R 3
-primOperator PrimLOr{}                = Operator "||"                 Infix  R 2
-primOperator PrimLNot{}               = Operator "not"                App    L 10
-primOperator PrimFromIntegral{}       = Operator "fromIntegral"       App    L 10
-primOperator PrimToFloating{}         = Operator "toFloating"         App    L 10
-primOperator PrimToBool{}             = Operator "toBool"             App    L 10
-primOperator PrimFromBool{}           = Operator "fromBool"           App    L 10
+primOperator = \case
+  PrimAdd{}                -> Operator (pretty '+')         Infix  L 6
+  PrimSub{}                -> Operator (pretty '-')         Infix  L 6
+  PrimMul{}                -> Operator (pretty '*')         Infix  L 7
+  PrimNeg{}                -> Operator (pretty '-')         Prefix L 6  -- Haskell's only prefix operator
+  PrimAbs{}                -> Operator "abs"                App    L 10
+  PrimSig{}                -> Operator "signum"             App    L 10
+  PrimVAdd{}               -> Operator "vadd"               App    L 10
+  PrimVMul{}               -> Operator "vmul"               App    L 10
+  PrimQuot{}               -> Operator "quot"               App    L 10
+  PrimRem{}                -> Operator "rem"                App    L 10
+  PrimQuotRem{}            -> Operator "quotRem"            App    L 10
+  PrimIDiv{}               -> Operator "div"                App    L 10
+  PrimMod{}                -> Operator "mod"                App    L 10
+  PrimDivMod{}             -> Operator "divMod"             App    L 10
+  PrimBAnd{}               -> Operator ".&."                Infix  L 7
+  PrimBOr{}                -> Operator ".|."                Infix  L 5
+  PrimBXor{}               -> Operator "xor"                App    L 10
+  PrimBNot{}               -> Operator "complement"         App    L 10
+  PrimBShiftL{}            -> Operator "shiftL"             App    L 10
+  PrimBShiftR{}            -> Operator "shiftR"             App    L 10
+  PrimBRotateL{}           -> Operator "rotateL"            App    L 10
+  PrimBRotateR{}           -> Operator "rotateR"            App    L 10
+  PrimPopCount{}           -> Operator "popCount"           App    L 10
+  PrimCountLeadingZeros{}  -> Operator "countLeadingZeros"  App    L 10
+  PrimCountTrailingZeros{} -> Operator "countTrailingZeros" App    L 10
+  PrimBReverse{}           -> Operator "bitreverse"         App    L 10
+  PrimBSwap{}              -> Operator "byteswap"           App    L 10
+  PrimVBAnd{}              -> Operator "vand"               App    L 10
+  PrimVBOr{}               -> Operator "vor"                App    L 10
+  PrimVBXor{}              -> Operator "vxor"               App    L 10
+  PrimFDiv{}               -> Operator (pretty '/')         Infix  L 7
+  PrimRecip{}              -> Operator "recip"              App    L 10
+  PrimSin{}                -> Operator "sin"                App    L 10
+  PrimCos{}                -> Operator "cos"                App    L 10
+  PrimTan{}                -> Operator "tan"                App    L 10
+  PrimAsin{}               -> Operator "asin"               App    L 10
+  PrimAcos{}               -> Operator "acos"               App    L 10
+  PrimAtan{}               -> Operator "atan"               App    L 10
+  PrimSinh{}               -> Operator "sinh"               App    L 10
+  PrimCosh{}               -> Operator "cosh"               App    L 10
+  PrimTanh{}               -> Operator "tanh"               App    L 10
+  PrimAsinh{}              -> Operator "asinh"              App    L 10
+  PrimAcosh{}              -> Operator "acosh"              App    L 10
+  PrimAtanh{}              -> Operator "atanh"              App    L 10
+  PrimExpFloating{}        -> Operator "exp"                App    L 10
+  PrimSqrt{}               -> Operator "sqrt"               App    L 10
+  PrimLog{}                -> Operator "log"                App    L 10
+  PrimFPow{}               -> Operator "**"                 Infix  R 8
+  PrimLogBase{}            -> Operator "logBase"            App    L 10
+  PrimTruncate{}           -> Operator "truncate"           App    L 10
+  PrimRound{}              -> Operator "round"              App    L 10
+  PrimFloor{}              -> Operator "floor"              App    L 10
+  PrimCeiling{}            -> Operator "ceiling"            App    L 10
+  PrimAtan2{}              -> Operator "atan2"              App    L 10
+  PrimIsNaN{}              -> Operator "isNaN"              App    L 10
+  PrimIsInfinite{}         -> Operator "isInfinite"         App    L 10
+  PrimLt{}                 -> Operator "<"                  Infix  N 4
+  PrimGt{}                 -> Operator ">"                  Infix  N 4
+  PrimLtEq{}               -> Operator "<="                 Infix  N 4
+  PrimGtEq{}               -> Operator ">="                 Infix  N 4
+  PrimEq{}                 -> Operator "=="                 Infix  N 4
+  PrimNEq{}                -> Operator "/="                 Infix  N 4
+  PrimMin{}                -> Operator "min"                App    L 10
+  PrimMax{}                -> Operator "max"                App    L 10
+  PrimVMin{}               -> Operator "minimum"            App    L 10
+  PrimVMax{}               -> Operator "maximum"            App    L 10
+  PrimLAnd{}               -> Operator "&&"                 Infix  R 3
+  PrimLOr{}                -> Operator "||"                 Infix  R 2
+  PrimLNot{}               -> Operator "not"                App    L 10
+  PrimVLAnd{}              -> Operator "and"                App    L 10
+  PrimVLOr{}               -> Operator "or"                 App    L 10
+  PrimFromIntegral{}       -> Operator "fromIntegral"       App    L 10
+  PrimToFloating{}         -> Operator "toFloating"         App    L 10
+  PrimToBool{}             -> Operator "toBool"             App    L 10
+  PrimFromBool{}           -> Operator "fromBool"           App    L 10
 
 
 -- Environments

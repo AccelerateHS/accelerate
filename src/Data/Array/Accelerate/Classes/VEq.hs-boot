@@ -19,8 +19,9 @@ class SIMD n a => VEq n a where
   (==*) :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   (/=*) :: Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool)
   {-# MINIMAL (==*) | (/=*) #-}
-  x ==* y = vnot (x /=* y)
-  x /=* y = vnot (x ==* y)
+  (==*) = undefined
+  (/=*) = undefined
 
-vnot :: KnownNat n => Exp (Vec n Bool) -> Exp (Vec n Bool)
+vand :: KnownNat n => Exp (Vec n Bool) -> Exp Bool
+vor  :: KnownNat n => Exp (Vec n Bool) -> Exp Bool
 
