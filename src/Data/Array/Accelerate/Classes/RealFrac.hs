@@ -24,6 +24,7 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Language                               ( cond, even )
 import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Type
@@ -136,7 +137,7 @@ defaultTruncate :: forall a b. (RealFrac a, Integral b, FromIntegral (Significan
 defaultTruncate x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkTruncate x
+  = mkPrimUnary (PrimTruncate floatingType integralType) x
   --
   | otherwise
   = let T2 n _ = properFraction x in n
@@ -145,7 +146,7 @@ defaultCeiling :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand
 defaultCeiling x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkCeiling x
+  = mkPrimUnary (PrimCeiling floatingType integralType) x
   --
   | otherwise
   = let T2 n r = properFraction x in cond (r > 0) (n+1) n
@@ -154,7 +155,7 @@ defaultFloor :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a
 defaultFloor x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkFloor x
+  = mkPrimUnary (PrimFloor floatingType integralType) x
   --
   | otherwise
   = let T2 n r = properFraction x in cond (r < 0) (n-1) n
@@ -163,7 +164,7 @@ defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a
 defaultRound x
   | Just FloatingDict <- floatingDict @a
   , Just IntegralDict <- integralDict @b
-  = mkRound x
+  = mkPrimUnary (PrimRound floatingType integralType) x
   --
   | otherwise
   = let T2 n r    = properFraction x

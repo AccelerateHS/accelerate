@@ -19,6 +19,7 @@ module Data.Array.Accelerate.Classes.VOrd (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.VEq
 import Data.Array.Accelerate.Representation.Tag
@@ -43,7 +44,9 @@ infix 4 <=*
 infix 4 >=*
 
 -- | The 'VOrd' class defines lane-wise comparisons for totally ordered
--- datatypes.
+-- data types.
+--
+-- @since 1.4.0.0
 --
 class VEq n a => VOrd n a where
   {-# MINIMAL (<=*) | vcompare #-}
@@ -113,12 +116,12 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim name =
         [d| instance KnownNat n => VOrd n $(conT name) where
-              (<*)  = mkLt
-              (>*)  = mkGt
-              (<=*) = mkLtEq
-              (>=*) = mkGtEq
-              vmin  = mkMin
-              vmax  = mkMax
+              (<*)     = mkPrimBinary $ PrimLt scalarType
+              (>*)     = mkPrimBinary $ PrimGt scalarType
+              (<=*)    = mkPrimBinary $ PrimLtEq scalarType
+              (>=*)    = mkPrimBinary $ PrimGtEq scalarType
+              vmin     = mkPrimBinary $ PrimMin scalarType
+              vmax     = mkPrimBinary $ PrimMax scalarType
           |]
 
       mkTup :: Word8 -> Q Dec
@@ -132,7 +135,7 @@ runQ $ do
             res = tupT ts
             ctx = (++) <$> mapM (appT [t| Ord |]) ts
                        <*> mapM (appT [t| SIMD $(varT w) |]) ts
-            cmp f = [| mkPack (zipWith $f (mkUnpack $(varE x)) (mkUnpack $(varE y))) |]
+            cmp f = [| pack (zipWith $f (unpack $(varE x)) (unpack $(varE y))) |]
         --
         instanceD ctx [t| VOrd $(varT w) $res |]
           [ funD (mkName "<*")  [ clause [varP x, varP y] (normalB (cmp [| (<) |]))  [] ]
@@ -166,8 +169,8 @@ instance KnownNat n => VOrd n Ordering where
   x >=* y = mkCoerce x >=* (mkCoerce y :: Exp (Vec n TAG))
 
 instance (Ord sh, VOrd n sh) => VOrd n (sh :. Int) where
-  x <* y  = mkPack (zipWith (<)  (mkUnpack x) (mkUnpack y))
-  x >* y  = mkPack (zipWith (>)  (mkUnpack x) (mkUnpack y))
-  x <=* y = mkPack (zipWith (<=) (mkUnpack x) (mkUnpack y))
-  x >=* y = mkPack (zipWith (>=) (mkUnpack x) (mkUnpack y))
+  x <* y  = pack (zipWith (<)  (unpack x) (unpack y))
+  x >* y  = pack (zipWith (>)  (unpack x) (unpack y))
+  x <=* y = pack (zipWith (<=) (unpack x) (unpack y))
+  x >=* y = pack (zipWith (>=) (unpack x) (unpack y))
 

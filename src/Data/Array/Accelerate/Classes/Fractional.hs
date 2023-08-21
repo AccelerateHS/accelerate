@@ -26,6 +26,7 @@ module Data.Array.Accelerate.Classes.Fractional (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
@@ -66,13 +67,13 @@ runQ $
       thFractional :: Name -> Q [Dec]
       thFractional a =
         [d| instance P.Fractional (Exp $(conT a)) where
-              (/)          = mkFDiv
-              recip        = mkRecip
+              (/)          = mkPrimBinary $ PrimFDiv floatingType
+              recip        = mkPrimUnary $ PrimRecip floatingType
               fromRational = constant . P.fromRational
 
             instance KnownNat n => P.Fractional (Exp (Vec n $(conT a))) where
-              (/)          = mkFDiv
-              recip        = mkRecip
+              (/)          = mkPrimBinary $ PrimFDiv floatingType
+              recip        = mkPrimUnary $ PrimRecip floatingType
               fromRational = constant . Vec . Prim.splat . P.fromRational
           |]
   in

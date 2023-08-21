@@ -27,8 +27,11 @@ module Data.Array.Accelerate.Classes.Integral (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
@@ -45,6 +48,18 @@ import qualified Prelude                                            as P
 -- | Integral numbers, supporting integral division
 --
 type Integral a = (Enum a, Ord a, Num a, P.Integral (Exp a))
+
+mkQuotRem :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
+mkQuotRem (Exp x) (Exp y) =
+  let r = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
+   in ( mkExp $ Prj PairIdxLeft  r
+      , mkExp $ Prj PairIdxRight r)
+
+mkDivMod :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
+mkDivMod (Exp x) (Exp y) =
+  let r = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
+   in ( mkExp $ Prj PairIdxLeft  r
+      , mkExp $ Prj PairIdxRight r)
 
 runQ $
   let
@@ -67,19 +82,19 @@ runQ $
       mkIntegral :: Name -> Q [Dec]
       mkIntegral a =
         [d| instance P.Integral (Exp $(conT a)) where
-              quot      = mkQuot
-              rem       = mkRem
-              div       = mkIDiv
-              mod       = mkMod
+              quot      = mkPrimBinary $ PrimQuot integralType
+              rem       = mkPrimBinary $ PrimRem integralType
+              div       = mkPrimBinary $ PrimIDiv integralType
+              mod       = mkPrimBinary $ PrimMod integralType
               quotRem   = mkQuotRem
               divMod    = mkDivMod
               toInteger = P.error "Prelude.toInteger not supported for Accelerate types"
 
             instance KnownNat n => P.Integral (Exp (Vec n $(conT a))) where
-              quot      = mkQuot
-              rem       = mkRem
-              div       = mkIDiv
-              mod       = mkMod
+              quot      = mkPrimBinary $ PrimQuot integralType
+              rem       = mkPrimBinary $ PrimRem integralType
+              div       = mkPrimBinary $ PrimIDiv integralType
+              mod       = mkPrimBinary $ PrimMod integralType
               quotRem   = mkQuotRem
               divMod    = mkDivMod
               toInteger = P.error "Prelude.toInteger not supported for Accelerate types"

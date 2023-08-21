@@ -46,68 +46,34 @@ module Data.Array.Accelerate.Smart (
   HasArraysR(..),
   HasTypeR(..),
 
-  -- ** Smart constructors for literals
+  -- ** Constants
   constant, undef,
 
-  -- ** Smart destructors for shapes
+  -- ** Shapes
   indexHead, indexTail,
 
-  -- ** Vector operations
-  splat, mkPack, mkUnpack,
+  -- ** SIMD vectors
+  splat, pack, unpack,
   extract, mkExtract,
   insert, mkInsert,
   shuffle,
   select,
-  vand, vor,
 
-  -- ** Smart constructors for primitive functions
-  -- *** Operators from Num
-  mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig,
+  -- ** Type coercions
+  mkBitcast, mkCoerce, Coerce(..),
 
-  -- *** Operators from Integral
-  mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
-
-  -- *** Operators from FiniteBits
-  mkBAnd, mkBOr, mkBXor, mkBNot,
-  mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR,
-  mkPopCount, mkCountLeadingZeros, mkCountTrailingZeros,
-
-  -- *** Operators from Fractional and Floating
-  mkFDiv, mkRecip,
-  mkSin, mkCos, mkTan,
-  mkAsin, mkAcos, mkAtan,
-  mkSinh, mkCosh, mkTanh,
-  mkAsinh, mkAcosh, mkAtanh,
-  mkExpFloating,
-  mkSqrt, mkLog,
-  mkFPow, mkLogBase,
-
-  -- *** Operators from RealFrac and RealFloat
-  mkTruncate, mkRound, mkFloor, mkCeiling,
-  mkAtan2,
-  mkIsNaN, mkIsInfinite,
-
-  -- *** Relational and equality operators
-  mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin, mkLAnd, mkLOr, mkLNot,
-
-  -- ** Smart constructors for type coercion functions
-  mkFromIntegral, mkToFloating, mkToBool, mkFromBool, mkBitcast, mkCoerce, Coerce(..),
-
-  -- ** Auxiliary functions
+  -- ** Miscellaneous
   ($$), ($$$), ($$$$), ($$$$$),
   ApplyAcc(..),
   unAcc, unAccFunction,
   mkExp, unExp, unExpFunction, unExpBinaryFunction, mkPrimUnary, mkPrimBinary,
   unPair, mkPairToTuple,
-
-  -- ** Miscellaneous
-  formatPreAccOp,
-  formatPreExpOp,
+  formatPreAccOp, formatPreExpOp,
 
 ) where
 
 
-import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..), PrimBool, PrimMaybe, PrimFun(..), BitOrMask, primFunType )
+import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..), PrimBool, PrimMaybe, PrimFun(..), primFunType )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Error
@@ -130,7 +96,6 @@ import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
 import qualified Data.Primitive.Vec                                 as Prim
 
-import Data.Bits                                                    ( Bits, unsafeShiftL, countLeadingZeros )
 import Data.Kind
 import Data.Text.Lazy.Builder
 import Formatting                                                   hiding ( splat )
@@ -485,6 +450,12 @@ data PreSmartAcc acc exp as where
                 -> PreBoundary acc exp (Array sh b)
                 -> acc (Array sh b)
                 -> PreSmartAcc acc exp (Array sh c)
+
+  -- Coerce        :: ShapeR sh
+  --               -> TypeR a
+  --               -> TypeR b
+  --               -> acc (Array sh a)
+  --               -> PreSmartAcc acc exp (Array sh b)
 
 
 -- Embedded expressions of the surface language
@@ -1008,10 +979,14 @@ indexTail (Exp x) = mkExp $ Prj PairIdxLeft x
 -- @since 1.4.0.0
 --
 splat :: (SIMD n a, Elt a) => Exp a -> Exp (Vec n a)
-splat x = mkPack (repeat x)
+splat x = pack (repeat x)
 
-mkPack :: forall n a. (SIMD n a, Elt a) => [Exp a] -> Exp (Vec n a)
-mkPack xs =
+-- | Pack scalar expressions into a single SIMD vector
+--
+-- @since 1.4.0.0
+--
+pack :: forall n a. (SIMD n a, Elt a) => [Exp a] -> Exp (Vec n a)
+pack xs =
   let go :: Word8 -> [Exp a] -> Exp (Vec n a) -> Exp (Vec n a)
       go _ []     vec = vec
       go i (v:vs) vec = go (i+1) vs (insert vec (constant i) v)
@@ -1020,8 +995,12 @@ mkPack xs =
   in
   go 0 (take n xs) undef
 
-mkUnpack :: forall n a. (SIMD n a, Elt a) => Exp (Vec n a) -> [Exp a]
-mkUnpack v =
+-- | Unpack the lanes of a SIMD vector into scalar elements
+--
+-- @since 1.4.0.0
+--
+unpack :: forall n a. (SIMD n a, Elt a) => Exp (Vec n a) -> [Exp a]
+unpack v =
   let n = fromIntegral (natVal' (proxy# :: Proxy# n)) :: Word8
    in map (extract v . constant) [0 .. n-1]
 
@@ -1231,285 +1210,8 @@ select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
     floating _ = error "impossible"
 
 
--- | Return 'True' if all lanes of the vector are 'True'
---
--- @since 1.4.0.0
---
-vand :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
-vand v =
-  let n, m :: Int
-      n = fromInteger $ natVal' (proxy# :: Proxy# n)
-      m = max 8 (1 `unsafeShiftL` (64 - countLeadingZeros (n-1)))
-      --
-      cmp :: forall t. (Elt t, Num t, Bits t, IsScalar (EltR t), IsNum (EltR t), BitOrMask (EltR t) ~ Bit)
-          => Exp Bool
-      cmp = let w = SingleIntegralType (TypeWord n)
-                b = mkExp $ Bitcast (BitScalarType bitType) (NumScalarType (IntegralNumType w)) (unExp v)
-            in
-            mkEq (constant ((1 `unsafeShiftL` n) - 1)) $
-              if n == m
-                 then b
-                 else mkPrimUnary (PrimFromIntegral w numType) b :: Exp t
-  in
-  if n == 1   then mkExp (Bitcast scalarType scalarType (unExp v)) else
-  if n <= 8   then cmp @Word8   else
-  if n <= 16  then cmp @Word16  else
-  if n <= 32  then cmp @Word32  else
-  if n <= 64  then cmp @Word64  else
-  if n <= 128 then cmp @Word128 else
-    internalError "Can not handle Vec types with more than 128 lanes"
-
--- | Return 'True' if any lane of the vector is 'True'
---
--- @since 1.4.0.0
---
-vor :: forall n. KnownNat n => Exp (Vec n Bool) -> Exp Bool
-vor v =
-  let n, m :: Int
-      n = fromInteger $ natVal' (proxy# :: Proxy# n)
-      m = max 8 (1 `unsafeShiftL` (64 - countLeadingZeros (n-1)))
-      --
-      cmp :: forall t. (Elt t, Num t, IsScalar (EltR t), IsNum (EltR t), BitOrMask (EltR t) ~ Bit)
-          => Exp Bool
-      cmp = let w = SingleIntegralType (TypeWord n)
-                b = mkExp $ Bitcast (BitScalarType bitType) (NumScalarType (IntegralNumType w)) (unExp v)
-            in
-            mkNEq (constant 0) $
-              if n == m
-                 then b
-                 else mkPrimUnary (PrimFromIntegral w numType) b :: Exp t
-  in
-  if n == 1   then mkExp (Bitcast scalarType scalarType (unExp v)) else
-  if n <= 8   then cmp @Word8   else
-  if n <= 16  then cmp @Word16  else
-  if n <= 32  then cmp @Word32  else
-  if n <= 64  then cmp @Word64  else
-  if n <= 128 then cmp @Word128 else
-    internalError "Can not handle Vec types with more than 128 lanes"
-
-
--- Smart constructors for primitive applications
---
-
--- Operators from Floating
-
-mkSin :: IsFloating (EltR t) => Exp t -> Exp t
-mkSin = mkPrimUnary $ PrimSin floatingType
-
-mkCos :: IsFloating (EltR t) => Exp t -> Exp t
-mkCos = mkPrimUnary $ PrimCos floatingType
-
-mkTan :: IsFloating (EltR t) => Exp t -> Exp t
-mkTan = mkPrimUnary $ PrimTan floatingType
-
-mkAsin :: IsFloating (EltR t) => Exp t -> Exp t
-mkAsin = mkPrimUnary $ PrimAsin floatingType
-
-mkAcos :: IsFloating (EltR t) => Exp t -> Exp t
-mkAcos = mkPrimUnary $ PrimAcos floatingType
-
-mkAtan :: IsFloating (EltR t) => Exp t -> Exp t
-mkAtan = mkPrimUnary $ PrimAtan floatingType
-
-mkSinh :: IsFloating (EltR t) => Exp t -> Exp t
-mkSinh = mkPrimUnary $ PrimSinh floatingType
-
-mkCosh :: IsFloating (EltR t) => Exp t -> Exp t
-mkCosh = mkPrimUnary $ PrimCosh floatingType
-
-mkTanh :: IsFloating (EltR t) => Exp t -> Exp t
-mkTanh = mkPrimUnary $ PrimTanh floatingType
-
-mkAsinh :: IsFloating (EltR t) => Exp t -> Exp t
-mkAsinh = mkPrimUnary $ PrimAsinh floatingType
-
-mkAcosh :: IsFloating (EltR t) => Exp t -> Exp t
-mkAcosh = mkPrimUnary $ PrimAcosh floatingType
-
-mkAtanh :: IsFloating (EltR t) => Exp t -> Exp t
-mkAtanh = mkPrimUnary $ PrimAtanh floatingType
-
-mkExpFloating :: IsFloating (EltR t) => Exp t -> Exp t
-mkExpFloating = mkPrimUnary $ PrimExpFloating floatingType
-
-mkSqrt :: IsFloating (EltR t) => Exp t -> Exp t
-mkSqrt = mkPrimUnary $ PrimSqrt floatingType
-
-mkLog :: IsFloating (EltR t) => Exp t -> Exp t
-mkLog = mkPrimUnary $ PrimLog floatingType
-
-mkFPow :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
-mkFPow = mkPrimBinary $ PrimFPow floatingType
-
-mkLogBase :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
-mkLogBase = mkPrimBinary $ PrimLogBase floatingType
-
--- Operators from Num
-
-mkAdd :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
-mkAdd = mkPrimBinary $ PrimAdd numType
-
-mkSub :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
-mkSub = mkPrimBinary $ PrimSub numType
-
-mkMul :: IsNum (EltR t) => Exp t -> Exp t -> Exp t
-mkMul = mkPrimBinary $ PrimMul numType
-
-mkNeg :: IsNum (EltR t) => Exp t -> Exp t
-mkNeg = mkPrimUnary $ PrimNeg numType
-
-mkAbs :: IsNum (EltR t) => Exp t -> Exp t
-mkAbs = mkPrimUnary $ PrimAbs numType
-
-mkSig :: IsNum (EltR t) => Exp t -> Exp t
-mkSig = mkPrimUnary $ PrimSig numType
-
--- Operators from Integral
-
-mkQuot :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkQuot = mkPrimBinary $ PrimQuot integralType
-
-mkRem :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkRem = mkPrimBinary $ PrimRem integralType
-
-mkQuotRem :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
-mkQuotRem (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
-   in ( mkExp $ Prj PairIdxLeft  pair
-      , mkExp $ Prj PairIdxRight pair)
-
-mkIDiv :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkIDiv = mkPrimBinary $ PrimIDiv integralType
-
-mkMod :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkMod = mkPrimBinary $ PrimMod integralType
-
-mkDivMod :: IsIntegral (EltR t) => Exp t -> Exp t -> (Exp t, Exp t)
-mkDivMod (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
-   in ( mkExp $ Prj PairIdxLeft  pair
-      , mkExp $ Prj PairIdxRight pair)
-
--- Operators from Bits and FiniteBits
-
-mkBAnd :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBAnd = mkPrimBinary $ PrimBAnd integralType
-
-mkBOr :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBOr = mkPrimBinary $ PrimBOr integralType
-
-mkBXor :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBXor = mkPrimBinary $ PrimBXor integralType
-
-mkBNot :: IsIntegral (EltR t) => Exp t -> Exp t
-mkBNot = mkPrimUnary $ PrimBNot integralType
-
-mkBShiftL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
-
-mkBShiftR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
-
-mkBRotateL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
-
-mkBRotateR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
-mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
-
-mkPopCount :: IsIntegral (EltR t) => Exp t -> Exp t
-mkPopCount = mkPrimUnary $ PrimPopCount integralType
-
-mkCountLeadingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
-mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
-
-mkCountTrailingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
-mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
-
--- Operators from Fractional
-
-mkFDiv :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
-mkFDiv = mkPrimBinary $ PrimFDiv floatingType
-
-mkRecip :: IsFloating (EltR t) => Exp t -> Exp t
-mkRecip = mkPrimUnary $ PrimRecip floatingType
-
--- Operators from RealFrac
-
-mkTruncate :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkTruncate = mkPrimUnary $ PrimTruncate floatingType integralType
-
-mkRound :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkRound = mkPrimUnary $ PrimRound floatingType integralType
-
-mkFloor :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkFloor = mkPrimUnary $ PrimFloor floatingType integralType
-
-mkCeiling :: (IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkCeiling = mkPrimUnary $ PrimCeiling floatingType integralType
-
--- Operators from RealFloat
-
-mkAtan2 :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
-mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
-
-mkIsNaN :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
-mkIsNaN = mkPrimUnary $ PrimIsNaN floatingType
-
-mkIsInfinite :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
-mkIsInfinite = mkPrimUnary $ PrimIsInfinite floatingType
-
--- Relational and equality operators
-
-mkLt :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkLt = mkPrimBinary $ PrimLt scalarType
-
-mkGt :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkGt = mkPrimBinary $ PrimGt scalarType
-
-mkLtEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkLtEq = mkPrimBinary $ PrimLtEq scalarType
-
-mkGtEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkGtEq = mkPrimBinary $ PrimGtEq scalarType
-
-mkEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkEq = mkPrimBinary $ PrimEq scalarType
-
-mkNEq :: (IsScalar (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp t -> Exp b
-mkNEq = mkPrimBinary $ PrimNEq scalarType
-
-mkMax :: IsScalar (EltR t) => Exp t -> Exp t -> Exp t
-mkMax = mkPrimBinary $ PrimMax scalarType
-
-mkMin :: IsScalar (EltR t) => Exp t -> Exp t -> Exp t
-mkMin = mkPrimBinary $ PrimMin scalarType
-
--- Logical operators
-
-mkLAnd :: IsBit (EltR t) => Exp t -> Exp t -> Exp t
-mkLAnd = mkPrimBinary $ PrimLAnd bitType
-
-mkLOr :: IsBit (EltR t) => Exp t -> Exp t -> Exp t
-mkLOr = mkPrimBinary $ PrimLOr bitType
-
-mkLNot :: IsBit (EltR t) => Exp t -> Exp t
-mkLNot = mkPrimUnary $ PrimLNot bitType
-
--- Numeric conversions
-
-mkFromIntegral :: (IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
-mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
-
-mkToFloating :: (IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
-mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
-
-mkToBool :: (IsIntegral (EltR a), IsBit (EltR b)) => Exp a -> Exp b
-mkToBool = mkPrimUnary $ PrimToBool integralType bitType
-
-mkFromBool :: (IsBit (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkFromBool = mkPrimUnary $ PrimFromBool bitType integralType
-
--- Other conversions
+-- Coercions between types
+-- -----------------------
 
 mkBitcast :: forall b a. (IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
 mkBitcast (Exp a) = mkExp $ Bitcast (scalarType @(EltR a)) (scalarType @(EltR b)) a

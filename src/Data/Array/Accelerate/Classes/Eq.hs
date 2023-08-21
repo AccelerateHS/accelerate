@@ -33,6 +33,7 @@ module Data.Array.Accelerate.Classes.Eq (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pattern.Bool
 import Data.Array.Accelerate.Pattern.Tuple
@@ -69,7 +70,7 @@ infixr 3 &&
 --
 infixr 3 &&!
 (&&!) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&!) = mkLAnd
+(&&!) = mkPrimBinary $ PrimLAnd bitType
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -88,12 +89,12 @@ infixr 2 ||
 --
 infixr 2 ||!
 (||!) :: Exp Bool -> Exp Bool -> Exp Bool
-(||!) = mkLOr
+(||!) = mkPrimBinary $ PrimLOr bitType
 
 -- | Logical negation
 --
 not :: Exp Bool -> Exp Bool
-not = mkLNot
+not = mkPrimUnary $ PrimLNot bitType
 
 
 -- | The 'Eq' class defines equality '(==)' and inequality '(/=)' for
@@ -171,8 +172,8 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Eq $(conT t) where
-              (==) = mkEq
-              (/=) = mkNEq
+              (==) = mkPrimBinary $ PrimEq  scalarType
+              (/=) = mkPrimBinary $ PrimNEq scalarType
           |]
 
       mkTup :: Int -> Q [Dec]
@@ -200,8 +201,8 @@ instance Eq sh => Eq (sh :. Int) where
   x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance Eq Bool where
-  (==) = mkEq
-  (/=) = mkNEq
+  (==) = mkPrimBinary $ PrimEq  scalarType
+  (/=) = mkPrimBinary $ PrimNEq scalarType
 
 instance Eq Ordering where
   x == y = mkCoerce x == (mkCoerce y :: Exp TAG)

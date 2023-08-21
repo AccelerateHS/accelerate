@@ -35,6 +35,7 @@ module Data.Array.Accelerate.Classes.Floating (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
@@ -65,43 +66,43 @@ runQ $
       thFloating a =
         [d| instance P.Floating (Exp $(conT a)) where
               pi      = constant pi
-              sin     = mkSin
-              cos     = mkCos
-              tan     = mkTan
-              asin    = mkAsin
-              acos    = mkAcos
-              atan    = mkAtan
-              sinh    = mkSinh
-              cosh    = mkCosh
-              tanh    = mkTanh
-              asinh   = mkAsinh
-              acosh   = mkAcosh
-              atanh   = mkAtanh
-              exp     = mkExpFloating
-              sqrt    = mkSqrt
-              log     = mkLog
-              (**)    = mkFPow
-              logBase = mkLogBase
+              sin     = mkPrimUnary $ PrimSin floatingType
+              cos     = mkPrimUnary $ PrimCos floatingType
+              tan     = mkPrimUnary $ PrimTan floatingType
+              asin    = mkPrimUnary $ PrimAsin floatingType
+              acos    = mkPrimUnary $ PrimAcos floatingType
+              atan    = mkPrimUnary $ PrimAtan floatingType
+              sinh    = mkPrimUnary $ PrimSinh floatingType
+              cosh    = mkPrimUnary $ PrimCosh floatingType
+              tanh    = mkPrimUnary $ PrimTanh floatingType
+              asinh   = mkPrimUnary $ PrimAsinh floatingType
+              acosh   = mkPrimUnary $ PrimAcosh floatingType
+              atanh   = mkPrimUnary $ PrimAtanh floatingType
+              exp     = mkPrimUnary $ PrimExpFloating floatingType
+              sqrt    = mkPrimUnary $ PrimSqrt floatingType
+              log     = mkPrimUnary $ PrimLog floatingType
+              (**)    = mkPrimBinary $ PrimFPow floatingType
+              logBase = mkPrimBinary $ PrimLogBase floatingType
 
             instance KnownNat n => P.Floating (Exp (Vec n $(conT a))) where
               pi      = constant (Vec (Prim.splat pi))
-              sin     = mkSin
-              cos     = mkCos
-              tan     = mkTan
-              asin    = mkAsin
-              acos    = mkAcos
-              atan    = mkAtan
-              sinh    = mkSinh
-              cosh    = mkCosh
-              tanh    = mkTanh
-              asinh   = mkAsinh
-              acosh   = mkAcosh
-              atanh   = mkAtanh
-              exp     = mkExpFloating
-              sqrt    = mkSqrt
-              log     = mkLog
-              (**)    = mkFPow
-              logBase = mkLogBase
+              sin     = mkPrimUnary $ PrimSin floatingType
+              cos     = mkPrimUnary $ PrimCos floatingType
+              tan     = mkPrimUnary $ PrimTan floatingType
+              asin    = mkPrimUnary $ PrimAsin floatingType
+              acos    = mkPrimUnary $ PrimAcos floatingType
+              atan    = mkPrimUnary $ PrimAtan floatingType
+              sinh    = mkPrimUnary $ PrimSinh floatingType
+              cosh    = mkPrimUnary $ PrimCosh floatingType
+              tanh    = mkPrimUnary $ PrimTanh floatingType
+              asinh   = mkPrimUnary $ PrimAsinh floatingType
+              acosh   = mkPrimUnary $ PrimAcosh floatingType
+              atanh   = mkPrimUnary $ PrimAtanh floatingType
+              exp     = mkPrimUnary $ PrimExpFloating floatingType
+              sqrt    = mkPrimUnary $ PrimSqrt floatingType
+              log     = mkPrimUnary $ PrimLog floatingType
+              (**)    = mkPrimBinary $ PrimFPow floatingType
+              logBase = mkPrimBinary $ PrimLogBase floatingType
           |]
   in
   concat <$> mapM thFloating floatingTypes

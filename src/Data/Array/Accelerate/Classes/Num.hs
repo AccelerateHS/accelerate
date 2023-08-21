@@ -26,6 +26,7 @@ module Data.Array.Accelerate.Classes.Num (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Vec
@@ -105,21 +106,21 @@ runQ $
       thNum :: Name -> Q [Dec]
       thNum a =
         [d| instance P.Num (Exp $(conT a)) where
-              (+)         = mkAdd
-              (-)         = mkSub
-              (*)         = mkMul
-              negate      = mkNeg
-              abs         = mkAbs
-              signum      = mkSig
+              (+)         = mkPrimBinary $ PrimAdd numType
+              (-)         = mkPrimBinary $ PrimSub numType
+              (*)         = mkPrimBinary $ PrimSub numType
+              negate      = mkPrimUnary  $ PrimNeg numType
+              abs         = mkPrimUnary  $ PrimAbs numType
+              signum      = mkPrimUnary  $ PrimSig numType
               fromInteger = constant . P.fromInteger
 
             instance KnownNat n => P.Num (Exp (Vec n $(conT a))) where
-              (+)         = mkAdd
-              (-)         = mkSub
-              (*)         = mkMul
-              negate      = mkNeg
-              abs         = mkAbs
-              signum      = mkSig
+              (+)         = mkPrimBinary $ PrimAdd numType
+              (-)         = mkPrimBinary $ PrimSub numType
+              (*)         = mkPrimBinary $ PrimSub numType
+              negate      = mkPrimUnary  $ PrimNeg numType
+              abs         = mkPrimUnary  $ PrimAbs numType
+              signum      = mkPrimUnary  $ PrimSig numType
               fromInteger = constant . Vec . Prim.splat . P.fromInteger
           |]
   in

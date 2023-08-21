@@ -30,6 +30,7 @@ module Data.Array.Accelerate.Classes.Ord (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.VEq
@@ -56,7 +57,7 @@ infix 4 >
 infix 4 <=
 infix 4 >=
 
--- | The 'Ord' class for totally ordered datatypes
+-- | The 'Ord' class for totally ordered data types
 --
 class Eq a => Ord a where
   {-# MINIMAL (<=) | compare #-}
@@ -146,33 +147,33 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Ord $(conT t) where
-              (<)  = mkLt
-              (>)  = mkGt
-              (<=) = mkLtEq
-              (>=) = mkGtEq
-              min  = mkMin
-              max  = mkMax
+              (<)  = mkPrimBinary $ PrimLt scalarType
+              (>)  = mkPrimBinary $ PrimGt scalarType
+              (<=) = mkPrimBinary $ PrimLtEq scalarType
+              (>=) = mkPrimBinary $ PrimGtEq scalarType
+              min  = mkPrimBinary $ PrimMin scalarType
+              max  = mkPrimBinary $ PrimMax scalarType
           |]
 
-      mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkLt' [x] [y]       = [| $x < $y |]
-      mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLt' xs ys) ) |]
-      mkLt' _      _      = error "mkLt'"
+      mkLt :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLt [x] [y]       = [| $x < $y |]
+      mkLt (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLt xs ys) ) |]
+      mkLt _      _      = error "mkLt"
 
-      mkGt' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkGt' [x]    [y]    = [| $x > $y |]
-      mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGt' xs ys) ) |]
-      mkGt' _      _      = error "mkGt'"
+      mkGt :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGt [x]    [y]    = [| $x > $y |]
+      mkGt (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGt xs ys) ) |]
+      mkGt _      _      = error "mkGt"
 
-      mkLtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkLtEq' [x] [y]       = [| $x <= $y |]
-      mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLtEq' xs ys) ) |]
-      mkLtEq' _      _      = error "mkLtEq'"
+      mkLtEq :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLtEq [x] [y]       = [| $x <= $y |]
+      mkLtEq (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLtEq xs ys) ) |]
+      mkLtEq _      _      = error "mkLtEq"
 
-      mkGtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkGtEq' [x]    [y]    = [| $x >= $y |]
-      mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGtEq' xs ys) ) |]
-      mkGtEq' _      _      = error "mkGtEq'"
+      mkGtEq :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGtEq [x]    [y]    = [| $x >= $y |]
+      mkGtEq (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGtEq xs ys) ) |]
+      mkGtEq _      _      = error "mkGtEq"
 
       mkTup :: Int -> Q [Dec]
       mkTup n =
@@ -184,10 +185,10 @@ runQ $ do
             pat vs  = conP (mkName ('T':show n)) (map varP vs)
         in
         [d| instance $cst => Ord $res where
-              $(pat xs) <  $(pat ys) = $( mkLt' (map varE xs) (map varE ys) )
-              $(pat xs) >  $(pat ys) = $( mkGt' (map varE xs) (map varE ys) )
-              $(pat xs) >= $(pat ys) = $( mkGtEq' (map varE xs) (map varE ys) )
-              $(pat xs) <= $(pat ys) = $( mkLtEq' (map varE xs) (map varE ys) )
+              $(pat xs) <  $(pat ys) = $( mkLt (map varE xs) (map varE ys) )
+              $(pat xs) >  $(pat ys) = $( mkGt (map varE xs) (map varE ys) )
+              $(pat xs) >= $(pat ys) = $( mkGtEq (map varE xs) (map varE ys) )
+              $(pat xs) <= $(pat ys) = $( mkLtEq (map varE xs) (map varE ys) )
           |]
 
   is <- mapM mkPrim integralTypes
@@ -249,5 +250,5 @@ vcmp cmp x y =
       go (u:us) (v:vs) = u || (v && go us vs)
       go _      _      = internalError "unexpected vector encoding"
   in
-  go (mkUnpack (cmp x y)) (mkUnpack (x ==* y))
+  go (unpack (cmp x y)) (unpack (x ==* y))
 

@@ -18,6 +18,7 @@ module Data.Array.Accelerate.Classes.FromBool (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
@@ -57,10 +58,10 @@ runQ $
       thFromBool :: Name -> Q [Dec]
       thFromBool b =
           [d| instance FromBool Bool $(conT b) where
-                fromBool = mkFromBool
+                fromBool = mkPrimUnary $ PrimFromBool bitType integralType
 
               instance KnownNat n => FromBool (Vec n Bool) (Vec n $(conT b)) where
-                fromBool = mkFromBool
+                fromBool = mkPrimUnary $ PrimFromBool bitType integralType
             |]
   in
   concat <$> mapM thFromBool integralTypes

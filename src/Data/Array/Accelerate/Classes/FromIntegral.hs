@@ -19,7 +19,9 @@ module Data.Array.Accelerate.Classes.FromIntegral (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
@@ -38,8 +40,8 @@ class FromIntegral a b where
   -- | General coercion from integral types
   fromIntegral :: Integral a => Exp a -> Exp b
 
--- instance {-# OVERLAPPABLE #-} (Elt a, Elt b, IsIntegral a, IsNum b) => FromIntegral a b where
---   fromIntegral = mkFromIntegral
+mkFromIntegral :: (IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
+mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
 
 -- Reify in ghci:
 --
@@ -111,13 +113,13 @@ runQ $ do
             -- | @since 1.4.0.0
 #endif
             instance FromIntegral $(conT a) Bool where
-              fromIntegral = mkToBool
+              fromIntegral = mkPrimUnary $ PrimToBool integralType bitType
 
 #if __GLASGOW_HASKELL__ >= 900
             -- | @since 1.4.0.0
 #endif
             instance KnownNat n => FromIntegral (Vec n $(conT a)) (Vec n Bool) where
-              fromIntegral = mkToBool
+              fromIntegral = mkPrimUnary $ PrimToBool integralType bitType
           |]
   --
   x <- concat <$> sequence [ thFromIntegral from to | from <- integralTypes, to <- numTypes ]

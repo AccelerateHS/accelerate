@@ -61,7 +61,7 @@ import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Smart                                  hiding ( pack, unpack )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 import qualified Data.Primitive.Vec                                 as Prim

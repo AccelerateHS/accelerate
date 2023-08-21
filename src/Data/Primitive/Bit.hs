@@ -352,7 +352,7 @@ testBitWord8# :: Word8# -> Int# -> Int#
 testBitWord8# x# i# = (x# `andWord8#` bitWord8# i#) `neWord8#` wordToWord8# 0##
 
 bitWord8# :: Int# -> Word8#
-bitWord8# i# = (wordToWord8# 1##) `uncheckedShiftLWord8#` i#
+bitWord8# i# = wordToWord8# 1## `uncheckedShiftLWord8#` i#
 
 complementWord8# :: Word8# -> Word8#
 complementWord8# x# = x# `xorWord8#` wordToWord8# 0xff##

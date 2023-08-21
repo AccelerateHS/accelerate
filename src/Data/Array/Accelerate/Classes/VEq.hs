@@ -32,12 +32,9 @@ import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
-import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-
-import Data.Array.Accelerate.Error
 
 import qualified Data.Primitive.Bit                                 as Prim
 
@@ -45,30 +42,33 @@ import Language.Haskell.TH.Extra                                    hiding ( Typ
 
 import Prelude                                                      hiding ( Eq(..) )
 
-import GHC.Exts
-import GHC.TypeLits
-
 
 -- | Vectorised conjunction: Element-wise returns true if both arguments in
 -- the corresponding lane are True. This is a strict vectorised version of
 -- '(Data.Array.Accelerate.&&)' that always evaluates both arguments.
 --
+-- @since 1.4.0.0
+--
 infixr 3 &&*
 (&&*) :: KnownNat n => Exp (Vec n Bool) -> Exp (Vec n Bool) -> Exp (Vec n Bool)
-(&&*) = mkLAnd
+(&&*) = mkPrimBinary $ PrimLAnd bitType
 
 -- | Vectorised disjunction: Element-wise returns true if either argument
 -- in the corresponding lane is true. This is a strict vectorised version
 -- of '(Data.Array.Accelerate.||)' that always evaluates both arguments.
 --
+-- @since 1.4.0.0
+--
 infixr 2 ||*
 (||*) :: KnownNat n => Exp (Vec n Bool) -> Exp (Vec n Bool) -> Exp (Vec n Bool)
-(||*) = mkLOr
+(||*) = mkPrimBinary $ PrimLOr bitType
 
 -- | Vectorised logical negation
 --
+-- @since 1.4.0.0
+--
 vnot :: KnownNat n => Exp (Vec n Bool) -> Exp (Vec n Bool)
-vnot = mkLNot
+vnot = mkPrimUnary $ PrimLNot bitType
 
 
 infix 4 ==*
@@ -121,8 +121,8 @@ runQ $ do
       mkPrim :: Name -> Q [Dec]
       mkPrim name =
         [d| instance KnownNat n => VEq n $(conT name) where
-              (==*) = mkEq
-              (/=*) = mkNEq
+              (==*) = mkPrimBinary $ PrimEq  scalarType
+              (/=*) = mkPrimBinary $ PrimNEq scalarType
           |]
 
       mkTup :: Word8 -> Q Dec
@@ -137,7 +137,7 @@ runQ $ do
             ctx = (++) <$> mapM (appT [t| Eq |]) ts
                        <*> mapM (appT [t| SIMD $(varT w) |]) ts
 
-            cmp f = [| mkPack (zipWith $f (mkUnpack $(varE x)) (mkUnpack $(varE y))) |]
+            cmp f = [| pack (zipWith $f (unpack $(varE x)) (unpack $(varE y))) |]
         --
         instanceD ctx [t| VEq $(varT w) $res |]
           [ funD (mkName "==*") [ clause [varP x, varP y] (normalB (cmp [| (==) |])) [] ]
@@ -161,6 +161,10 @@ instance KnownNat n => VEq n Z where
   _ /=* _ = vfalse
 
 instance KnownNat n => VEq n Bool where
+  (==*) = mkPrimBinary $ PrimEq  scalarType
+  (/=*) = mkPrimBinary $ PrimNEq scalarType
+
+{--
   (==*) =
     let n = natVal' (proxy# :: Proxy# n)
         --
@@ -200,10 +204,11 @@ instance KnownNat n => VEq n Bool where
     if n <= 64  then cmp @Word64  else
     if n <= 128 then cmp @Word128 else
       internalError "Can not handle SIMD vector types with more than 128 lanes"
+--}
 
 instance (Eq sh, SIMD n sh) => VEq n (sh :. Int) where
-  x ==* y = mkPack (zipWith (==) (mkUnpack x) (mkUnpack y))
-  x /=* y = mkPack (zipWith (/=) (mkUnpack x) (mkUnpack y))
+  x ==* y = pack (zipWith (==) (unpack x) (unpack y))
+  x /=* y = pack (zipWith (/=) (unpack x) (unpack y))
 
 instance KnownNat n => VEq n Ordering where
   x ==* y = mkCoerce x ==* (mkCoerce y :: Exp (Vec n TAG))

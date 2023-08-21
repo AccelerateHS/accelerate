@@ -28,7 +28,7 @@ module Data.Array.Accelerate.Classes.RealFloat (
 
 ) where
 
-import Data.Array.Accelerate.AST                                    ( BitOrMask, PrimMask )
+import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask, PrimMask )
 import Data.Array.Accelerate.Language                               ( (^), cond, while )
 import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
@@ -280,6 +280,15 @@ instance KnownNat n => RealFloat (Vec n Float128) where
   isNegativeZero  = coerce . ieee754_f128_is_negative_zero . mkBitcast'
   isIEEE _        = defaultIsIEEE (undefined :: Exp Float128)
   atan2           = mkAtan2
+
+mkIsNaN :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
+mkIsNaN = mkPrimUnary $ PrimIsNaN floatingType
+
+mkIsInfinite :: (IsFloating (EltR t), BitOrMask (EltR t) ~ EltR b) => Exp t -> Exp b
+mkIsInfinite = mkPrimUnary $ PrimIsInfinite floatingType
+
+mkAtan2 :: IsFloating (EltR t) => Exp t -> Exp t -> Exp t
+mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
 
 
 -- To satisfy superclass constraints

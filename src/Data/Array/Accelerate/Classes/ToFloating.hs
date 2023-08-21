@@ -19,7 +19,9 @@ module Data.Array.Accelerate.Classes.ToFloating (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
@@ -40,8 +42,8 @@ class ToFloating a b where
   -- | General coercion to floating types
   toFloating :: (Num a, Floating b) => Exp a -> Exp b
 
--- instance (Elt a, Elt b, IsNum a, IsFloating b) => ToFloating a b where
---   toFloating = mkToFloating
+mkToFloating :: (IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
+mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
 
 
 -- Generate standard instances explicitly. See also: 'FromIntegral'.

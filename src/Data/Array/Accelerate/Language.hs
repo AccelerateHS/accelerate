@@ -17,13 +17,6 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- We use the dictionary view of overloaded operations (such as arithmetic and
--- bit manipulation) to reify such expressions.  With non-overloaded
--- operations (such as, the logical connectives) and partially overloaded
--- operations (such as comparisons), we use the standard operator names with a
--- \'*\' attached.  We keep the standard alphanumeric names as they can be
--- easily qualified.
---
 
 module Data.Array.Accelerate.Language (
 
@@ -54,7 +47,6 @@ module Data.Array.Accelerate.Language (
   -- ** Stencil specification
   Boundary, Stencil,
   clamp, mirror, wrap, function,
-
 
   -- ** Common stencil types
   Stencil3, Stencil5, Stencil7, Stencil9,
@@ -1475,12 +1467,12 @@ x ^^ n
 -- |Convert a character to an 'Int'.
 --
 ord :: Exp Char -> Exp Int
-ord = mkFromIntegral
+ord = mkPrimUnary $ PrimFromIntegral integralType numType
 
 -- |Convert an 'Int' into a character.
 --
 chr :: Exp Int -> Exp Char
-chr = mkFromIntegral
+chr = mkPrimUnary $ PrimFromIntegral integralType numType
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

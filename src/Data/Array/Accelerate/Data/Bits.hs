@@ -31,6 +31,7 @@ module Data.Array.Accelerate.Data.Bits (
 ) where
 
 import Data.Array.Accelerate.AST                                    ( BitOrMask )
+import Data.Array.Accelerate.AST                                    ( PrimFun(..), BitOrMask )
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
@@ -215,7 +216,7 @@ shiftRDefault
 -- Shift the argument right (signed)
 shiftRADefault :: forall t. (B.FiniteBits t, Num t, Ord t, FromIntegral Int t, IsScalar (EltR t), IsIntegral (EltR t), BitOrMask (EltR t) ~ Bit) => Exp t -> Exp t -> Exp t
 shiftRADefault x i
-  = cond (i >= P.fromIntegral (B.finiteBitSize (undefined::t))) (cond (mkLt x 0) (-1) 0)
+  = cond (i >= P.fromIntegral (B.finiteBitSize (undefined::t))) (cond (x < 0) (-1) 0)
   $ mkBShiftR x i
 
 -- Shift the argument right (unsigned)
@@ -335,6 +336,39 @@ popCnt64 v1 = mkFromIntegral c
     v4 = (v3 + (v3 `unsafeShiftR` 4)) .&. 0X0F0F0F0F0F0F0F0F
     c  = (v4 * 0x0101010101010101) `unsafeShiftR` 56
 --}
+
+mkBAnd :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBAnd = mkPrimBinary $ PrimBAnd integralType
+
+mkBOr :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBOr = mkPrimBinary $ PrimBOr integralType
+
+mkBXor :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBXor = mkPrimBinary $ PrimBXor integralType
+
+mkBNot :: IsIntegral (EltR t) => Exp t -> Exp t
+mkBNot = mkPrimUnary $ PrimBNot integralType
+
+mkBShiftL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
+
+mkBShiftR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
+
+mkBRotateL :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
+
+mkBRotateR :: IsIntegral (EltR t) => Exp t -> Exp t -> Exp t
+mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
+
+mkPopCount :: IsIntegral (EltR t) => Exp t -> Exp t
+mkPopCount = mkPrimUnary $ PrimPopCount integralType
+
+mkCountLeadingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
+mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
+
+mkCountTrailingZeros :: IsIntegral (EltR t) => Exp t -> Exp t
+mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
 
 runQ $
   let
