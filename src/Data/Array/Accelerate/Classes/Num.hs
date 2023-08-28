@@ -108,7 +108,7 @@ runQ $
         [d| instance P.Num (Exp $(conT a)) where
               (+)         = mkPrimBinary $ PrimAdd numType
               (-)         = mkPrimBinary $ PrimSub numType
-              (*)         = mkPrimBinary $ PrimSub numType
+              (*)         = mkPrimBinary $ PrimMul numType
               negate      = mkPrimUnary  $ PrimNeg numType
               abs         = mkPrimUnary  $ PrimAbs numType
               signum      = mkPrimUnary  $ PrimSig numType
@@ -117,7 +117,7 @@ runQ $
             instance KnownNat n => P.Num (Exp (Vec n $(conT a))) where
               (+)         = mkPrimBinary $ PrimAdd numType
               (-)         = mkPrimBinary $ PrimSub numType
-              (*)         = mkPrimBinary $ PrimSub numType
+              (*)         = mkPrimBinary $ PrimMul numType
               negate      = mkPrimUnary  $ PrimNeg numType
               abs         = mkPrimUnary  $ PrimAbs numType
               signum      = mkPrimUnary  $ PrimSig numType
