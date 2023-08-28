@@ -192,9 +192,9 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     Avar ix                 -> pnode (avar ix)
     Alet lhs bnd body       -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc detail context0 aenv bnd
-      (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
-      _ <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc detail context0 aenv1 body
+      (aenv1, a)             <- prettyLetALeftHandSide ident aenv lhs
+      _                      <- mkNode bnd' (Just a)
+      body'                  <- prettyDelayedOpenAcc detail context0 aenv1 body
       return body'
 
     Acond p t e             -> do
@@ -225,6 +225,7 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
 
     Anil                            -> "()"             .$ []
     Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
+    Acoerce _ bR a                  -> "coerce"         .$ [ return $ PDoc ("@" <> pretty (show bR)) [], ppA a ]
     Use repr arr                    -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
     Unit _ e                        -> "unit"           .$ [ ppE e ]
     Generate _ sh f                 -> "generate"       .$ [ ppE sh, ppF f ]

@@ -58,7 +58,7 @@ import GHC.Prim
 -- | A newtype wrapper over 'Bool' whose instances pack bits as efficiently
 -- as possible (8 values per byte). Arrays of 'Bit' use 8x less memory than
 -- arrays of 'Bool' (which stores one value per byte). However, (parallel)
--- random writes are slower.
+-- random writes are (almost certainly) slower.
 --
 newtype Bit = Bit { unBit :: Bool }
   deriving (Eq, Ord, Bounded, Enum, FiniteBits, Bits, Typeable, Generic)

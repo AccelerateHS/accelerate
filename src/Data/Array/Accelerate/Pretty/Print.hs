@@ -195,6 +195,7 @@ prettyPreOpenAcc config ctx prettyAcc extractAcc aenv pacc =
 
 
     Atrace (Message _ _ msg) as bs  -> ppN "atrace"      .$ [ fromString (show msg), ppA as, ppA bs ]
+    Acoerce _ bR a                  -> ppN "coerce"      .$ [ "@" <> pretty (show bR), ppA a ]
     Aforeign _ ff _ a               -> ppN "aforeign"    .$ [ pretty (strForeign ff), ppA a ]
     Awhile p f a                    -> ppN "awhile"      .$ [ ppAF p, ppAF f, ppA a ]
     Use repr arr                    -> ppN "use"         .$ [ prettyArray repr arr ]

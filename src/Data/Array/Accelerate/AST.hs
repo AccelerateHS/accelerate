@@ -81,7 +81,7 @@ module Data.Array.Accelerate.AST (
   -- * Internal AST
   -- ** Array computations
   Afun, PreAfun, OpenAfun, PreOpenAfun(..),
-  Acc, OpenAcc(..), PreOpenAcc(..), Direction(..), Message(..),
+  Acc, OpenAcc(..), PreOpenAcc(..), Direction(..), Message(..), RescaleFactor,
   ALeftHandSide, ArrayVar, ArrayVars,
 
   -- ** Scalar expressions
@@ -205,6 +205,13 @@ data Message a where
           -> Text
           -> Message a
 
+-- Coercing an array to a different type may involve scaling the size of the
+-- array by the given factor. Positive values mean the size of the innermost
+-- dimension is multiplied by that value (i.e. the number of elements in the
+-- array grows by that factor), negative meaning it shrinks.
+--
+type RescaleFactor = INT
+
 -- | Collective array computations parametrised over array variables
 -- represented with de Bruijn indices.
 --
@@ -286,6 +293,21 @@ data PreOpenAcc (acc :: Type -> Type -> Type) aenv a where
               -> acc             aenv arrs1
               -> acc             aenv arrs2
               -> PreOpenAcc  acc aenv arrs2
+
+  -- Reinterpret the bits of the array as a different type. The size of the
+  -- innermost dimension is adjusted as necessary. The old and new sizes must be
+  -- compatible, but this may not be checked; e.g. in the conversion
+  --
+  -- > Array (Z :. n) Float <~~> Array (Z :. m) (Vec 3 Float)
+  --
+  -- then we require
+  --
+  -- > (m, r) = quotRem n 3 and r == 0
+  --
+  Acoerce     :: RescaleFactor
+              -> TypeR b
+              -> acc            aenv (Array (sh, INT) a)
+              -> PreOpenAcc acc aenv (Array (sh, INT) b)
 
   -- Array inlet. Triggers (possibly) asynchronous host->device transfer if
   -- necessary.
@@ -792,6 +814,8 @@ instance HasArraysR acc => HasArraysR (PreOpenAcc acc) where
   arraysR (Apair as bs)               = TupRpair (arraysR as) (arraysR bs)
   arraysR Anil                        = TupRunit
   arraysR (Atrace _ _ bs)             = arraysR bs
+  arraysR (Acoerce _ bR as)           = let ArrayR shR _ = arrayR as
+                                         in arraysRarray shR bR
   arraysR (Apply aR _ _)              = aR
   arraysR (Aforeign r _ _ _)          = r
   arraysR (Acond _ a _)               = arraysR a
@@ -1092,6 +1116,7 @@ rnfPreOpenAcc rnfA pacc =
     Apair as bs               -> rnfA as `seq` rnfA bs
     Anil                      -> ()
     Atrace msg as bs          -> rnfM msg `seq` rnfA as `seq` rnfA bs
+    Acoerce scale bR as       -> scale `seq` rnfTypeR bR `seq` rnfA as
     Apply repr afun acc       -> rnfTupR rnfArrayR repr `seq` rnfAF afun `seq` rnfA acc
     Aforeign repr asm afun a  -> rnfTupR rnfArrayR repr `seq` rnf (strForeign asm) `seq` rnfAF afun `seq` rnfA a
     Acond p a1 a2             -> rnfE p `seq` rnfA a1 `seq` rnfA a2
@@ -1310,6 +1335,7 @@ liftPreOpenAcc liftA pacc =
     Apair as bs               -> [|| Apair $$(liftA as) $$(liftA bs) ||]
     Anil                      -> [|| Anil ||]
     Atrace msg as bs          -> [|| Atrace $$(liftMessage (arraysR as) msg) $$(liftA as) $$(liftA bs) ||]
+    Acoerce scale bR a        -> [|| Acoerce scale $$(liftTypeR bR) $$(liftA a) ||]
     Apply repr f a            -> [|| Apply $$(liftArraysR repr) $$(liftAF f) $$(liftA a) ||]
     Aforeign repr asm f a     -> [|| Aforeign $$(liftArraysR repr) $$(liftForeign asm) $$(liftPreOpenAfun liftA f) $$(liftA a) ||]
     Acond p t e               -> [|| Acond $$(liftE p) $$(liftA t) $$(liftA e) ||]
@@ -1523,6 +1549,7 @@ formatPreAccOp = later $ \case
   Avar (Var _ ix)   -> bformat ("Avar a" % int) (idxToInt ix)
   Use aR a          -> bformat ("Use " % string) (showArrayShort 5 (showsElt (arrayRtype aR)) aR a)
   Atrace{}          -> "Atrace"
+  Acoerce{}         -> "Acoerce"
   Apply{}           -> "Apply"
   Aforeign{}        -> "Aforeign"
   Acond{}           -> "Acond"

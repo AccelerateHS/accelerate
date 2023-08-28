@@ -91,6 +91,7 @@ simplifyPreOpenAcc = \case
   Apair a1 a2                     -> Apair (simplifyOpenAcc a1) (simplifyOpenAcc a2)
   Anil                            -> Anil
   Atrace msg as bs                -> Atrace msg (simplifyOpenAcc as) (simplifyOpenAcc bs)
+  Acoerce scale bR a              -> Acoerce scale bR (simplifyOpenAcc a)
   Apply repr f a                  -> Apply repr (simplifyOpenAfun f) (simplifyOpenAcc a)
   Aforeign repr asm f a           -> Aforeign repr asm (simplifyOpenAfun f) (simplifyOpenAcc a)
   Acond e a1 a2                   -> Acond (simplifyExp e) (simplifyOpenAcc a1) (simplifyOpenAcc a2)

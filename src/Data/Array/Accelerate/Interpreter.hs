@@ -47,7 +47,9 @@ module Data.Array.Accelerate.Interpreter (
 import Data.Array.Accelerate.AST                                    hiding ( Boundary(..) )
 import Data.Array.Accelerate.AST.Environment
 import Data.Array.Accelerate.AST.Var
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Array.Data
+import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
@@ -87,6 +89,7 @@ import Unsafe.Coerce
 import Prelude                                                      hiding ( (!!), sum )
 import qualified Data.Text.IO                                       as T
 
+import GHC.Prim
 import GHC.TypeLits
 
 
@@ -211,6 +214,7 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
     Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
+    Acoerce scale bR acc          -> acoerceOp scale bR (manifest acc)
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -991,6 +995,267 @@ evalOpenExp pexp env aenv =
 
 -- Coercions
 -- ---------
+
+acoerceOp
+    :: HasCallStack
+    => RescaleFactor
+    -> TypeR b
+    -> WithReprs (Array (sh, INT) a)
+    -> WithReprs (Array (sh, INT) b)
+acoerceOp scale bR (TupRsingle (ArrayR shR aR), Array (sz,sh) adata) = (repr', arr')
+  where
+    repr'  = TupRsingle (ArrayR shR bR)
+    arr'   = Array (sz,sh') adata'
+    sh'    = case compare scale 0 of
+               EQ -> sh
+               GT -> sh * scale
+               LT -> let (q,r) = quotRem sh (negate scale)
+                      in boundsCheck "shape mismatch" (r == 0) q
+    adata' = acoerce aR bR adata
+
+    acoerce :: TypeR a -> TypeR b -> ArrayData a -> ArrayData b
+    acoerce TupRunit               TupRunit               ()       = ()
+    acoerce (TupRpair TupRunit aR) bR                     ((), ad) | Just Refl <- matchTypeR aR bR = ad
+    acoerce (TupRpair aR TupRunit) bR                     (ad, ()) | Just Refl <- matchTypeR aR bR = ad
+    acoerce aR                     (TupRpair TupRunit bR) ad       | Just Refl <- matchTypeR aR bR = ((), ad)
+    acoerce aR                     (TupRpair bR TupRunit) ad       | Just Refl <- matchTypeR aR bR = (ad, ())
+    acoerce (TupRpair aR1 aR2)     (TupRpair bR1 bR2)     (a1, a2) = (acoerce aR1 bR1 a1, acoerce aR2 bR2 a2)
+    acoerce (TupRsingle aR)        (TupRsingle bR)        ad       = scalar aR bR ad
+    acoerce _ _ _ = internalError "missing cases for class Acoerce"
+
+    scalar :: ScalarType a -> ScalarType b -> ArrayData a -> ArrayData b
+    scalar (NumScalarType t) = num t
+    scalar (BitScalarType t) = bit t
+
+    num :: NumType a -> ScalarType b -> ArrayData a -> ArrayData b
+    num (IntegralNumType t) = integral t
+    num (FloatingNumType t) = floating t
+
+    bit :: forall a b. BitType a -> ScalarType b -> ArrayData a -> ArrayData b
+    bit = \case
+      TypeBit    -> scalar'
+      TypeMask{} -> scalar'
+      where
+        scalar' :: ScalarType b -> ScalarArrayData a -> ArrayData b
+        scalar' (NumScalarType t) = num' t
+        scalar' (BitScalarType t) = bit' t
+
+        bit' :: BitType b -> ScalarArrayData a -> ArrayData b
+        bit' TypeBit    = castUniqueArray
+        bit' TypeMask{} = castUniqueArray
+
+        num' :: NumType b -> ScalarArrayData a -> ArrayData b
+        num' (IntegralNumType t) = integral' t
+        num' (FloatingNumType t) = floating' t
+
+        integral' :: IntegralType b -> ScalarArrayData a -> ArrayData b
+        integral' = \case
+          SingleIntegralType t   -> single' t
+          VectorIntegralType n t -> vector' n t
+          where
+            single' :: SingleIntegralType b -> ScalarArrayData a -> ArrayData b
+            single' TypeInt8    = castUniqueArray
+            single' TypeInt16   = castUniqueArray
+            single' TypeInt32   = castUniqueArray
+            single' TypeInt64   = castUniqueArray
+            single' TypeInt128  = castUniqueArray
+            single' TypeWord8   = castUniqueArray
+            single' TypeWord16  = castUniqueArray
+            single' TypeWord32  = castUniqueArray
+            single' TypeWord64  = castUniqueArray
+            single' TypeWord128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleIntegralType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeInt8    = castUniqueArray
+            vector' _ TypeInt16   = castUniqueArray
+            vector' _ TypeInt32   = castUniqueArray
+            vector' _ TypeInt64   = castUniqueArray
+            vector' _ TypeInt128  = castUniqueArray
+            vector' _ TypeWord8   = castUniqueArray
+            vector' _ TypeWord16  = castUniqueArray
+            vector' _ TypeWord32  = castUniqueArray
+            vector' _ TypeWord64  = castUniqueArray
+            vector' _ TypeWord128 = castUniqueArray
+
+        floating' :: FloatingType b -> ScalarArrayData a -> ArrayData b
+        floating' = \case
+          SingleFloatingType t   -> single' t
+          VectorFloatingType n t -> vector' n t
+          where
+            single' :: SingleFloatingType b -> ScalarArrayData a -> ArrayData b
+            single' TypeFloat16  = castUniqueArray
+            single' TypeFloat32  = castUniqueArray
+            single' TypeFloat64  = castUniqueArray
+            single' TypeFloat128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleFloatingType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeFloat16  = castUniqueArray
+            vector' _ TypeFloat32  = castUniqueArray
+            vector' _ TypeFloat64  = castUniqueArray
+            vector' _ TypeFloat128 = castUniqueArray
+
+    integral :: forall a b. IntegralType a -> ScalarType b -> ArrayData a -> ArrayData b
+    integral = \case
+      SingleIntegralType t   -> single t
+      VectorIntegralType n t -> vector n t
+      where
+        single :: SingleIntegralType a -> ScalarType b -> ArrayData a -> ArrayData b
+        single TypeInt8    = scalar'
+        single TypeInt16   = scalar'
+        single TypeInt32   = scalar'
+        single TypeInt64   = scalar'
+        single TypeInt128  = scalar'
+        single TypeWord8   = scalar'
+        single TypeWord16  = scalar'
+        single TypeWord32  = scalar'
+        single TypeWord64  = scalar'
+        single TypeWord128 = scalar'
+
+        vector :: (KnownNat n, a ~ Vec n c) => Proxy# n -> SingleIntegralType c -> ScalarType b -> ArrayData (Vec n c) -> ArrayData b
+        vector _ TypeInt8    = scalar'
+        vector _ TypeInt16   = scalar'
+        vector _ TypeInt32   = scalar'
+        vector _ TypeInt64   = scalar'
+        vector _ TypeInt128  = scalar'
+        vector _ TypeWord8   = scalar'
+        vector _ TypeWord16  = scalar'
+        vector _ TypeWord32  = scalar'
+        vector _ TypeWord64  = scalar'
+        vector _ TypeWord128 = scalar'
+
+        scalar' :: ScalarType b -> ScalarArrayData a -> ArrayData b
+        scalar' (NumScalarType t) = num' t
+        scalar' (BitScalarType t) = bit' t
+
+        bit' :: BitType b -> ScalarArrayData a -> ArrayData b
+        bit' TypeBit    = castUniqueArray
+        bit' TypeMask{} = castUniqueArray
+
+        num' :: NumType b -> ScalarArrayData a -> ArrayData b
+        num' (IntegralNumType t) = integral' t
+        num' (FloatingNumType t) = floating' t
+
+        integral' :: IntegralType b -> ScalarArrayData a -> ArrayData b
+        integral' = \case
+          SingleIntegralType t   -> single' t
+          VectorIntegralType n t -> vector' n t
+          where
+            single' :: SingleIntegralType b -> ScalarArrayData a -> ArrayData b
+            single' TypeInt8    = castUniqueArray
+            single' TypeInt16   = castUniqueArray
+            single' TypeInt32   = castUniqueArray
+            single' TypeInt64   = castUniqueArray
+            single' TypeInt128  = castUniqueArray
+            single' TypeWord8   = castUniqueArray
+            single' TypeWord16  = castUniqueArray
+            single' TypeWord32  = castUniqueArray
+            single' TypeWord64  = castUniqueArray
+            single' TypeWord128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleIntegralType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeInt8    = castUniqueArray
+            vector' _ TypeInt16   = castUniqueArray
+            vector' _ TypeInt32   = castUniqueArray
+            vector' _ TypeInt64   = castUniqueArray
+            vector' _ TypeInt128  = castUniqueArray
+            vector' _ TypeWord8   = castUniqueArray
+            vector' _ TypeWord16  = castUniqueArray
+            vector' _ TypeWord32  = castUniqueArray
+            vector' _ TypeWord64  = castUniqueArray
+            vector' _ TypeWord128 = castUniqueArray
+
+        floating' :: FloatingType b -> ScalarArrayData a -> ArrayData b
+        floating' = \case
+          SingleFloatingType t   -> single' t
+          VectorFloatingType n t -> vector' n t
+          where
+            single' :: SingleFloatingType b -> ScalarArrayData a -> ArrayData b
+            single' TypeFloat16  = castUniqueArray
+            single' TypeFloat32  = castUniqueArray
+            single' TypeFloat64  = castUniqueArray
+            single' TypeFloat128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleFloatingType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeFloat16  = castUniqueArray
+            vector' _ TypeFloat32  = castUniqueArray
+            vector' _ TypeFloat64  = castUniqueArray
+            vector' _ TypeFloat128 = castUniqueArray
+
+    floating :: forall a b. FloatingType a -> ScalarType b -> ArrayData a -> ArrayData b
+    floating = \case
+      SingleFloatingType t   -> single t
+      VectorFloatingType n t -> vector n t
+      where
+        single :: SingleFloatingType a -> ScalarType b -> ArrayData a -> ArrayData b
+        single TypeFloat16   = scalar'
+        single TypeFloat32   = scalar'
+        single TypeFloat64   = scalar'
+        single TypeFloat128  = scalar'
+
+        vector :: (KnownNat n, a ~ Vec n c) => Proxy# n -> SingleFloatingType c -> ScalarType b -> ArrayData (Vec n c) -> ArrayData b
+        vector _ TypeFloat16   = scalar'
+        vector _ TypeFloat32   = scalar'
+        vector _ TypeFloat64   = scalar'
+        vector _ TypeFloat128  = scalar'
+
+        scalar' :: ScalarType b -> ScalarArrayData a -> ArrayData b
+        scalar' (NumScalarType t) = num' t
+        scalar' (BitScalarType t) = bit' t
+
+        bit' :: BitType b -> ScalarArrayData a -> ArrayData b
+        bit' TypeBit    = castUniqueArray
+        bit' TypeMask{} = castUniqueArray
+
+        num' :: NumType b -> ScalarArrayData a -> ArrayData b
+        num' (IntegralNumType t) = integral' t
+        num' (FloatingNumType t) = floating' t
+
+        integral' :: IntegralType b -> ScalarArrayData a -> ArrayData b
+        integral' = \case
+          SingleIntegralType t   -> single' t
+          VectorIntegralType n t -> vector' n t
+          where
+            single' :: SingleIntegralType b -> ScalarArrayData a -> ArrayData b
+            single' TypeInt8    = castUniqueArray
+            single' TypeInt16   = castUniqueArray
+            single' TypeInt32   = castUniqueArray
+            single' TypeInt64   = castUniqueArray
+            single' TypeInt128  = castUniqueArray
+            single' TypeWord8   = castUniqueArray
+            single' TypeWord16  = castUniqueArray
+            single' TypeWord32  = castUniqueArray
+            single' TypeWord64  = castUniqueArray
+            single' TypeWord128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleIntegralType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeInt8    = castUniqueArray
+            vector' _ TypeInt16   = castUniqueArray
+            vector' _ TypeInt32   = castUniqueArray
+            vector' _ TypeInt64   = castUniqueArray
+            vector' _ TypeInt128  = castUniqueArray
+            vector' _ TypeWord8   = castUniqueArray
+            vector' _ TypeWord16  = castUniqueArray
+            vector' _ TypeWord32  = castUniqueArray
+            vector' _ TypeWord64  = castUniqueArray
+            vector' _ TypeWord128 = castUniqueArray
+
+        floating' :: FloatingType b -> ScalarArrayData a -> ArrayData b
+        floating' = \case
+          SingleFloatingType t   -> single' t
+          VectorFloatingType n t -> vector' n t
+          where
+            single' :: SingleFloatingType b -> ScalarArrayData a -> ArrayData b
+            single' TypeFloat16  = castUniqueArray
+            single' TypeFloat32  = castUniqueArray
+            single' TypeFloat64  = castUniqueArray
+            single' TypeFloat128 = castUniqueArray
+
+            vector' :: KnownNat n => Proxy# n -> SingleFloatingType c -> ScalarArrayData a -> ArrayData (Vec n c)
+            vector' _ TypeFloat16  = castUniqueArray
+            vector' _ TypeFloat32  = castUniqueArray
+            vector' _ TypeFloat64  = castUniqueArray
+            vector' _ TypeFloat128 = castUniqueArray
+
 
 -- Coercion between two scalar types. We require that the size of the source and
 -- destination values are equal (this is not checked at this point).

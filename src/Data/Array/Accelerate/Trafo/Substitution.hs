@@ -683,6 +683,7 @@ rebuildPreOpenAcc k av acc =
     Apair as bs               -> Apair           <$> k av as <*> k av bs
     Anil                      -> pure Anil
     Atrace msg as bs          -> Atrace msg      <$> k av as <*> k av bs
+    Acoerce s bR a            -> Acoerce s bR    <$> k av a
     Apply repr f a            -> Apply repr      <$> rebuildAfun k av f <*> k av a
     Acond p t e               -> Acond           <$> rebuildOpenExp (pure . IE) av' p <*> k av t <*> k av e
     Awhile p f a              -> Awhile          <$> rebuildAfun k av p <*> rebuildAfun k av f <*> k av a

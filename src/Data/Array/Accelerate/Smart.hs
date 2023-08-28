@@ -60,7 +60,9 @@ module Data.Array.Accelerate.Smart (
   select,
 
   -- ** Type coercions
-  mkBitcast, mkCoerce, Coerce(..),
+  mkBitcast,
+  mkCoerce, Coerce(..),
+  mkAcoerce, Acoerce(..),
 
   -- ** Miscellaneous
   ($$), ($$$), ($$$$), ($$$$$),
@@ -73,7 +75,7 @@ module Data.Array.Accelerate.Smart (
 ) where
 
 
-import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..), PrimBool, PrimMaybe, PrimFun(..), primFunType )
+import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..), RescaleFactor, PrimBool, PrimMaybe, PrimFun(..), primFunType )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Error
@@ -351,6 +353,11 @@ data PreSmartAcc acc exp as where
                 -> acc arrs2
                 -> PreSmartAcc acc exp arrs2
 
+  Acoerce       :: RescaleFactor
+                -> TypeR b
+                -> acc (Array (sh, INT) a)
+                -> PreSmartAcc acc exp (Array (sh, INT) b)
+
   Use           :: ArrayR (Array sh e)
                 -> Array sh e
                 -> PreSmartAcc acc exp (Array sh e)
@@ -450,12 +457,6 @@ data PreSmartAcc acc exp as where
                 -> PreBoundary acc exp (Array sh b)
                 -> acc (Array sh b)
                 -> PreSmartAcc acc exp (Array sh c)
-
-  -- Coerce        :: ShapeR sh
-  --               -> TypeR a
-  --               -> TypeR b
-  --               -> acc (Array sh a)
-  --               -> PreSmartAcc acc exp (Array sh b)
 
 
 -- Embedded expressions of the surface language
@@ -815,8 +816,10 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                    PairIdxRight -> t2
     Aprj _ _                  -> error "Ejector seat? You're joking!"
     Atrace _ _ a              -> arraysR a
+    Acoerce _ bR a            -> let ArrayR shR _ = arrayR a
+                                  in TupRsingle $ ArrayR shR bR
     Use repr _                -> TupRsingle repr
-    Unit aR _                 -> TupRsingle $ ArrayR ShapeRz $ aR
+    Unit aR _                 -> TupRsingle $ ArrayR ShapeRz aR
     Generate repr _ _         -> TupRsingle repr
     Reshape shr _ a           -> let ArrayR _ aR = arrayR a
                                  in  TupRsingle $ ArrayR shr aR
@@ -1244,6 +1247,90 @@ instance Coerce a (a, ()) where
   mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
 
 
+mkAcoerce
+    :: forall b a sh. (Acoerce (EltR a) (EltR b))
+    => Acc (Sugar.Array (sh :. Int) a)
+    -> Acc (Sugar.Array (sh :. Int) b)
+mkAcoerce (Acc a) =
+  let ArrayR _ aR = arrayR a
+      (bR, sz)    = mkAcoerce' @(EltR a) aR
+   in Acc $ SmartAcc (Acoerce sz bR a)
+
+class Acoerce a b where
+  mkAcoerce' :: TypeR a -> (TypeR b, RescaleFactor)
+
+instance {-# OVERLAPS #-} (IsScalar a, IsScalar b) => Acoerce a b where
+  mkAcoerce' _ =
+    let ta = scalarType @a
+        tb = scalarType @b
+        sa = scalar ta
+        sb = scalar tb
+        sz = case compare sa sb of
+               EQ -> 0
+               GT ->          sa `quot` sb
+               LT -> negate $ sb `quot` sa
+        --
+        scalar :: ScalarType t -> RescaleFactor
+        scalar (NumScalarType t) = num t
+        scalar (BitScalarType t) = bit t
+
+        bit :: BitType t -> RescaleFactor
+        bit TypeBit      = 1
+        bit (TypeMask n) = fromInteger (natVal' n)
+
+        num :: NumType t -> RescaleFactor
+        num (IntegralNumType t) = integral t
+        num (FloatingNumType t) = floating t
+
+        integral :: IntegralType t -> RescaleFactor
+        integral (VectorIntegralType n t) = fromInteger (natVal' n) * integral (SingleIntegralType t)
+        integral (SingleIntegralType t)   = case t of
+          TypeInt  n -> fromIntegral n
+          TypeWord n -> fromIntegral n
+
+        floating :: FloatingType t -> RescaleFactor
+        floating (VectorFloatingType n t) = fromInteger (natVal' n) * floating (SingleFloatingType t)
+        floating (SingleFloatingType t)   = case t of
+          TypeFloat16  -> 16
+          TypeFloat32  -> 32
+          TypeFloat64  -> 64
+          TypeFloat128 -> 128
+    in
+    (TupRsingle tb, sz)
+
+-- TODO: Make this a compile time error. This should be possible with type
+-- families, but GHC seems to have problems normalising the BitSize of 'Vec's
+-- (and the GHC.TypeLits.Normalise package unfortunately does not seem to help).
+--
+instance (Acoerce a1 b1, Acoerce a2 b2) => Acoerce (a1, a2) (b1, b2) where
+  mkAcoerce' (TupRpair a1 a2) =
+    let (b1, s1) = mkAcoerce' a1
+        (b2, s2) = mkAcoerce' a2
+    in
+    if s1 == s2
+       then (TupRpair b1 b2, s1)
+       else error $ formatToString ("Could not coerce type `" % formatTypeR % "' to `" % formatTypeR % "'")
+                        (TupRpair a1 a2) (TupRpair b1 b2)
+  mkAcoerce' _ = error "impossible"
+
+instance Acoerce ((), a) a where
+  mkAcoerce' (TupRpair TupRunit a) = (a, 0)
+  mkAcoerce' _                     = error "impossible"
+
+instance Acoerce (a, ()) a where
+  mkAcoerce' (TupRpair a TupRunit) = (a, 0)
+  mkAcoerce' _                     = error "impossible"
+
+instance Acoerce a ((), a) where
+  mkAcoerce' a = (TupRpair TupRunit a, 0)
+
+instance Acoerce a (a, ()) where
+  mkAcoerce' a = (TupRpair a TupRunit, 0)
+
+instance Acoerce a a where
+  mkAcoerce' a = (a, 0)
+
+
 -- Auxiliary functions
 -- --------------------
 
@@ -1361,6 +1448,7 @@ formatPreAccOp = later $ \case
   Stencil{}           -> "Stencil"
   Stencil2{}          -> "Stencil2"
   Aforeign{}          -> "Aforeign"
+  Acoerce{}           -> "Acoerce"
 
 formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
 formatPreExpOp = later $ \case

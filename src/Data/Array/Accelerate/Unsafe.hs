@@ -1,4 +1,8 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 -- |
 -- Module      : Data.Array.Accelerate.Unsafe
 -- Copyright   : [2009..2020] The Accelerate Team
@@ -23,10 +27,16 @@ module Data.Array.Accelerate.Unsafe (
 
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Array
+import Data.Array.Accelerate.Sugar.Shape
 
 
--- | The function 'coerce' allows you to convert a value between any two types
--- whose underlying representations have the same bit size at each component.
+-- | The class 'Coercible' reinterprets the bits of a value or array of values
+-- as that of a different type.
+--
+-- At the expression level, this allows you to convert a value between any two
+-- types whose underlying representations have the same bit size at each
+-- component.
 --
 -- For example:
 --
@@ -41,11 +51,38 @@ import Data.Array.Accelerate.Sugar.Elt
 -- abstract type to the concrete type by dropping the extra @()@ from the
 -- representation, and vice-versa.
 --
--- The type class 'Coerce' assures that there is a coercion between the two
--- types.
+-- At the array level this may also entail changing the size of the innermost
+-- dimension.
 --
--- @since 1.2.0.0
+-- For example:
 --
-coerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
-coerce = mkCoerce
+-- > coerce (x :: Acc (Vector Float)) :: Acc (Vector (Complex Float))
+--
+-- will result in an array with half as many elements, as each element now
+-- consists of two values (the real and imaginary values laid out consecutively
+-- in memory, and now interpreted as a single packed 'Vec 2 Float'). For this to
+-- be safe, the size of 'x' must therefore be even.
+--
+-- Note that when applied at the array level 'coerce' prevents array fusion.
+-- Therefore if the bit size of the source and target value types is the same,
+-- then:
+--
+-- > map f . coerce . map g
+--
+-- will result in two kernels being executed, whereas:
+--
+-- > map f . map coerce . map g
+--
+-- will fuse into a single kernel.
+--
+-- @since 1.4.0.0
+--
+class Coercible f a b where
+  coerce :: f a -> f b
+
+instance Acoerce (EltR a) (EltR b) => Coercible Acc (Array (sh :. Int) a) (Array (sh :. Int) b) where
+  coerce = mkAcoerce
+
+instance Coerce (EltR a) (EltR b) => Coercible Exp a b where
+  coerce = mkCoerce
 

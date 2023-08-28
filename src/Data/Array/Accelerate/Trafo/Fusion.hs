@@ -178,6 +178,7 @@ manifest config (OpenAcc pacc) =
     Apair a1 a2             -> Apair (manifest config a1) (manifest config a2)
     Anil                    -> Anil
     Atrace msg a1 a2        -> Atrace msg (manifest config a1) (manifest config a2)
+    Acoerce scale bR a      -> Acoerce scale bR (manifest config a)
     Apply repr f a          -> apply repr (cvtAF f) (manifest config a)
     Aforeign repr ff f a    -> Aforeign repr ff (cvtAF f) (manifest config a)
 
@@ -364,12 +365,13 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- duplication. SEE: [Sharing vs. Fusion]
     --
     Alet lhs bnd body   -> aletD embedAcc elimAcc lhs bnd body
-    Anil                -> done $ Anil
     Acond p at ae       -> acondD matchAcc embedAcc (cvtE p) at ae
+    Anil                -> done $ Anil
     Apply aR f a        -> done $ Apply aR (cvtAF f) (cvtA a)
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Apair a1 a2         -> done $ Apair (cvtA a1) (cvtA a2)
     Atrace msg a1 a2    -> done $ Atrace msg (cvtA a1) (cvtA a2)
+    Acoerce scale bR a  -> done $ Acoerce scale bR (cvtA a)
     Aforeign aR ff f a  -> done $ Aforeign aR ff (cvtAF f) (cvtA a)
     -- Collect s           -> collectD s
 
@@ -1549,6 +1551,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Anil                    -> Anil
         Atrace msg a b          -> Atrace msg (cvtA a) (cvtA b)
+        Acoerce scale bR a      -> Acoerce scale bR (cvtA a)
         Apair a1 a2             -> Apair (cvtA a1) (cvtA a2)
         Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
         Apply repr f a          -> Apply repr (cvtAF f) (cvtA a)
