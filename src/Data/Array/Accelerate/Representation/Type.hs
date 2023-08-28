@@ -47,7 +47,11 @@ data TupR s a where
   TupRsingle :: s a                  -> TupR s a
   TupRpair   :: TupR s a -> TupR s b -> TupR s (a, b)
 
-deriving instance (forall a. Show (s a)) => Show (TupR s t)
+instance (forall a. Show (s a)) => Show (TupR s t) where
+  show = \case
+    TupRunit     -> "()"
+    TupRsingle t -> show t
+    TupRpair a b -> "(" ++ show a ++ "," ++ show b ++ ")"
 
 formatTypeR :: Format r (TypeR a -> r)
 formatTypeR = later $ \case
