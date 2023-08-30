@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE EmptyCase           #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE LambdaCase          #-}
@@ -672,4 +673,50 @@ floatingDict TypeFloat128 = FloatingDict
 infixr 0 $$
 ($$) :: (b -> a) -> (c -> d -> b) -> c -> d -> a
 (f $$ g) x y = f (g x y)
+
+#if __GLASGOW_HASKELL__ < 904
+int64ToWord64# :: Int# -> Word#
+int64ToWord64# = int2Word#
+
+word64ToInt64# :: Word# -> Int#
+word64ToInt64# = word2Int#
+#endif
+
+#if __GLASGOW_HASKELL__ < 902
+wordToWord8# :: Word# -> Word#
+wordToWord8# x = x
+
+wordToWord16# :: Word# -> Word#
+wordToWord16# x = x
+
+wordToWord32# :: Word# -> Word#
+wordToWord32# x = x
+
+word8ToWord# :: Word# -> Word#
+word8ToWord# x = x
+
+word16ToWord# :: Word# -> Word#
+word16ToWord# x = x
+
+word32ToWord# :: Word# -> Word#
+word32ToWord# x = x
+
+int8ToWord8# :: Int# -> Word#
+int8ToWord8# = int2Word#
+
+int16ToWord16# :: Int# -> Word#
+int16ToWord16# = int2Word#
+
+int32ToWord32# :: Int# -> Word#
+int32ToWord32# = int2Word#
+
+word8ToInt8# :: Word# -> Int#
+word8ToInt8# = word2Int#
+
+word16ToInt16# :: Word# -> Int#
+word16ToInt16# = word2Int#
+
+word32ToInt32# :: Word# -> Int#
+word32ToInt32# = word2Int#
+#endif
 
