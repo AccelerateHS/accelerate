@@ -41,7 +41,7 @@ module Data.Array.Accelerate.Interpreter (
   run, run1, runN,
 
   -- Internal (hidden)
-  evalPrim, evalBitcastScalar, atraceOp,
+  evalPrim, evalBitcastScalar, atraceOp, acoerceOp,
 
 ) where
 

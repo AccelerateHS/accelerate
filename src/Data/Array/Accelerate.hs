@@ -51,7 +51,7 @@
 --   reference implementation defining the semantics of the Accelerate language
 --
 -- * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>:
---   implementation supporting parallel execution on multicore CPUs (e.g. x86).
+--   implementation supporting parallel execution on multicore CPUs (e.g. x86-64, AARCH64).
 --
 -- * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>:
 --   implementation supporting parallel execution on CUDA-capable NVIDIA GPUs.
@@ -700,4 +700,3 @@ arrayReshape = S.reshape
 --  * <https://hackage.haskell.org/package/accelerate-io-serialise accelerate-io-serialise>: binary serialisation of arrays using <https://hackage.haskell.org/package/serialise serialise>
 --  * <https://hackage.haskell.org/package/accelerate-io-vector accelerate-io-vector>: efficient boxed and unboxed one-dimensional arrays
 --
-
