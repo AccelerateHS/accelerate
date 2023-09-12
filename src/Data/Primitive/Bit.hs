@@ -240,12 +240,12 @@ toList (BitMask (Vec ba#)) = concat (unpack 0# [])
           let q#    = quotInt# i# 8#
               w#    = indexWord8Array# ba# q#
               lim#  = minInt# 8# (n# -# i#)
-              w8 j# = if isTrue# (j# <# lim#)
-                         then let b# = testBitWord8# w# (7# -# j#)
-                               in Bit (isTrue# b#) : w8 (j# +# 1#)
-                         else []
+              w8 j# acc' =
+                if isTrue# (j# <# lim#)
+                   then w8 (j# +# 1#) (Bit (isTrue# (testBitWord8# w# j#)) : acc')
+                   else acc'
           in
-          unpack (i# +# 8#) (w8 0# : acc)
+          unpack (i# +# 8#) (w8 0# [] : acc)
       | otherwise = acc
 
 {-# INLINE fromList #-}
@@ -260,14 +260,14 @@ fromList bits = case byteArrayFromListN bytes (pack bits' []) of
     pack [] acc = acc
     pack xs acc =
       let (h,t) = splitAt 8 xs
-          w     = w8 7 0 h
+          w     = w8 0 0 h
        in
        pack t (w : acc)
 
     w8 :: Int -> Word8 -> [Bit] -> Word8
     w8 !_ !w []             = w
-    w8 !i !w (Bit True :bs) = w8 (i-1) (setBit w i) bs
-    w8 !i !w (Bit False:bs) = w8 (i-1) w            bs
+    w8 !i !w (Bit True :bs) = w8 (i+1) (setBit w i) bs
+    w8 !i !w (Bit False:bs) = w8 (i+1) w            bs
 
 {-# INLINE extract #-}
 extract :: forall n. KnownNat n => BitMask n -> Int -> Bit
