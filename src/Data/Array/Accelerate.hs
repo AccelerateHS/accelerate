@@ -372,7 +372,7 @@ module Data.Array.Accelerate (
   fst, afst, snd, asnd, curry, uncurry,
 
   -- *** SIMD vectors
-  splat, insert, extract, shuffle,
+  splat, pack, unpack, insert, extract, shuffle,
 
   -- *** Flow control
   (?), select, match, cond, while, iterate,
