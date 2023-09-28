@@ -1266,7 +1266,7 @@ instance {-# OVERLAPS #-} (IsScalar a, IsScalar b) => Acoerce a b where
         sa = scalar ta
         sb = scalar tb
         sz = case compare sa sb of
-               EQ -> 0
+               EQ -> 0  -- TLM: reuse this value for something else? rescale of ±1 achieves the same thing
                GT ->          sa `quot` sb
                LT -> negate $ sb `quot` sa
         --

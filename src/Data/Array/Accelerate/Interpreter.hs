@@ -215,7 +215,8 @@ evalOpenAcc (AST.Manifest pacc) aenv =
                                      (TupRpair r1 r2, (a1, a2))
     Anil                          -> (TupRunit, ())
     Atrace msg as bs              -> unsafePerformIO $ manifest bs <$ atraceOp msg (snd $ manifest as)
-    Acoerce scale bR acc          -> acoerceOp scale bR (manifest acc)
+    Acoerce scale bR acc          -> let (TupRsingle (ArrayR shR aR), as) = manifest acc
+                                      in (TupRsingle (ArrayR shR bR), acoerceOp scale aR bR as)
     Apply repr afun acc           -> (repr, evalOpenAfun afun aenv $ snd $ manifest acc)
     Aforeign repr _ afun acc      -> (repr, evalOpenAfun afun Empty $ snd $ manifest acc)
     Acond p acc1 acc2
@@ -1000,12 +1001,12 @@ evalOpenExp pexp env aenv =
 acoerceOp
     :: HasCallStack
     => RescaleFactor
+    -> TypeR a
     -> TypeR b
-    -> WithReprs (Array (sh, INT) a)
-    -> WithReprs (Array (sh, INT) b)
-acoerceOp scale bR (TupRsingle (ArrayR shR aR), Array (sz,sh) adata) = (repr', arr')
+    -> Array (sh, INT) a
+    -> Array (sh, INT) b
+acoerceOp scale aR bR (Array (sz,sh) adata) = arr'
   where
-    repr'  = TupRsingle (ArrayR shR bR)
     arr'   = Array (sz,sh') adata'
     sh'    = case compare scale 0 of
                EQ -> sh
