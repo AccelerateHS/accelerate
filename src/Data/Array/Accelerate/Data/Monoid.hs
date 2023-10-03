@@ -1,16 +1,17 @@
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms       #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE ViewPatterns           #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ >= 806
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE UndecidableInstances   #-}
 #endif
 -- |
 -- Module      : Data.Array.Accelerate.Data.Monoid
@@ -30,8 +31,8 @@ module Data.Array.Accelerate.Data.Monoid (
 
   Monoid(..), (<>),
 
-  Sum(..), pattern Sum_,
-  Product(..), pattern Product_,
+  Sum, pattern Sum,
+  Product, pattern Product,
 
 ) where
 
@@ -49,30 +50,45 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Function
-import Data.Monoid                                                  hiding ( (<>) )
-import Data.Semigroup
+import Data.Monoid                                                  ( Monoid(..), Product, Sum )
+import Data.Semigroup                                               ( Semigroup(..) )
 import qualified Prelude                                            as P
+import qualified Data.Monoid                                        as P
 
 
 -- Sum: Monoid under addition
 -- --------------------------
 
-pattern Sum_ :: Elt a => Exp a -> Exp (Sum a)
-pattern Sum_ x = Pattern x
-{-# COMPLETE Sum_ #-}
+pattern Sum :: IsSum a b => a -> b
+pattern Sum x <- (matchSum -> x)
+  where Sum = buildSum
+{-# COMPLETE Sum :: Sum #-}
+{-# COMPLETE Sum :: Exp #-}
+
+class IsSum a b | b -> a where
+  matchSum :: b -> a
+  buildSum :: a -> b
+
+instance IsSum a (Sum a) where
+  matchSum = P.getSum
+  buildSum = P.Sum
+
+instance Elt a => IsSum (Exp a) (Exp (Sum a)) where
+  matchSum (Pattern x) = x
+  buildSum x = Pattern x
 
 instance Elt a => Elt (Sum a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Sum a) where
   type Plain (Sum a) = Sum (Plain a)
-  lift (Sum a)       = Sum_ (lift a)
+  lift (Sum a)       = Sum (lift a)
 
 instance Elt a => Unlift Exp (Sum (Exp a)) where
-  unlift (Sum_ a) = Sum a
+  unlift (Sum a) = Sum a
 
 instance Bounded a => P.Bounded (Exp (Sum a)) where
-  minBound = Sum_ minBound
-  maxBound = Sum_ maxBound
+  minBound = Sum minBound
+  maxBound = Sum maxBound
 
 instance Num a => P.Num (Exp (Sum a)) where
   (+)             = lift2 ((+) :: Sum (Exp a) -> Sum (Exp a) -> Sum (Exp a))
@@ -84,45 +100,59 @@ instance Num a => P.Num (Exp (Sum a)) where
   fromInteger x   = lift (P.fromInteger x :: Sum (Exp a))
 
 instance Eq a => Eq (Sum a) where
-  (==) = lift2 ((==) `on` getSum)
-  (/=) = lift2 ((/=) `on` getSum)
+  (==) = lift2 ((==) `on` P.getSum)
+  (/=) = lift2 ((/=) `on` P.getSum)
 
 instance Ord a => Ord (Sum a) where
-  (<)     = lift2 ((<) `on` getSum)
-  (>)     = lift2 ((>) `on` getSum)
-  (<=)    = lift2 ((<=) `on` getSum)
-  (>=)    = lift2 ((>=) `on` getSum)
-  min x y = Sum_ $ lift2 (min `on` getSum) x y
-  max x y = Sum_ $ lift2 (max `on` getSum) x y
+  (<)     = lift2 ((<) `on` P.getSum)
+  (>)     = lift2 ((>) `on` P.getSum)
+  (<=)    = lift2 ((<=) `on` P.getSum)
+  (>=)    = lift2 ((>=) `on` P.getSum)
+  min x y = Sum $ lift2 (min `on` P.getSum) x y
+  max x y = Sum $ lift2 (max `on` P.getSum) x y
 
 instance Num a => Monoid (Exp (Sum a)) where
   mempty = 0
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Sum a)) where
-  (<>)              = (+)
-  stimes n (Sum_ x) = Sum_ $ P.fromIntegral n * x
+  (<>)             = (+)
+  stimes n (Sum x) = Sum $ P.fromIntegral n * x
 
 
 -- Product: Monoid under multiplication
 -- ------------------------------------
 
-pattern Product_ :: Elt a => Exp a -> Exp (Product a)
-pattern Product_ x = Pattern x
-{-# COMPLETE Product_ #-}
+pattern Product :: IsProduct a b => a -> b
+pattern Product x <- (matchProduct -> x)
+  where Product = buildProduct
+{-# COMPLETE Product :: Product #-}
+{-# COMPLETE Product :: Exp     #-}
+
+class IsProduct a b | b -> a where
+  matchProduct :: b -> a
+  buildProduct :: a -> b
+
+instance IsProduct a (Product a) where
+  matchProduct = P.getProduct
+  buildProduct = P.Product
+
+instance Elt a => IsProduct (Exp a) (Exp (Product a)) where
+  matchProduct (Pattern x) = x
+  buildProduct x = Pattern x
 
 instance Elt a => Elt (Product a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Product a) where
   type Plain (Product a) = Product (Plain a)
-  lift (Product a)       = Product_ (lift a)
+  lift (Product a)       = Product (lift a)
 
 instance Elt a => Unlift Exp (Product (Exp a)) where
-  unlift (Product_ a) = Product a
+  unlift (Product a) = Product a
 
 instance Bounded a => P.Bounded (Exp (Product a)) where
-  minBound = Product_ minBound
-  maxBound = Product_ maxBound
+  minBound = Product minBound
+  maxBound = Product maxBound
 
 instance Num a => P.Num (Exp (Product a)) where
   (+)             = lift2 ((+) :: Product (Exp a) -> Product (Exp a) -> Product (Exp a))
@@ -134,24 +164,24 @@ instance Num a => P.Num (Exp (Product a)) where
   fromInteger x   = lift (P.fromInteger x :: Product (Exp a))
 
 instance Eq a => Eq (Product a) where
-  (==) = lift2 ((==) `on` getProduct)
-  (/=) = lift2 ((/=) `on` getProduct)
+  (==) = lift2 ((==) `on` P.getProduct)
+  (/=) = lift2 ((/=) `on` P.getProduct)
 
 instance Ord a => Ord (Product a) where
-  (<)     = lift2 ((<) `on` getProduct)
-  (>)     = lift2 ((>) `on` getProduct)
-  (<=)    = lift2 ((<=) `on` getProduct)
-  (>=)    = lift2 ((>=) `on` getProduct)
-  min x y = Product_ $ lift2 (min `on` getProduct) x y
-  max x y = Product_ $ lift2 (max `on` getProduct) x y
+  (<)     = lift2 ((<) `on` P.getProduct)
+  (>)     = lift2 ((>) `on` P.getProduct)
+  (<=)    = lift2 ((<=) `on` P.getProduct)
+  (>=)    = lift2 ((>=) `on` P.getProduct)
+  min x y = Product $ lift2 (min `on` P.getProduct) x y
+  max x y = Product $ lift2 (max `on` P.getProduct) x y
 
 instance Num a => Monoid (Exp (Product a)) where
   mempty = 1
 
 -- | @since 1.2.0.0
 instance Num a => Semigroup (Exp (Product a)) where
-  (<>)                  = (*)
-  stimes n (Product_ x) = Product_ $ x ^ (P.fromIntegral n :: Exp Int)
+  (<>)                 = (*)
+  stimes n (Product x) = Product $ x ^ (P.fromIntegral n :: Exp Int)
 
 
 -- Instances for unit and tuples

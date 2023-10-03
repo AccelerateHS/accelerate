@@ -1,17 +1,18 @@
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PatternSynonyms       #-}
-{-# LANGUAGE RebindableSyntax      #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE TypeApplications      #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE CPP                    #-}
+{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PatternSynonyms        #-}
+{-# LANGUAGE RebindableSyntax       #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE ViewPatterns           #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 #if __GLASGOW_HASKELL__ >= 806
-{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE UndecidableInstances   #-}
 #endif
 -- |
 -- Module      : Data.Array.Accelerate.Data.Semigroup
@@ -31,8 +32,8 @@ module Data.Array.Accelerate.Data.Semigroup (
 
   Semigroup(..),
 
-  Min(..), pattern Min_,
-  Max(..), pattern Max_,
+  Min, pattern Min,
+  Max, pattern Max,
 
 ) where
 
@@ -47,26 +48,41 @@ import Data.Array.Accelerate.Sugar.Elt
 
 import Data.Function
 import Data.Monoid                                                  ( Monoid(..) )
-import Data.Semigroup
+import Data.Semigroup                                               ( Semigroup(..), Min, Max )
 import qualified Prelude                                            as P
+import qualified Data.Semigroup                                     as P
 
 
-pattern Min_ :: Elt a => Exp a -> Exp (Min a)
-pattern Min_ x = Pattern x
-{-# COMPLETE Min_ #-}
+pattern Min :: IsMin a b => a -> b
+pattern Min x <- (matchMin -> x)
+  where Min = buildMin
+{-# COMPLETE Min :: Min #-}
+{-# COMPLETE Min :: Exp #-}
+
+class IsMin a b | b -> a where
+  matchMin :: b -> a
+  buildMin :: a -> b
+
+instance IsMin a (Min a) where
+  matchMin = P.getMin
+  buildMin = P.Min
+
+instance Elt a => IsMin (Exp a) (Exp (Min a)) where
+  matchMin (Pattern x) = x
+  buildMin x = Pattern x
 
 instance Elt a => Elt (Min a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Min a) where
   type Plain (Min a) = Min (Plain a)
-  lift (Min a)       = Min_ (lift a)
+  lift (Min a)       = Min (lift a)
 
 instance Elt a => Unlift Exp (Min (Exp a)) where
-  unlift (Min_ a) = Min a
+  unlift (Min a) = Min a
 
 instance Bounded a => P.Bounded (Exp (Min a)) where
-  minBound = lift $ Min (minBound :: Exp a)
-  maxBound = lift $ Min (maxBound :: Exp a)
+  minBound = Min minBound
+  maxBound = Min maxBound
 
 instance Num a => P.Num (Exp (Min a)) where
   (+)           = lift2 ((+) :: Min (Exp a) -> Min (Exp a) -> Min (Exp a))
@@ -78,42 +94,56 @@ instance Num a => P.Num (Exp (Min a)) where
   fromInteger x = lift (P.fromInteger x :: Min (Exp a))
 
 instance Eq a => Eq (Min a) where
-  (==) = lift2 ((==) `on` getMin)
-  (/=) = lift2 ((/=) `on` getMin)
+  (==) = lift2 ((==) `on` P.getMin)
+  (/=) = lift2 ((/=) `on` P.getMin)
 
 instance Ord a => Ord (Min a) where
-  (<)     = lift2 ((<) `on` getMin)
-  (>)     = lift2 ((>) `on` getMin)
-  (<=)    = lift2 ((<=) `on` getMin)
-  (>=)    = lift2 ((>=) `on` getMin)
-  min x y = lift . Min $ lift2 (min `on` getMin) x y
-  max x y = lift . Min $ lift2 (max `on` getMin) x y
+  (<)     = lift2 ((<) `on` P.getMin)
+  (>)     = lift2 ((>) `on` P.getMin)
+  (<=)    = lift2 ((<=) `on` P.getMin)
+  (>=)    = lift2 ((>=) `on` P.getMin)
+  min x y = Min $ lift2 (min `on` P.getMin) x y
+  max x y = Min $ lift2 (max `on` P.getMin) x y
 
 instance Ord a => Semigroup (Exp (Min a)) where
-  x <> y  = lift . Min $ lift2 (min `on` getMin) x y
-  stimes  = stimesIdempotent
+  x <> y  = Min $ lift2 (min `on` P.getMin) x y
+  stimes  = P.stimesIdempotent
 
 instance (Ord a, Bounded a) => Monoid (Exp (Min a)) where
   mempty  = maxBound
   mappend = (<>)
 
 
-pattern Max_ :: Elt a => Exp a -> Exp (Max a)
-pattern Max_ x = Pattern x
-{-# COMPLETE Max_ #-}
+pattern Max :: IsMax a b => a -> b
+pattern Max x <- (matchMax -> x)
+  where Max = buildMax
+{-# COMPLETE Max :: Max #-}
+{-# COMPLETE Max :: Exp #-}
+
+class IsMax a b | b -> a where
+  matchMax :: b -> a
+  buildMax :: a -> b
+
+instance IsMax a (Max a) where
+  matchMax = P.getMax
+  buildMax = P.Max
+
+instance Elt a => IsMax (Exp a) (Exp (Max a)) where
+  matchMax (Pattern x) = x
+  buildMax x = Pattern x
 
 instance Elt a => Elt (Max a)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Max a) where
   type Plain (Max a) = Max (Plain a)
-  lift (Max a)       = Max_ (lift a)
+  lift (Max a)       = Max (lift a)
 
 instance Elt a => Unlift Exp (Max (Exp a)) where
-  unlift (Max_ a) = Max a
+  unlift (Max a) = Max a
 
 instance Bounded a => P.Bounded (Exp (Max a)) where
-  minBound = Max_ minBound
-  maxBound = Max_ maxBound
+  minBound = Max minBound
+  maxBound = Max maxBound
 
 instance Num a => P.Num (Exp (Max a)) where
   (+)           = lift2 ((+) :: Max (Exp a) -> Max (Exp a) -> Max (Exp a))
@@ -125,20 +155,20 @@ instance Num a => P.Num (Exp (Max a)) where
   fromInteger x = lift (P.fromInteger x :: Max (Exp a))
 
 instance Eq a => Eq (Max a) where
-  (==) = lift2 ((==) `on` getMax)
-  (/=) = lift2 ((/=) `on` getMax)
+  (==) = lift2 ((==) `on` P.getMax)
+  (/=) = lift2 ((/=) `on` P.getMax)
 
 instance Ord a => Ord (Max a) where
-  (<)     = lift2 ((<) `on` getMax)
-  (>)     = lift2 ((>) `on` getMax)
-  (<=)    = lift2 ((<=) `on` getMax)
-  (>=)    = lift2 ((>=) `on` getMax)
-  min x y = Max_ $ lift2 (min `on` getMax) x y
-  max x y = Max_ $ lift2 (max `on` getMax) x y
+  (<)     = lift2 ((<) `on` P.getMax)
+  (>)     = lift2 ((>) `on` P.getMax)
+  (<=)    = lift2 ((<=) `on` P.getMax)
+  (>=)    = lift2 ((>=) `on` P.getMax)
+  min x y = Max $ lift2 (min `on` P.getMax) x y
+  max x y = Max $ lift2 (max `on` P.getMax) x y
 
 instance Ord a => Semigroup (Exp (Max a)) where
-  x <> y  = Max_ $ lift2 (max `on` getMax) x y
-  stimes  = stimesIdempotent
+  x <> y  = Max $ lift2 (max `on` P.getMax) x y
+  stimes  = P.stimesIdempotent
 
 instance (Ord a, Bounded a) => Monoid (Exp (Max a)) where
   mempty  = minBound
