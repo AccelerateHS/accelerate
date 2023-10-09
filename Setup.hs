@@ -1,4 +1,4 @@
-
+{-# LANGUAGE MultiWayIf #-}
 module Main where
 
 import Distribution.Extra.Doctest
@@ -74,9 +74,21 @@ postBuildHook args build_flags pkg_desc lbi = do
 
           setupMessage verbosity (printf "Building executable '%s' for" hs_exe) (package pkg_desc)
 
-          -- symlink the C build directory into the HS build directories
-          exists <- doesDirectoryExist c_tmpdir
-          unless exists $ createDirectoryLink ("../../../../.." </> hs_tmpdir) c_tmpdir
+          -- Symlink the C build directory into the HS build directories.
+          -- We need to take care here: the symlink might already exist but point
+          -- to a nonexistent path, in which case doesDirectoryExist returns False
+          -- but it is still a symlink.
+          whenM (pathIsSymbolicLinkSafe c_tmpdir) $ removeFile c_tmpdir
+          objExists <- doesPathExist c_tmpdir
+          objExistsDir <- doesDirectoryExist c_tmpdir
+          createdObjSymlink <-
+            if | objExists && not objExistsDir ->
+                  dieNoVerbosity $ c_tmpdir ++ " is a file; remove this to continue compiling accelerate."
+               | objExistsDir ->
+                  return False
+               | otherwise -> do
+                  createDirectoryLink ("../../../../.." </> hs_tmpdir) c_tmpdir
+                  return True
 
           -- prevent having to re-link every time we build the library
           executable <- doesFileExist (hs_builddir </> hs_exe)
@@ -89,7 +101,14 @@ postBuildHook args build_flags pkg_desc lbi = do
           renameFile (c_builddir </> c_exe) (hs_builddir </> hs_exe)
 
           -- clean up after ourselves
-          unless exists $ removeDirectoryLink c_tmpdir
+          when createdObjSymlink $ removeDirectoryLink c_tmpdir
 
   postBuild simpleUserHooks args build_flags pkg_desc lbi
 
+-- | Returns True if there is a symbolic link at the given path, False otherwise.
+pathIsSymbolicLinkSafe :: FilePath -> IO Bool
+pathIsSymbolicLinkSafe fp =
+  handleDoesNotExist False $ pathIsSymbolicLink fp
+
+whenM :: IO Bool -> IO () -> IO ()
+whenM mcond action = mcond >>= \cond -> when cond action
