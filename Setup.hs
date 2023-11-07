@@ -87,7 +87,13 @@ postBuildHook args build_flags pkg_desc lbi = do
                | objExistsDir ->
                   return False
                | otherwise -> do
-                  createDirectoryLink ("../../../../.." </> hs_tmpdir) c_tmpdir
+                  let target = "../../../../.." </> hs_tmpdir
+                  -- Make the symlink
+                  createDirectoryLink target c_tmpdir
+                  -- Create that temp directory if necessary. This is required if the accelerate
+                  -- package is built as a dependency from another cabal project, because then only
+                  -- the library is built, and not the executables such as tracy-capture.
+                  createDirectoryIfMissing True target
                   return True
 
           -- prevent having to re-link every time we build the library
