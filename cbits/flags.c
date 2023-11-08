@@ -253,7 +253,6 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     bool in_acc = false;
     for (int i = 1; i < argc; ++i) {
       if (NULL == argv[i]) {  /* see above */
-        // fprintf(stderr, "process_options: NULL argument, bailing at i=%d\n", i);
         argc = i;
         break;
       }
@@ -309,16 +308,6 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     }
   }
 
-  // fprintf(stderr, "process_options: parsed %d: (num_cl_options=%d)\n", argc - 1, num_cl_options);
-  // for (int i = 1; i < argc; i++) {
-  //   switch (cl_option_type[i]) {
-  //     case PROC_OPT_OTHER:  fprintf(stderr, "- [%d] other: <%s>\n", i, argv[i]); break;
-  //     case PROC_OPT_MARKER: fprintf(stderr, "- [%d] marker: <%s>\n", i, argv[i]); break;
-  //     case PROC_OPT_OPT:    fprintf(stderr, "- [%d] option: <%s>\n", i, argv[i]); break;
-  //     default: abort();
-  //   }
-  // }
-
   /* Gather options from the ACCELERATE_FLAGS environment variable. Note that we
    * must not modify this variable, otherwise subsequent invocations of getenv()
    * will get the modified version.
@@ -373,12 +362,9 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
       }
     }
 
-    // fprintf(stderr, "process_options: passing on from CL:\n");
-
     /* command line flags */
     for (int i = 1; i < argc; ++i) {
       if (cl_option_type[i] == PROC_OPT_OPT) {
-        // fprintf(stderr, "- <%s>\n", argv[i]);
         *r++ = argv[i];
       }
     }
@@ -412,11 +398,6 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
       }
     }
   }
-
-  // fprintf(stderr, "process_options: after masking:\n");
-  // for (int i = 1; i < argc; i++) {
-  //   fprintf(stderr, "- <%s>\n", argv[i]);
-  // }
 
   /* cleanup */
   if (cl_option_type) free(cl_option_type);
