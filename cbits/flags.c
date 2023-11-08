@@ -222,14 +222,14 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
    * between +ACC ... [-ACC] (similar to the Haskell RTS options).
    *
    * First we collect the total number of command-line options. We also
-   * already what occurs where in the argument list, so that we only have to
-   * do the complicated parsing once.
+   * already store what occurs where in the argument list, so that we only have
+   * to do the complicated parsing once.
    *
    * Note that this function may well be called twice; this probably has
    * something to do with runtime loading of binaries in e.g.
    * accelerate-llvm-native (but I'm not sure). If so, we have already parsed
    * out +ACC stuff the first time round, and the GHC RTS has already removed
-   * the +RTS flags including the -RTS drop-ins that we replaceed the +ACC
+   * the +RTS flags including the -RTS drop-ins that we replaced the +ACC
    * arguments with. It does that by reordering arguments so that the non-RTS
    * ones come first, and by replacing the first not-an-argument-anymore with
    * NULL.
