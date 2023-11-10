@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include "flags.h"
@@ -212,37 +213,100 @@ static void parse_options(int argc, char *argv[])
  * The input 'argv' vector is mutated to remove the entries processed by this
  * module. This prevents the flags from interfering with the regular Haskell
  * program (in the same way as the RTS options). Note however that since we can
- * not update the 'argc' length of the vector, the removed entries are simply
- * set to NULL (and moved to the end of the vector).
+ * not update the 'argc' length of the vector, the removed entries are replaced
+ * with "-RTS" (see the comment at the end of the function).
  */
 __attribute__((constructor)) void process_options(int argc, char *argv[])
 {
-  int i;
-
   /* Find the command line options which need to be processed. These will be
    * between +ACC ... [-ACC] (similar to the Haskell RTS options).
    *
-   * Note that this only recognises a single +ACC ... -ACC group. Should we be
-   * able to handle multiple (disjoint) groups of flags? To do this properly we
-   * probably want to collect the arguments (from both sources) into a linked
-   * list. This would not be particularly difficult, just tedious... \:
+   * First we collect the total number of command-line options. We also
+   * already store what occurs where in the argument list, so that we only have
+   * to do the complicated parsing once.
+   *
+   * Note that this function may well be called twice; this probably has
+   * something to do with runtime loading of binaries in e.g.
+   * accelerate-llvm-native (but I'm not sure). If so, we have already parsed
+   * out +ACC stuff the first time round, and the GHC RTS has already removed
+   * the +RTS flags including the -RTS drop-ins that we replaced the +ACC
+   * arguments with. It does that by reordering arguments so that the non-RTS
+   * ones come first, and by replacing the first not-an-argument-anymore with
+   * NULL.
+   *
+   * Long story short, if we encounter a NULL, we have encountered what is,
+   * according to the GHC RTS, de-facto the end of the argument list. So we
+   * update argc and exit the loop.
    */
-  int cl_start;
-  int cl_end;
-  int num_cl_options = 0;
+  typedef enum {
+    PROC_OPT_OTHER,   /* some non-accelerate argument */
+    PROC_OPT_MARKER,  /* +ACC or -ACC (not +/-RTS!) */
+    PROC_OPT_OPT,     /* an option for accelerate */
+  } cl_option_t;
+  cl_option_t *cl_option_type = malloc(argc * sizeof(cl_option_t));
+  if (argc > 0) cl_option_type[0] = PROC_OPT_OTHER;
 
-  for (cl_start = 1; cl_start < argc; ++cl_start) {
-    if (0 == strncmp("+ACC", argv[cl_start], 4)) {
-      break;
+  int num_cl_options = 0;  /* the number of PROC_OPT_OPT */
+
+  {
+    bool in_rts = false;
+    bool in_acc = false;
+    for (int i = 1; i < argc; ++i) {
+      if (NULL == argv[i]) {  /* see above */
+        argc = i;
+        break;
+      }
+
+      /* the default, overriden in the case analysis below */
+      cl_option_type[i] = PROC_OPT_OTHER;
+
+      if (0 == strncmp("+RTS", argv[i], 4)) {
+        if (in_acc) {
+          fprintf(stderr,
+            "accelerate: error: a '+RTS' option found inside a '+ACC' block. Close the '+ACC'\n"
+            "block using '-ACC' before opening a '+RTS' block. Continuing, assuming a '-ACC'.\n"
+          );
+          in_acc = false;
+        }
+        in_rts = true;  /* let's not error on +RTS +RTS */
+
+      } else if (0 == strncmp("-RTS", argv[i], 4)) {
+        if (in_acc) {
+          fprintf(stderr,
+            "accelerate: error: a '-RTS' option found inside a '+ACC' block. Close the '+ACC'\n"
+            "block using '-ACC' before opening a '+RTS' block. Continuing, assuming a '-ACC'.\n"
+          );
+          in_acc = false;
+        }
+        in_rts = false;
+
+      } else if (0 == strncmp("+ACC", argv[i], 4)) {
+        if (in_rts) {
+          fprintf(stderr,
+            "accelerate: error: a '+ACC' option found inside a '+RTS' block. Close the '+RTS'\n"
+            "block using '-RTS' before opening a '+ACC' block.\n"
+          );
+        } else {
+          in_acc = true;
+          cl_option_type[i] = PROC_OPT_MARKER;
+        }
+
+      } else if (0 == strncmp("-ACC", argv[i], 4)) {
+        /* inside +RTS, just leave them alone; the GHC RTS will error for us */
+        if (!in_rts) {
+          cl_option_type[i] = PROC_OPT_MARKER;
+          in_acc = false;
+        }
+
+      } else {
+        /* a normal argument */
+        if (in_acc) {
+          cl_option_type[i] = PROC_OPT_OPT;
+          ++num_cl_options;
+        }
+      }
     }
   }
-
-  for (cl_end = cl_start+1; cl_end < argc; ++cl_end) {
-    if (0 == strncmp("-ACC", argv[cl_end], 4)) {
-      break;
-    }
-  }
-  num_cl_options = cl_end-cl_start-1;
 
   /* Gather options from the ACCELERATE_FLAGS environment variable. Note that we
    * must not modify this variable, otherwise subsequent invocations of getenv()
@@ -272,18 +336,18 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
    * command line options for parsing. The command line options are placed at
    * the end, so that they may override environment options.
    */
-  int    argc2 = num_cl_options + num_env_options + 1;
+  int    argc2 = 1 + num_env_options + num_cl_options;
   char** argv2 = NULL;
 
   if (argc2 > 1) {
-    char*  p = env;
     char** r = argv2 = malloc(argc2 * sizeof(char*));
 
     /* program name */
     *r++ = argv[0];
 
     /* environment variables */
-    if (p) {
+    if (env) {
+      char* p = env;
       while (*p) {
         while (*p && isspace(*p)) ++p;
 
@@ -299,8 +363,11 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
     }
 
     /* command line flags */
-    for (i = cl_start+1; i < cl_end; ++i)
-      *r++ = argv[i];
+    for (int i = 1; i < argc; ++i) {
+      if (cl_option_type[i] == PROC_OPT_OPT) {
+        *r++ = argv[i];
+      }
+    }
 
     /* finally process command lines */
     parse_options(argc2, argv2);
@@ -311,32 +378,30 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
    * but we can pull a small sleight-of-hand by rewriting them to -RTS, so that
    * they will be deleted by the GHC RTS when it is initialised.
    *
-   * In this method, we can also updated them in place, without permuting the
+   * In this method, we can also update them in place, without permuting the
    * order of the options to place the (now unused) Accelerate flags at the end
-   * of the vector. This does create a slight change in behaviour though, where
-   * the application will become more lenient to the user not (correctly)
-   * closing the RTS group, for example:
+   * of the vector.
    *
-   * > ./foo +RTS -... +ACC -... -ACC
-   *
-   * is rewritten to:
-   *
-   * > ./foo +RTS -... -RTS -... -RTS
-   *
-   * Previously, since the RTS group was not terminated correctly the GHC RTS
-   * would complain that the trailing Accelerate options (+ACC -...) were
-   * unknown RTS flags.
+   * Note that we do not have to worry about a +RTS +ACC situation where this
+   * replacement would change semantics, because we did not parse +ACC arguments
+   * inside a +RTS block above.
    */
-  for (i = cl_start; i < cl_end+1 && i < argc; ++i) {
-    if (strlen(argv[i]) >= 4) {
-      strcpy(argv[i], "-RTS");
-    } else {
-      argv[i][0] = '\0';
+  for (int i = 1; i < argc; ++i) {
+    /* Replace markers _and_ accelerate options. */
+    if (cl_option_type[i] == PROC_OPT_MARKER ||
+          cl_option_type[i] == PROC_OPT_OPT) {
+      if (strlen(argv[i]) >= 4) {
+        strcpy(argv[i], "-RTS");
+      } else {
+        argv[i] = malloc(5);  /* 4 + the zero byte */
+        strcpy(argv[i], "-RTS");
+      }
     }
   }
 
   /* cleanup */
+  if (cl_option_type) free(cl_option_type);
   if (argv2) free(argv2);
-  if (env)   free(env);
+  if (env) free(env);
 }
 
