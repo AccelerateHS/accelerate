@@ -30,7 +30,7 @@ preConfHook args config_flags = do
       debugging = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
 
   when debugging $ do
-    yes <- doesFileExist "cbits/tracy/TracyClient.cpp"
+    yes <- doesFileExist "cbits/tracy/public/TracyClient.cpp"
     if yes
       then
         -- Nix (and apparently future versions of stack) automatically update
