@@ -38,6 +38,7 @@ import GHC.Generics
 import qualified GHC.Exts                                           as GHC
 
 -- $setup
+-- >>> import Prelude
 -- >>> :seti -XOverloadedLists
 
 
@@ -153,7 +154,7 @@ infixl 9 !
 --
 infixl 9 !!
 (!!) :: forall sh e. Elt e => Array sh e -> Int -> e
-(!!) (Array arr) i = toElt $ R.linearIndexArray (eltR @e) arr i
+(!!) (Array arr) i = toElt $ R.linearIndexArray (eltR @e) arr (fromIntegral i)
 
 -- | Create an array from its representation function, applied at each
 -- index of the array
@@ -174,8 +175,8 @@ fromFunctionM sh f = Array <$> R.fromFunctionM (arrayR @sh @e) (fromElt sh) f'
 
 -- | Create a vector from the concatenation of the given list of vectors
 --
-concatVectors :: forall e. Elt e => [Vector e] -> Vector e
-concatVectors = toArr . R.concatVectors (eltR @e) . map fromArr
+-- concatVectors :: forall e. Elt e => [Vector e] -> Vector e
+-- concatVectors = toArr . R.concatVectors (eltR @e) . map fromArr
 
 -- | Creates a new, uninitialized Accelerate array
 --

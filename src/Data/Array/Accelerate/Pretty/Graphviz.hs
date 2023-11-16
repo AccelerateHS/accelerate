@@ -192,9 +192,9 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
     Avar ix                 -> pnode (avar ix)
     Alet lhs bnd body       -> do
       bnd'@(PNode ident _ _) <- prettyDelayedOpenAcc detail context0 aenv bnd
-      (aenv1, a) <- prettyLetALeftHandSide ident aenv lhs
-      _ <- mkNode bnd' (Just a)
-      body' <- prettyDelayedOpenAcc detail context0 aenv1 body
+      (aenv1, a)             <- prettyLetALeftHandSide ident aenv lhs
+      _                      <- mkNode bnd' (Just a)
+      body'                  <- prettyDelayedOpenAcc detail context0 aenv1 body
       return body'
 
     Acond p t e             -> do
@@ -216,14 +216,16 @@ prettyDelayedOpenAcc detail ctx aenv (Manifest pacc) =
       p'    <- prettyDelayedAfun detail aenv p
       f'    <- prettyDelayedAfun detail aenv f
       --
-      let PNode _ (Leaf (Nothing,xb)) fvs = x'
-          loop                            = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
-      return $ PNode ident (Leaf (Nothing,loop)) fvs
+      case x' of
+        PNode _ (Leaf (Nothing,xb)) fvs -> let loop = nest 2 (sep ["awhile", pretty p', pretty f', xb ])
+                                            in return $ PNode ident (Leaf (Nothing,loop)) fvs
+        _                               -> internalError "unexpected node"
 
     Apair a1 a2              -> genNodeId >>= prettyDelayedApair detail aenv a1 a2
 
     Anil                            -> "()"             .$ []
     Atrace (Message _ _ msg) as bs  -> "atrace"         .$ [ return $ PDoc (pretty msg) [], ppA as, ppA bs ]
+    Acoerce _ bR a                  -> "coerce"         .$ [ return $ PDoc ("@" <> pretty (show bR)) [], ppA a ]
     Use repr arr                    -> "use"            .$ [ return $ PDoc (prettyArray repr arr) [] ]
     Unit _ e                        -> "unit"           .$ [ ppE e ]
     Generate _ sh f                 -> "generate"       .$ [ ppE sh, ppF f ]
@@ -519,20 +521,21 @@ fvOpenExp env aenv = fv
     fv Evar{}                   = []
     fv Undef{}                  = []
     fv Const{}                  = []
-    fv PrimConst{}              = []
     fv (PrimApp _ x)            = fv x
-    fv (Pair e1 e2)             = concat [ fv e1, fv e2]
+    fv (Pair e1 e2)             = concat [ fv e1, fv e2 ]
     fv Nil                      = []
-    fv (VecPack   _ e)          = fv e
-    fv (VecUnpack _ e)          = fv e
+    fv (Extract _ _ v i)        = concat [ fv v, fv i ]
+    fv (Insert _ _ v i x)       = concat [ fv v, fv i, fv x ]
+    fv (Shuffle _ _ x y i)      = concat [ fv x, fv y, fv i ]
+    fv (Select _ m x y)         = concat [ fv m, fv x, fv y ]
     fv (IndexSlice _ slix sh)   = concat [ fv slix, fv sh ]
     fv (IndexFull _ slix sh)    = concat [ fv slix, fv sh ]
     fv (ToIndex _ sh ix)        = concat [ fv sh, fv ix ]
     fv (FromIndex _ sh ix)      = concat [ fv sh, fv ix ]
     fv (ShapeSize _ sh)         = fv sh
     fv Foreign{}                = []
-    fv (Case e rhs def)         = concat [ fv e, concat [ fv c | (_,c) <- rhs ], maybe [] fv def ]
+    fv (Case _ e rhs def)       = concat [ fv e, concat [ fv c | (_,c) <- rhs ], maybe [] fv def ]
     fv (Cond p t e)             = concat [ fv p, fv t, fv e ]
     fv (While p f x)            = concat [ fvF p, fvF f, fv x ]
-    fv (Coerce _ _ e)           = fv e
+    fv (Bitcast _ _ e)          = fv e
 

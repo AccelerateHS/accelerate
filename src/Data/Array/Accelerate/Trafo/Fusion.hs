@@ -178,6 +178,7 @@ manifest config (OpenAcc pacc) =
     Apair a1 a2             -> Apair (manifest config a1) (manifest config a2)
     Anil                    -> Anil
     Atrace msg a1 a2        -> Atrace msg (manifest config a1) (manifest config a2)
+    Acoerce scale bR a      -> Acoerce scale bR (manifest config a)
     Apply repr f a          -> apply repr (cvtAF f) (manifest config a)
     Aforeign repr ff f a    -> Aforeign repr ff (cvtAF f) (manifest config a)
 
@@ -364,12 +365,13 @@ embedPreOpenAcc config matchAcc embedAcc elimAcc pacc
     -- duplication. SEE: [Sharing vs. Fusion]
     --
     Alet lhs bnd body   -> aletD embedAcc elimAcc lhs bnd body
-    Anil                -> done $ Anil
     Acond p at ae       -> acondD matchAcc embedAcc (cvtE p) at ae
+    Anil                -> done $ Anil
     Apply aR f a        -> done $ Apply aR (cvtAF f) (cvtA a)
     Awhile p f a        -> done $ Awhile (cvtAF p) (cvtAF f) (cvtA a)
     Apair a1 a2         -> done $ Apair (cvtA a1) (cvtA a2)
     Atrace msg a1 a2    -> done $ Atrace msg (cvtA a1) (cvtA a2)
+    Acoerce scale bR a  -> done $ Acoerce scale bR (cvtA a)
     Aforeign aR ff f a  -> done $ Aforeign aR ff (cvtAF f) (cvtA a)
     -- Collect s           -> collectD s
 
@@ -1472,19 +1474,20 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Undef tR                        -> Undef tR
         Nil                             -> Nil
         Pair e1 e2                      -> Pair (cvtE e1) (cvtE e2)
-        VecPack vR e                    -> VecPack vR (cvtE e)
-        VecUnpack vR e                  -> VecUnpack vR (cvtE e)
+        Extract vR iR v i               -> Extract vR iR (cvtE v) (cvtE i)
+        Insert vR iR v i x              -> Insert vR iR (cvtE v) (cvtE i) (cvtE x)
+        Shuffle vR iR x y i             -> Shuffle vR iR (cvtE x) (cvtE y) (cvtE i)
+        Select eR m x y                 -> Select eR (cvtE m) (cvtE x) (cvtE y)
         IndexSlice x ix sh              -> IndexSlice x (cvtE ix) (cvtE sh)
         IndexFull x ix sl               -> IndexFull x (cvtE ix) (cvtE sl)
         ToIndex shR' sh ix              -> ToIndex shR' (cvtE sh) (cvtE ix)
         FromIndex shR' sh i             -> FromIndex shR' (cvtE sh) (cvtE i)
-        Case e rhs def                  -> Case (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
+        Case eR e rhs def               -> Case eR (cvtE e) (over (mapped . _2) cvtE rhs) (fmap cvtE def)
         Cond p t e                      -> Cond (cvtE p) (cvtE t) (cvtE e)
-        PrimConst c                     -> PrimConst c
         PrimApp g x                     -> PrimApp g (cvtE x)
         ShapeSize shR' sh               -> ShapeSize shR' (cvtE sh)
         While p f x                     -> While (replaceF sh' f' avar p) (replaceF sh' f' avar f) (cvtE x)
-        Coerce t1 t2 e                  -> Coerce t1 t2 (cvtE e)
+        Bitcast t1 t2 e                 -> Bitcast t1 t2 (cvtE e)
 
         Shape a
           | Just Refl <- matchVar a avar -> Stats.substitution "replaceE/shape" sh'
@@ -1500,10 +1503,10 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
           , Lam lhs (Body b) <- f'
                                         -> Stats.substitution "replaceE/!!" . cvtE
                                          $ Let lhs
-                                               (Let (LeftHandSideSingle scalarTypeInt) i
+                                               (Let (LeftHandSideSingle scalarType) i
                                                     $ FromIndex shR (weakenE (weakenSucc' weakenId) sh')
                                                     $ Evar
-                                                    $ Var scalarTypeInt ZeroIdx)
+                                                    $ Var scalarType ZeroIdx)
                                                b
           | otherwise                   -> LinearIndex a (cvtE i)
 
@@ -1548,6 +1551,7 @@ aletD' embedAcc elimAcc (LeftHandSideSingle ArrayR{}) (Embed env1 cc1) (Embed en
         Acond p at ae           -> Acond (cvtE p) (cvtA at) (cvtA ae)
         Anil                    -> Anil
         Atrace msg a b          -> Atrace msg (cvtA a) (cvtA b)
+        Acoerce scale bR a      -> Acoerce scale bR (cvtA a)
         Apair a1 a2             -> Apair (cvtA a1) (cvtA a2)
         Awhile p f a            -> Awhile (cvtAF p) (cvtAF f) (cvtA a)
         Apply repr f a          -> Apply repr (cvtAF f) (cvtA a)
@@ -1673,23 +1677,23 @@ identity t
   | DeclareVars lhs _ value <- declareVars t
   = Lam lhs $ Body $ expVars $ value weakenId
 
-toIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> Int)
+toIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (sh -> INT)
 toIndex shR sh
   | DeclareVars lhs k value <- declareVars $ shapeType shR
   = Lam lhs $ Body $ ToIndex shR (weakenE k sh) $ expVars $ value weakenId
 
-fromIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (Int -> sh)
+fromIndex :: ShapeR sh -> OpenExp env aenv sh -> OpenFun env aenv (INT -> sh)
 fromIndex shR sh
-  = Lam (LeftHandSideSingle scalarTypeInt)
+  = Lam (LeftHandSideSingle scalarType)
   $ Body
   $ FromIndex shR (weakenE (weakenSucc' weakenId) sh)
   $ Evar
-  $ Var scalarTypeInt ZeroIdx
+  $ Var scalarType ZeroIdx
 
 intersect :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 intersect = mkShapeBinary f
   where
-    f a b = PrimApp (PrimMin singleType) $ Pair a b
+    f a b = PrimApp (PrimMin scalarType) $ Pair a b
 
 -- union :: ShapeR sh -> OpenExp env aenv sh -> OpenExp env aenv sh -> OpenExp env aenv sh
 -- union = mkShapeBinary f
@@ -1697,7 +1701,7 @@ intersect = mkShapeBinary f
 --     f a b = PrimApp (PrimMax singleType) $ Pair a b
 
 mkShapeBinary
-    :: (forall env'. OpenExp env' aenv Int -> OpenExp env' aenv Int -> OpenExp env' aenv Int)
+    :: (forall env'. OpenExp env' aenv INT -> OpenExp env' aenv INT -> OpenExp env' aenv INT)
     -> ShapeR sh
     -> OpenExp env aenv sh
     -> OpenExp env aenv sh
@@ -1744,8 +1748,13 @@ indexArray v@(Var (ArrayR shR _) _)
   | DeclareVars lhs _ value <- declareVars $ shapeType shR
   = Lam lhs $ Body $ Index v $ expVars $ value weakenId
 
-linearIndex :: ArrayVar aenv (Array sh e) -> Fun aenv (Int -> e)
-linearIndex v = Lam (LeftHandSideSingle scalarTypeInt) $ Body $ LinearIndex v $ Evar $ Var scalarTypeInt ZeroIdx
+linearIndex :: ArrayVar aenv (Array sh e) -> Fun aenv (INT -> e)
+linearIndex v
+  = Lam (LeftHandSideSingle scalarType)
+  $ Body
+  $ LinearIndex v
+  $ Evar
+  $ Var scalarType ZeroIdx
 
 
 extractOpenAcc :: ExtractAcc OpenAcc

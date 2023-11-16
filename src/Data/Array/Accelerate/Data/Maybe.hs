@@ -28,11 +28,12 @@
 
 module Data.Array.Accelerate.Data.Maybe (
 
-  Maybe(..), pattern Nothing_, pattern Just_,
+  Maybe, pattern Nothing, pattern Just,
   maybe, isJust, isNothing, fromMaybe, fromJust, justs,
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -53,7 +54,6 @@ import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 
 import Data.Function                                                ( (&) )
-import Data.Maybe                                                   ( Maybe(..) )
 import Prelude                                                      ( ($), (.) )
 
 
@@ -65,7 +65,7 @@ isNothing = not . isJust
 -- | Returns 'True' if the argument is of the form @Just _@
 --
 isJust :: Elt a => Exp (Maybe a) -> Exp Bool
-isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp Nil
+isJust (Exp x) = mkExp $ PrimApp (PrimToBool integralType bitType) (SmartExp $ Prj PairIdxLeft x)
   -- TLM: This is a sneaky hack because we know that the tag bits for Just
   -- and True are identical.
 
@@ -75,8 +75,8 @@ isJust (Exp x) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft x) `Pair` SmartExp
 --
 fromMaybe :: Elt a => Exp a -> Exp (Maybe a) -> Exp a
 fromMaybe d = match \case
-  Nothing_ -> d
-  Just_ x  -> x
+  Nothing -> d
+  Just x  -> x
 
 -- | The 'fromJust' function extracts the element out of the 'Just' constructor.
 -- If the argument was actually 'Nothing', you will get an undefined value
@@ -92,8 +92,8 @@ fromJust (Exp x) = Exp $ SmartExp (PairIdxRight `Prj` SmartExp (PairIdxRight `Pr
 --
 maybe :: (Elt a, Elt b) => Exp b -> (Exp a -> Exp b) -> Exp (Maybe a) -> Exp b
 maybe d f = match \case
-  Nothing_ -> d
-  Just_ x  -> f x
+  Nothing -> d
+  Just x  -> f x
 
 -- | Extract from an array all of the 'Just' values, together with a segment
 -- descriptor indicating how many elements along each dimension were returned.
@@ -106,40 +106,44 @@ justs xs = compact (map isJust xs) (map fromJust xs)
 
 instance Functor Maybe where
   fmap f = match \case
-    Nothing_ -> Nothing_
-    Just_ x  -> Just_ (f x)
+    Nothing -> Nothing
+    Just x  -> Just (f x)
 
 instance Monad Maybe where
-  return   = Just_
+  return   = Just
   mx >>= f = mx & match \case
-    Nothing_ -> Nothing_
-    Just_ x  -> f x
+    Nothing -> Nothing
+    Just x  -> f x
 
 instance Eq a => Eq (Maybe a) where
   (==) = match go
     where
-      go Nothing_  Nothing_  = True_
-      go (Just_ x) (Just_ y) = x == y
-      go _         _         = False_
+      go Nothing  Nothing  = True
+      go (Just x) (Just y) = x == y
+      go _         _         = False
 
 instance Ord a => Ord (Maybe a) where
   compare = match go
     where
-      go (Just_ x) (Just_ y)  = compare x y
-      go Nothing_  Nothing_   = EQ_
-      go Nothing_  Just_{}    = LT_
-      go Just_{}   Nothing_{} = GT_
+      go :: Exp (Maybe a) -> Exp (Maybe a) -> Exp Ordering
+      go (Just x) (Just y)  = compare x y
+      go Nothing  Nothing   = EQ
+      go Nothing  Just{}    = LT
+      go Just{}   Nothing{} = GT
 
 instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
-  mempty = Nothing_
+  mempty = Nothing
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
-  ma <> mb = cond (isNothing ma) mb
-           $ cond (isNothing mb) ma
-           $ lift (Just (fromJust ma <> fromJust mb))
+  (<>) = match go
+    where
+      go :: Exp (Maybe a) -> Exp (Maybe a) -> Exp (Maybe a)
+      go Nothing  b        = b
+      go a        Nothing  = a
+      go (Just a) (Just b) = Just (a <> b)
 
 instance (Lift Exp a, Elt (Plain a)) => Lift Exp (Maybe a) where
   type Plain (Maybe a) = Maybe (Plain a)
-  lift Nothing  = Nothing_
-  lift (Just a) = Just_ (lift a)
+  lift Nothing  = Nothing
+  lift (Just a) = Just (lift a)
 

@@ -1,7 +1,13 @@
-{-# LANGUAGE ConstraintKinds   #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE ConstraintKinds     #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE FlexibleInstances   #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE UnboxedTuples       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Fractional
@@ -20,12 +26,16 @@ module Data.Array.Accelerate.Classes.Fractional (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Num
 
-import Prelude                                                      ( (.) )
+import Language.Haskell.TH                                          hiding ( Exp )
+import Prelude                                                      hiding ( Num, Fractional )
+import qualified Data.Primitive.Vec                                 as Prim
 import qualified Prelude                                            as P
 
 
@@ -44,29 +54,28 @@ import qualified Prelude                                            as P
 --
 type Fractional a = (Num a, P.Fractional (Exp a))
 
+runQ $
+  let
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
 
-instance P.Fractional (Exp Half) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+      thFractional :: Name -> Q [Dec]
+      thFractional a =
+        [d| instance P.Fractional (Exp $(conT a)) where
+              (/)          = mkPrimBinary $ PrimFDiv floatingType
+              recip        = mkPrimUnary $ PrimRecip floatingType
+              fromRational = constant . P.fromRational
 
-instance P.Fractional (Exp Float) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
-instance P.Fractional (Exp Double) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
-instance P.Fractional (Exp CFloat) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
-
-instance P.Fractional (Exp CDouble) where
-  (/)          = mkFDiv
-  recip        = mkRecip
-  fromRational = constant . P.fromRational
+            instance KnownNat n => P.Fractional (Exp (Vec n $(conT a))) where
+              (/)          = mkPrimBinary $ PrimFDiv floatingType
+              recip        = mkPrimUnary $ PrimRecip floatingType
+              fromRational = constant . Vec . Prim.splat . P.fromRational
+          |]
+  in
+  concat <$> mapM thFractional floatingTypes
 

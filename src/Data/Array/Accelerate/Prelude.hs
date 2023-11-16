@@ -121,15 +121,17 @@ module Data.Array.Accelerate.Prelude (
 import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
-import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Pattern.Maybe
+import Data.Array.Accelerate.Pattern.Shape
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays, Array, Scalar, Vector, Segments,  fromList )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, Z(..), (:.)(..), All(..), DIM1, DIM2, empty )
+import Data.Array.Accelerate.Sugar.Shape                            ( Shape, Slice, DIM1, DIM2, empty )
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.FromBool
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
@@ -138,10 +140,7 @@ import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Data.Bits
 
 import Lens.Micro                                                   ( Lens', (&), (^.), (.~), (+~), (-~), lens, over )
-import Prelude                                                      ( (.), ($), Maybe(..), const, id, flip )
-#if __GLASGOW_HASKELL__ >= 904
-import Data.Type.Equality
-#endif
+import Prelude                                                      ( (.), ($), const, id, flip )
 
 
 -- $setup
@@ -708,7 +707,7 @@ fold1All f arr = fold1 f (flatten arr)
 --     40, 170, 0, 138]
 --
 foldSeg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Num i, IsSingleIntegral (EltR i))
     => (Exp e -> Exp e -> Exp e)
     -> Exp e
     -> Acc (Array (sh:.Int) e)
@@ -717,17 +716,17 @@ foldSeg
 foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
   where
     (plus, zero) =
-      case integralType @i of
-        TypeInt{}    -> ((+), 0)
-        TypeInt8{}   -> ((+), 0)
-        TypeInt16{}  -> ((+), 0)
-        TypeInt32{}  -> ((+), 0)
-        TypeInt64{}  -> ((+), 0)
-        TypeWord{}   -> ((+), 0)
-        TypeWord8{}  -> ((+), 0)
-        TypeWord16{} -> ((+), 0)
-        TypeWord32{} -> ((+), 0)
-        TypeWord64{} -> ((+), 0)
+      case singleIntegralType @(EltR i) of
+        TypeInt8{}    -> ((+), 0)
+        TypeInt16{}   -> ((+), 0)
+        TypeInt32{}   -> ((+), 0)
+        TypeInt64{}   -> ((+), 0)
+        TypeInt128{}  -> ((+), 0)
+        TypeWord8{}   -> ((+), 0)
+        TypeWord16{}  -> ((+), 0)
+        TypeWord32{}  -> ((+), 0)
+        TypeWord64{}  -> ((+), 0)
+        TypeWord128{} -> ((+), 0)
 
 
 -- | Variant of 'foldSeg' that requires /all/ segments of the reduced array
@@ -735,7 +734,7 @@ foldSeg f z arr seg = foldSeg' f z arr (scanl plus zero seg)
 -- descriptor species the length of each of the logical sub-arrays.
 --
 fold1Seg
-    :: forall sh e i. (Shape sh, Elt e, Elt i, i ~ EltR i, IsIntegral i)
+    :: forall sh e i. (Shape sh, Elt e, Num i, IsSingleIntegral (EltR i))
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -745,17 +744,17 @@ fold1Seg f arr seg = fold1Seg' f arr (scanl plus zero seg)
     plus :: Exp i -> Exp i -> Exp i
     zero :: Exp i
     (plus, zero) =
-      case integralType @(EltR i) of
-        TypeInt{}    -> ((+), 0)
-        TypeInt8{}   -> ((+), 0)
-        TypeInt16{}  -> ((+), 0)
-        TypeInt32{}  -> ((+), 0)
-        TypeInt64{}  -> ((+), 0)
-        TypeWord{}   -> ((+), 0)
-        TypeWord8{}  -> ((+), 0)
-        TypeWord16{} -> ((+), 0)
-        TypeWord32{} -> ((+), 0)
-        TypeWord64{} -> ((+), 0)
+      case singleIntegralType @(EltR i) of
+        TypeInt8{}    -> ((+), 0)
+        TypeInt16{}   -> ((+), 0)
+        TypeInt32{}   -> ((+), 0)
+        TypeInt64{}   -> ((+), 0)
+        TypeInt128{}  -> ((+), 0)
+        TypeWord8{}   -> ((+), 0)
+        TypeWord16{}  -> ((+), 0)
+        TypeWord32{}  -> ((+), 0)
+        TypeWord64{}  -> ((+), 0)
+        TypeWord128{} -> ((+), 0)
 
 
 -- Specialised reductions
@@ -807,14 +806,14 @@ any f = or . map f
 and :: Shape sh
     => Acc (Array (sh:.Int) Bool)
     -> Acc (Array sh Bool)
-and = fold (&&) True_
+and = fold (&&) True
 
 -- | Check if any element along the innermost dimension is 'True'.
 --
 or :: Shape sh
    => Acc (Array (sh:.Int) Bool)
    -> Acc (Array sh Bool)
-or = fold (||) False_
+or = fold (||) False
 
 -- | Compute the sum of elements along the innermost dimension of the array. To
 -- find the sum of the entire array, 'flatten' it first.
@@ -985,7 +984,7 @@ scanlSeg
     -> Acc (Array (sh:.Int) e)
 scanlSeg f z arr seg =
   if null arr || null flags
-    then fill (sh ::. sz + length seg) z
+    then fill (sh :. sz + length seg) z
     else scanl1Seg f arr' seg'
   where
     -- Segmented exclusive scan is implemented by first injecting the seed
@@ -996,11 +995,11 @@ scanlSeg f z arr seg =
     -- overlaying the input data in all places other than at the start of
     -- a segment.
     --
-    sh ::. sz = shape arr
+    sh :. sz  = shape arr
     seg'      = map (+1) seg
     arr'      = permute const
-                        (fill (sh ::. sz + length seg) z)
-                        (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc ! I1 i)))
+                        (fill (sh :. sz + length seg) z)
+                        (\(sx :. i) -> Just (sx :. i + fromIntegral (inc ! I1 i)))
                         (take (length flags) arr)
 
     -- Each element in the segments must be shifted to the right one additional
@@ -1058,7 +1057,7 @@ scanl'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanl'Seg f z arr seg =
   if null arr
-    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    then T2 arr  (fill (indexTail (shape arr) :. length seg) z)
     else T2 body sums
   where
     -- Segmented scan' is implemented by deconstructing a segmented exclusive
@@ -1078,8 +1077,8 @@ scanl'Seg f z arr seg =
     seg'        = map (+1) seg
     tails       = zipWith (+) seg $ prescanl (+) 0 seg'
     sums        = backpermute
-                    (indexTail (shape arr') ::. length seg)
-                    (\(sz ::. i) -> sz ::. fromIntegral (tails ! I1 i))
+                    (indexTail (shape arr') :. length seg)
+                    (\(sz :. i) -> sz :. fromIntegral (tails ! I1 i))
                     arr'
 
     -- Slice out the body of each segment.
@@ -1093,13 +1092,13 @@ scanl'Seg f z arr seg =
     offset      = scanl1 (+) seg
     inc         = scanl1 (+)
                 $ permute (+) (fill (I1 $ size arr + 1) 0)
-                              (\ix -> Just_ (index1' (offset ! ix)))
+                              (\ix -> Just (index1' (offset ! ix)))
                               (fill (shape seg) (1 :: Exp i))
 
     len         = offset ! I1 (length offset - 1)
     body        = backpermute
-                    (indexTail (shape arr) ::. fromIntegral len)
-                    (\(sz ::. i) -> sz ::. i + fromIntegral (inc ! I1 i))
+                    (indexTail (shape arr) :. fromIntegral len)
+                    (\(sz :. i) -> sz :. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1136,7 +1135,7 @@ scanl'Seg f z arr seg =
 --     40, 41, 83, 126, 170, 45, 91, 138]
 --
 scanl1Seg
-    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    :: forall sh i e. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -1144,7 +1143,7 @@ scanl1Seg
 scanl1Seg f arr seg
   = map snd
   . scanl1 (segmentedL f)
-  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkHeadFlags seg)) arr
+  $ zip (replicate @(sh :. All) (indexTail (shape arr) :. All) (mkHeadFlags seg)) arr
 
 -- |Segmented version of 'prescanl'.
 --
@@ -1206,10 +1205,10 @@ scanrSeg
     -> Acc (Array (sh:.Int) e)
 scanrSeg f z arr seg =
   if null arr || null flags
-    then fill (sh ::. sz + length seg) z
+    then fill (sh :. sz + length seg) z
     else scanr1Seg f arr' seg'
   where
-    sh ::. sz    = shape arr
+    sh :. sz    = shape arr
 
     -- Using technique described for 'scanlSeg', where we intersperse the array
     -- with the seed element at the start of each segment, and then perform an
@@ -1220,8 +1219,8 @@ scanrSeg f z arr seg =
 
     seg'        = map (+1) seg
     arr'        = permute const
-                          (fill (sh ::. sz + length seg) z)
-                          (\(sx ::. i) -> Just_ (sx ::. i + fromIntegral (inc !! i) - 1))
+                          (fill (sh :. sz + length seg) z)
+                          (\(sx :. i) -> Just (sx :. i + fromIntegral (inc !! i) - 1))
                           (drop (sz - length flags) arr)
 
 
@@ -1265,7 +1264,7 @@ scanr'Seg
     -> Acc (Array (sh:.Int) e, Array (sh:.Int) e)
 scanr'Seg f z arr seg =
   if null arr
-    then T2 arr  (fill (indexTail (shape arr) ::. length seg) z)
+    then T2 arr  (fill (indexTail (shape arr) :. length seg) z)
     else T2 body sums
   where
     -- Using technique described for scanl'Seg
@@ -1276,16 +1275,16 @@ scanr'Seg f z arr seg =
     seg'        = map (+1) seg
     heads       = prescanl (+) 0 seg'
     sums        = backpermute
-                    (indexTail (shape arr') ::. length seg)
-                    (\(sz ::.i) -> sz ::. fromIntegral (heads ! I1 i))
+                    (indexTail (shape arr') :. length seg)
+                    (\(sz :.i) -> sz :. fromIntegral (heads ! I1 i))
                     arr'
 
     -- body segments
     flags       = mkHeadFlags seg
     inc         = scanl1 (+) flags
     body        = backpermute
-                    (indexTail (shape arr) ::. indexHead (shape flags))
-                    (\(sz ::. i) -> sz ::. i + fromIntegral (inc ! I1 i))
+                    (indexTail (shape arr) :. indexHead (shape flags))
+                    (\(sz :. i) -> sz :. i + fromIntegral (inc ! I1 i))
                     arr'
 
 
@@ -1313,7 +1312,7 @@ scanr'Seg f z arr seg =
 --     40, 170, 129, 87, 44, 138, 93, 47]
 --
 scanr1Seg
-    :: (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
+    :: forall sh i e. (Shape sh, Slice sh, Elt e, Integral i, Bits i, FromIntegral i Int)
     => (Exp e -> Exp e -> Exp e)
     -> Acc (Array (sh:.Int) e)
     -> Acc (Segments i)
@@ -1321,7 +1320,7 @@ scanr1Seg
 scanr1Seg f arr seg
   = map snd
   . scanr1 (segmentedR f)
-  $ zip (replicate (lift (indexTail (shape arr) :. All)) (mkTailFlags seg)) arr
+  $ zip (replicate @(sh :. All) (indexTail (shape arr) :. All) (mkTailFlags seg)) arr
 
 
 -- |Segmented version of 'prescanr'.
@@ -1367,7 +1366,7 @@ mkHeadFlags
     -> Acc (Segments i)
 mkHeadFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (offset ! ix))) ones
+  $ permute (+) zeros (\ix -> Just (index1' (offset ! ix))) ones
   where
     T2 offset len = scanl' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1382,7 +1381,7 @@ mkTailFlags
     -> Acc (Segments i)
 mkTailFlags seg
   = init
-  $ permute (+) zeros (\ix -> Just_ (index1' (the len - 1 - offset ! ix))) ones
+  $ permute (+) zeros (\ix -> Just (index1' (the len - 1 - offset ! ix))) ones
   where
     T2 offset len = scanr' (+) 0 seg
     zeros         = fill (index1' $ the len + 1) 0
@@ -1418,7 +1417,7 @@ segmentedR f y x = segmentedL (flip f) x y
 -- base library, because it results in too many ambiguity errors.
 --
 index1' ::  (Integral i, FromIntegral i Int) => Exp i -> Exp DIM1
-index1' i = lift (Z :. fromIntegral i)
+index1' i = Z :. fromIntegral i
 
 
 -- Reshaping of arrays
@@ -1658,15 +1657,15 @@ compact keep arr
   -- for the offset indices.
   | Just Refl <- matchShapeType @sh @Z
   = let
-        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 target len   = scanl' (+) 0 (map fromBool keep)
         prj ix          = if keep!ix
-                             then Just_ (I1 (target!ix))
-                             else Nothing_
+                             then Just (I1 (target!ix))
+                             else Nothing
         dummy           = fill (I1 (the len)) undef
         result          = permute const dummy prj arr
     in
     if null arr
-       then T2 emptyArray (fill Z_ 0)
+       then T2 emptyArray (fill Z 0)
        else
     if the len == unindex1 (shape arr)
        then T2 arr    len
@@ -1675,11 +1674,11 @@ compact keep arr
 compact keep arr
   = let
         sz              = indexTail (shape arr)
-        T2 target len   = scanl' (+) 0 (map boolToInt keep)
+        T2 target len   = scanl' (+) 0 (map fromBool keep)
         T2 offset valid = scanl' (+) 0 (flatten len)
         prj ix          = if keep!ix
-                             then Just_ (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
-                             else Nothing_
+                             then Just (I1 (offset !! (toIndex sz (indexTail ix)) + target!ix))
+                             else Nothing
         dummy           = fill (I1 (the valid)) undef
         result          = permute const dummy prj arr
     in
@@ -1760,7 +1759,7 @@ scatter
     -> Acc (Vector e)
 scatter to defaults input = permute const defaults pf input'
   where
-    pf ix   = Just_ (I1 (to ! ix))
+    pf ix   = Just (I1 (to ! ix))
     input'  = backpermute (shape to `intersect` shape input) id input
 
 
@@ -1789,8 +1788,8 @@ scatterIf to maskV pred defaults input = permute const defaults pf input'
   where
     input'  = backpermute (shape to `intersect` shape input) id input
     pf ix   = if pred (maskV ! ix)
-                 then Just_ (I1 (to ! ix))
-                 else Nothing_
+                 then Just (I1 (to ! ix))
+                 else Nothing
 
 
 -- Permutations
@@ -2226,9 +2225,9 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 -- argument. For example, given the function:
 --
 -- > example1 :: Exp (Maybe Bool) -> Exp Int
--- > example1 Nothing_ = 0
--- > example1 (Just_ False_) = 1
--- > example1 (Just_ True_) = 2
+-- > example1 Nothing = 0
+-- > example1 (Just False) = 1
+-- > example1 (Just True) = 2
 --
 -- In order to use this function it must be applied to the 'match'
 -- operator:
@@ -2239,14 +2238,14 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 -- case statements inline. For example, instead of this:
 --
 -- > example2 x = case f x of
--- >   Nothing_ -> ...      -- error: embedded pattern synonym...
--- >   Just_ y  -> ...      -- ...used outside of 'match' context
+-- >   Nothing -> ...      -- error: embedded pattern synonym...
+-- >   Just y  -> ...      -- ...used outside of 'match' context
 --
 -- This can be written instead as:
 --
 -- > example3 x = f x & match \case
--- >   Nothing_ -> ...
--- >   Just_ y  -> ...
+-- >   Nothing -> ...
+-- >   Just y  -> ...
 --
 -- And utilising the @LambdaCase@ and @BlockArguments@ syntactic extensions.
 --
@@ -2263,27 +2262,25 @@ instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
 --
 -- > isNone :: Elt a => Exp (Option a) -> Exp Bool
 -- > isNone = match \case
--- >   None_   -> True_
--- >   Some_{} -> False_
+-- >   None_   -> True
+-- >   Some_{} -> False
 --
 -- @since 1.3.0.0
 --
 match :: Matching f => f -> f
 match f = mkFun (mkMatch f) id
 
-data Args f where
-  (:->)  :: Exp a -> Args b -> Args (Exp a -> b)
-  Result :: Args (Exp a)
-
 class Matching a where
   type ResultT a
-  mkMatch :: a -> Args a -> Exp (ResultT a)
-  mkFun   :: (Args f -> Exp (ResultT a))
-          -> (Args a -> Args f)
+  data ArgsR a
+  mkMatch :: a -> ArgsR a -> Exp (ResultT a)
+  mkFun   :: (ArgsR f -> Exp (ResultT a))
+          -> (ArgsR a -> ArgsR f)
           -> a
 
 instance Elt a => Matching (Exp a) where
   type ResultT (Exp a) = a
+  data ArgsR (Exp a) = Result
 
   mkFun f k = f (k Result)
   mkMatch (Exp e) Result =
@@ -2293,6 +2290,7 @@ instance Elt a => Matching (Exp a) where
 
 instance (Elt e, Matching r) => Matching (Exp e -> r) where
   type ResultT (Exp e -> r) = ResultT r
+  data ArgsR (Exp e -> r) = Exp e :-> ArgsR r
 
   mkFun f k x = mkFun f (\xs -> k (x :-> xs))
   mkMatch f (x@(Exp p) :-> xs) =
@@ -2342,7 +2340,7 @@ sfoldl :: (Shape sh, Elt a, Elt b)
        -> Exp a
 sfoldl f z ix xs
   = let n               = indexHead (shape xs)
-        step (T2 i acc) = T2 (i+1) (acc `f` (xs ! (ix ::. i)))
+        step (T2 i acc) = T2 (i+1) (acc `f` (xs ! (ix :. i)))
      in snd $ while (\v -> fst v < n) step (T2 0 z)
 
 
@@ -2385,17 +2383,17 @@ uncurry f t = let (x, y) = unlift t in f x y
 -- | The one index for a rank-0 array.
 --
 index0 :: Exp Z
-index0 = lift Z
+index0 = Z
 
 -- | Turn an 'Int' expression into a rank-1 indexing expression.
 --
 index1 :: Elt i => Exp i -> Exp (Z :. i)
-index1 i = lift (Z :. i)
+index1 i = Z :. i
 
 -- | Turn a rank-1 indexing expression into an 'Int' expression.
 --
 unindex1 :: Elt i => Exp (Z :. i) -> Exp i
-unindex1 ix = let Z :. i = unlift ix in i
+unindex1 (Z :. i) = i
 
 -- | Creates a rank-2 index from two Exp Int`s
 --
@@ -2404,7 +2402,7 @@ index2
     => Exp i
     -> Exp i
     -> Exp (Z :. i :. i)
-index2 i j = lift (Z :. i :. j)
+index2 i j = Z :. i :. j
 
 -- | Destructs a rank-2 index to an Exp tuple of two Int`s.
 --
@@ -2412,7 +2410,7 @@ unindex2
     :: Elt i
     => Exp (Z :. i :. i)
     -> Exp (i, i)
-unindex2 (Z_ ::. i ::. j) = T2 i j
+unindex2 (Z :. i :. j) = T2 i j
 
 -- | Create a rank-3 index from three Exp Int`s
 --
@@ -2422,14 +2420,14 @@ index3
     -> Exp i
     -> Exp i
     -> Exp (Z :. i :. i :. i)
-index3 k j i = Z_ ::. k ::. j ::. i
+index3 k j i = Z :. k :. j :. i
 
 -- | Destruct a rank-3 index into an Exp tuple of Int`s
 unindex3
     :: Elt i
     => Exp (Z :. i :. i :. i)
     -> Exp (i, i, i)
-unindex3 (Z_ ::. k ::. j ::. i) = T3 k j i
+unindex3 (Z :. k :. j :. i) = T3 k j i
 
 
 -- Array operations with a scalar result
@@ -2497,7 +2495,7 @@ length = unindex1 . shape
 --                       new =
 --                         let m     = c2-c1
 --                             put i = let s = sieves ! i
---                                      in s >= 0 && s < m ? (Just_ (I1 s), Nothing_)
+--                                      in s >= 0 && s < m ? (Just (I1 s), Nothing)
 --                         in
 --                         afst
 --                           $ filter (> 0)
@@ -2532,7 +2530,7 @@ expand f g xs =
      else
       let
           n          = m + 1
-          put ix     = Just_ (I1 (offset ! ix))
+          put ix     = Just (I1 (offset ! ix))
 
           head_flags :: Acc (Vector Int)
           head_flags = permute const (fill (I1 n) 0) put (fill (shape szs) 1)
@@ -2554,7 +2552,7 @@ expand f g xs =
                                -- also the same, which is undefined behaviour
                                (\ix -> if szs ! ix > 0
                                          then put ix
-                                         else Nothing_)
+                                         else Nothing)
                      $ enumFromN (shape xs) 0
       in
       zipWith g (gather iotas xs) idxs
@@ -2618,14 +2616,14 @@ emptyArray = fill (constant empty) undef
 -- Imported from `lens-accelerate` (which provides more general Field instances)
 --
 _1 :: forall sh. Elt sh => Lens' (Exp (sh:.Int)) (Exp Int)
-_1 = lens (\ix   -> let _  :. x = unlift ix :: Exp sh :. Exp Int in x)
-          (\ix x -> let sh :. _ = unlift ix :: Exp sh :. Exp Int in lift (sh :. x))
+_1 = lens (\ix   -> let _  :. x = ix in x)
+          (\ix x -> let sh :. _ = ix in sh :. x)
 
 _2 :: forall sh. Elt sh => Lens' (Exp (sh:.Int:.Int)) (Exp Int)
-_2 = lens (\ix   -> let _  :. y :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int in y)
-          (\ix y -> let sh :. _ :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int in lift (sh :. y :. x))
+_2 = lens (\ix   -> let _  :. y :. _ = ix in y)
+          (\ix y -> let sh :. _ :. x = ix in sh :. y :. x)
 
 _3 :: forall sh. Elt sh => Lens' (Exp (sh:.Int:.Int:.Int)) (Exp Int)
-_3 = lens (\ix   -> let _  :. z :. _ :. _ = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in z)
-          (\ix z -> let sh :. _ :. y :. x = unlift ix :: Exp sh :. Exp Int :. Exp Int :. Exp Int in lift (sh :. z :. y :. x))
+_3 = lens (\ix   -> let _  :. z :. _ :. _ = ix in z)
+          (\ix z -> let sh :. _ :. y :. x = ix in sh :. z :. y :. x)
 

@@ -1,7 +1,10 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
@@ -22,7 +25,7 @@
 
 module Data.Array.Accelerate.Classes.Eq (
 
-  Bool(..), pattern True_, pattern False_,
+  Bool, pattern True, pattern False,
   Eq(..),
   (&&), (&&!),
   (||), (||!),
@@ -30,18 +33,20 @@ module Data.Array.Accelerate.Classes.Eq (
 
 ) where
 
-import Data.Array.Accelerate.AST.Idx
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pattern.Bool
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
+import {-# SOURCE #-} Data.Array.Accelerate.Classes.VEq
 
-import Data.Bool                                                    ( Bool(..) )
-import Data.Char                                                    ( Char )
 import Text.Printf
+import Data.Char
 import Prelude                                                      ( ($), String, Num(..), Ordering(..), show, error, return, concat, map, zipWith, foldr1, mapM )
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
 import qualified Prelude                                            as P
@@ -56,10 +61,7 @@ infix 4 /=
 infixr 3 &&
 (&&) :: Exp Bool -> Exp Bool -> Exp Bool
 (&&) (Exp x) (Exp y) =
-  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                         (SmartExp $ Prj PairIdxLeft y)
-                         (SmartExp $ Const scalarTypeWord8 0))
-          `Pair` SmartExp Nil
+  mkExp $ Cond x y (SmartExp $ Const (scalarType @PrimBool) 0)
 
 -- | Conjunction: True if both arguments are true. This is a strict version of
 -- '(&&)': it will always evaluate both arguments, even when the first is false.
@@ -68,7 +70,7 @@ infixr 3 &&
 --
 infixr 3 &&!
 (&&!) :: Exp Bool -> Exp Bool -> Exp Bool
-(&&!) = mkLAnd
+(&&!) = mkPrimBinary $ PrimLAnd bitType
 
 -- | Disjunction: True if either argument is true. This is a short-circuit
 -- operator, so the second argument will be evaluated only if the first is
@@ -77,10 +79,7 @@ infixr 3 &&!
 infixr 2 ||
 (||) :: Exp Bool -> Exp Bool -> Exp Bool
 (||) (Exp x) (Exp y) =
-  mkExp $ SmartExp (Cond (SmartExp $ Prj PairIdxLeft x)
-                         (SmartExp $ Const scalarTypeWord8 1)
-                         (SmartExp $ Prj PairIdxLeft y))
-          `Pair` SmartExp Nil
+  mkExp $ Cond x (SmartExp $ Const (scalarType @PrimBool) 1) y
 
 
 -- | Disjunction: True if either argument is true. This is a strict version of
@@ -90,34 +89,36 @@ infixr 2 ||
 --
 infixr 2 ||!
 (||!) :: Exp Bool -> Exp Bool -> Exp Bool
-(||!) = mkLOr
+(||!) = mkPrimBinary $ PrimLOr bitType
 
 -- | Logical negation
 --
 not :: Exp Bool -> Exp Bool
-not = mkLNot
+not = mkPrimUnary $ PrimLNot bitType
 
 
--- | The 'Eq' class defines equality '==' and inequality '/=' for scalar
+-- | The 'Eq' class defines equality '(==)' and inequality '(/=)' for
 -- Accelerate expressions.
 --
--- For convenience, we include 'Elt' as a superclass.
+-- Vector types behave analogously to tuple types. For testing equality
+-- lane-wise on each element of a vector, see the class
+-- 'Data.Array.Accelerate.VEq'.
 --
 class Elt a => Eq a where
   (==) :: Exp a -> Exp a -> Exp Bool
   (/=) :: Exp a -> Exp a -> Exp Bool
   {-# MINIMAL (==) | (/=) #-}
-  x == y = mkLNot (x /= y)
-  x /= y = mkLNot (x == y)
+  x == y = not (x /= y)
+  x /= y = not (x == y)
 
 
 instance Eq () where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = True
+  _ /= _ = False
 
 instance Eq Z where
-  _ == _ = True_
-  _ /= _ = False_
+  _ == _ = True
+  _ /= _ = False
 
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
@@ -127,8 +128,15 @@ instance P.Eq (Exp a) where
   (==) = preludeError "Eq.(==)" "(==)"
   (/=) = preludeError "Eq.(/=)" "(/=)"
 
-preludeError :: String -> String -> a
-preludeError x y = error (printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y)
+preludeError :: HasCallStack => String -> String -> a
+preludeError x y
+  = error
+  $ P.unlines [ printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y
+              , ""
+              , "These Prelude.Eq instances are present only to fulfil superclass"
+              , "constraints for subsequent classes in the standard Haskell numeric"
+              , "hierarchy."
+              ]
 
 runQ $ do
   let
@@ -139,11 +147,13 @@ runQ $ do
         , ''Int16
         , ''Int32
         , ''Int64
+        , ''Int128
         , ''Word
         , ''Word8
         , ''Word16
         , ''Word32
         , ''Word64
+        , ''Word128
         ]
 
       floatingTypes :: [Name]
@@ -151,6 +161,7 @@ runQ $ do
         [ ''Half
         , ''Float
         , ''Double
+        , ''Float128
         ]
 
       nonNumTypes :: [Name]
@@ -158,28 +169,11 @@ runQ $ do
         [ ''Char
         ]
 
-      cTypes :: [Name]
-      cTypes =
-        [ ''CInt
-        , ''CUInt
-        , ''CLong
-        , ''CULong
-        , ''CLLong
-        , ''CULLong
-        , ''CShort
-        , ''CUShort
-        , ''CChar
-        , ''CUChar
-        , ''CSChar
-        , ''CFloat
-        , ''CDouble
-        ]
-
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Eq $(conT t) where
-              (==) = mkEq
-              (/=) = mkNEq
+              (==) = mkPrimBinary $ PrimEq  scalarType
+              (/=) = mkPrimBinary $ PrimNEq scalarType
           |]
 
       mkTup :: Int -> Q [Dec]
@@ -199,19 +193,22 @@ runQ $ do
   is <- mapM mkPrim integralTypes
   fs <- mapM mkPrim floatingTypes
   ns <- mapM mkPrim nonNumTypes
-  cs <- mapM mkPrim cTypes
   ts <- mapM mkTup [2..16]
-  return $ concat (concat [is,fs,ns,cs,ts])
+  return $ concat (concat [is,fs,ns,ts])
 
 instance Eq sh => Eq (sh :. Int) where
   x == y = indexHead x == indexHead y && indexTail x == indexTail y
   x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
 instance Eq Bool where
-  x == y = mkCoerce x == (mkCoerce y :: Exp PrimBool)
-  x /= y = mkCoerce x /= (mkCoerce y :: Exp PrimBool)
+  (==) = mkPrimBinary $ PrimEq  scalarType
+  (/=) = mkPrimBinary $ PrimNEq scalarType
 
 instance Eq Ordering where
   x == y = mkCoerce x == (mkCoerce y :: Exp TAG)
   x /= y = mkCoerce x /= (mkCoerce y :: Exp TAG)
+
+instance VEq n a => Eq (Vec n a) where
+  x == y = vand (x ==* y)
+  x /= y = vor  (x /=* y)
 

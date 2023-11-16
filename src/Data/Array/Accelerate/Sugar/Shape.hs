@@ -136,12 +136,12 @@ data Divide sh = Divide
 -- | Number of dimensions of a /shape/ or /index/ (>= 0)
 --
 rank :: forall sh. Shape sh => Int
-rank = R.rank (shapeR @sh)
+rank = fromIntegral $ R.rank (shapeR @sh)
 
 -- | Total number of elements in an array of the given /shape/
 --
 size :: forall sh. Shape sh => sh -> Int
-size = R.size (shapeR @sh) . fromElt
+size = fromIntegral . R.size (shapeR @sh) . fromElt
 
 -- | The empty /shape/
 --
@@ -165,7 +165,7 @@ toIndex :: forall sh. Shape sh
         => sh       -- ^ Total shape (extent) of the array
         -> sh       -- ^ The argument index
         -> Int      -- ^ Corresponding linear index
-toIndex sh ix = R.toIndex (shapeR @sh) (fromElt sh) (fromElt ix)
+toIndex sh ix = fromIntegral $ R.toIndex (shapeR @sh) (fromElt sh) (fromElt ix)
 
 -- | Inverse of 'toIndex'.
 --
@@ -173,7 +173,7 @@ fromIndex :: forall sh. Shape sh
           => sh     -- ^ Total shape (extent) of the array
           -> Int    -- ^ The argument index
           -> sh     -- ^ Corresponding multi-dimensional index
-fromIndex sh = toElt . R.fromIndex (shapeR @sh) (fromElt sh)
+fromIndex sh = toElt . R.fromIndex (shapeR @sh) (fromElt sh) . fromIntegral
 
 -- | Iterate through all of the indices of a shape, applying the given
 -- function at each index. The index space is traversed in row-major order.
@@ -210,19 +210,19 @@ shapeToRange ix =
 -- | Convert a shape to a list of dimensions
 --
 shapeToList :: forall sh. Shape sh => sh -> [Int]
-shapeToList = R.shapeToList (shapeR @sh) . fromElt
+shapeToList = map fromIntegral . R.shapeToList (shapeR @sh) . fromElt
 
 -- | Convert a list of dimensions into a shape. If the list does not
 -- contain exactly the number of elements as specified by the type of the
 -- shape: error.
 --
 listToShape :: forall sh. Shape sh => [Int] -> sh
-listToShape = toElt . R.listToShape (shapeR @sh)
+listToShape = toElt . R.listToShape (shapeR @sh) . map fromIntegral
 
 -- | Attempt to convert a list of dimensions into a shape
 --
 listToShape' :: forall sh. Shape sh => [Int] -> Maybe sh
-listToShape' = fmap toElt . R.listToShape' (shapeR @sh)
+listToShape' = fmap toElt . R.listToShape' (shapeR @sh) . map fromIntegral
 
 -- | Nicely format a shape as a string
 --

@@ -24,7 +24,7 @@ module Data.Array.Accelerate.Test.NoFib.Spectral.RadixSort (
 
 import Data.Function
 import Data.List                                                    ( sortBy )
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Maybe(..) )
 import qualified Data.Bits                                          as P
 
 import Data.Array.Accelerate                                        as A
@@ -139,21 +139,21 @@ instance Radix Word64 where
   radix  = radixOfUnsigned
 
 radixOfSigned
-    :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral e Int)
+    :: forall e. (Radix e, A.Bounded e, A.Integral e, A.FromIntegral Int e, A.FromIntegral e Int)
     => Exp Int
     -> Exp e
     -> Exp Int
 radixOfSigned i e = i A.== (passes' - 1) ? (radix' (e `xor` minBound), radix' e)
    where
-     radix' x = A.fromIntegral $ (x `A.shiftR` i) .&. 1
+     radix' x = A.fromIntegral $ (x `A.shiftR` A.fromIntegral i) .&. 1
      passes'  = constant (passes (undefined :: e))
 
 radixOfUnsigned
-    :: (Radix e, A.Integral e, A.FromIntegral e Int)
+    :: (Radix e, A.Integral e, A.FromIntegral Int e, A.FromIntegral e Int)
     => Exp Int
     -> Exp e
     -> Exp Int
-radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` i) .&. 1
+radixOfUnsigned i e = A.fromIntegral $ (e `A.shiftR` A.fromIntegral i) .&. 1
 
 
 -- A simple (parallel) radix sort implementation [1].
@@ -176,7 +176,7 @@ radixsortBy rdx arr = foldr1 (>->) (P.map radixPass [0..p-1]) arr
                         iup     = A.map (size v - 1 -) . prescanr (+) 0 $ flags
                         index   = A.zipWith deal flags (A.zip idown iup)
                     in
-                    permute const v (\ix -> Just_ (index1 (index!ix))) v
+                    permute const v (\ix -> Just (index1 (index!ix))) v
 
 
 -- This is rather slow. Speeding up the reference implementation by using, say,

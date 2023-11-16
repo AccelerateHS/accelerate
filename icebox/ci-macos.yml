@@ -25,7 +25,6 @@ jobs:
           - "9.0"
           - "8.10"
           - "8.8"
-          - "8.6"
     env:
       STACK_FLAGS: "--flag accelerate:nofib"
       HADDOCK_FLAGS: "--haddock --no-haddock-deps --no-haddock-hyperlink-source --haddock-arguments=\"--no-print-missing-docs\""

@@ -18,11 +18,12 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue436 (
 
 ) where
 
-import Data.Array.Accelerate                              as A
+import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Prelude                                                      hiding ( Bool(..) )
 
 
 test_issue436 :: RunN -> TestTree

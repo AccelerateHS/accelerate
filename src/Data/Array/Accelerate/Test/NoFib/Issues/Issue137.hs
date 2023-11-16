@@ -24,6 +24,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Prelude                                                      hiding ( Maybe(..) )
 
 
 test_issue137 :: RunN -> TestTree
@@ -38,19 +39,19 @@ test1 :: Acc (Vector (Int,Int))
 test1 =
   let
       sz          = 3000 :: Int
-      interm_arrA = use $ A.fromList (Z :. sz) [ 8 - (a `mod` 17) | a <- [1..sz]]
+      interm_arrA = use $ A.fromList (Z :. sz) [ 8 - (a `mod` 17) | a <- [1..sz]] :: Acc (Vector Int)
       msA         = use $ A.fromList (Z :. sz) [ (a `div` 8) | a <- [1..sz]]
       inf         = 10000 :: Exp Int
-      infsA       = A.generate (index1 (384 :: Exp Int)) (\_ -> lift (inf,inf))
-      inpA        = A.map (\v -> lift (abs v,inf) :: Exp (Int,Int)) interm_arrA
+      infsA       = A.generate (index1 (384 :: Exp Int)) (\_ -> T2 inf inf)
+      inpA        = A.map (\v -> T2 (abs v) inf) interm_arrA
   in
-  A.permute (\a12 b12 -> let (a1,a2) = unlift a12
-                             (b1,b2) = unlift b12
+  A.permute (\a12 b12 -> let T2 a1 a2 = a12
+                             T2 b1 b2 = b12
                          in (a1 A.<= b1)
-                          ? ( lift (a1, A.min a2 b1)
-                            , lift (b1, A.min b2 a1)
+                          ? ( T2 a1 (A.min a2 b1)
+                            , T2 b1 (A.min b2 a1)
                             ))
             infsA
-            (\ix -> Just_ (index1 (msA A.! ix)))
+            (\ix -> Just (index1 (msA A.! ix)))
             inpA
 

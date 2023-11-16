@@ -25,7 +25,7 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Stencil (
 ) where
 
 import Data.Typeable
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Maybe(..), Either(..) )
 
 import Data.Array.Accelerate                                        as A
 import Data.Array.Accelerate.Sugar.Elt                              as S
@@ -635,7 +635,7 @@ bound bnd sh0 ix0 =
     go TupRunit           ()      ()      = Right ()
     go (TupRpair tsh tsz) (sh,sz) (ih,iz) = go tsh sh ih `addDim` go tsz sz iz
     go (TupRsingle t)     sh      i
-      | Just Refl <- matchScalarType t (scalarType :: ScalarType Int)
+      | Just Refl <- matchScalarType t (scalarType :: ScalarType INT)
       = if i P.< 0
           then case bnd of
                  Clamp      -> Right 0
@@ -655,6 +655,7 @@ bound bnd sh0 ix0 =
       | otherwise
       = error "bound: expected shape with Int dimensions"
 
+    addDim :: Either e ds -> Either e d -> Either e (ds, d)
     Right ds `addDim` Right d = Right (ds, d)
     _        `addDim` Left e  = Left e
     Left e   `addDim` _       = Left e

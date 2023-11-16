@@ -28,11 +28,12 @@
 
 module Data.Array.Accelerate.Data.Either (
 
-  Either(..), pattern Left_, pattern Right_,
+  Either, pattern Left, pattern Right,
   either, isLeft, isRight, fromLeft, fromRight, lefts, rights,
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.AST.Idx
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Lift
@@ -52,7 +53,6 @@ import Data.Array.Accelerate.Data.Functor
 import Data.Array.Accelerate.Data.Monoid
 import Data.Array.Accelerate.Data.Semigroup
 
-import Data.Either                                                  ( Either(..) )
 import Prelude                                                      ( (.), ($) )
 
 
@@ -64,7 +64,7 @@ isLeft = not . isRight
 -- | Return 'True' if the argument is a 'Right'-value
 --
 isRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp Bool
-isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartExp Nil
+isRight (Exp e) = mkExp $ PrimApp (PrimToBool integralType bitType) (SmartExp $ Prj PairIdxLeft e)
   -- TLM: This is a sneaky hack because we know that the tag bits for Right
   -- and True are identical.
 
@@ -73,14 +73,14 @@ isRight (Exp e) = Exp $ SmartExp $ (SmartExp $ Prj PairIdxLeft e) `Pair` SmartEx
 -- instead.
 --
 fromLeft :: (Elt a, Elt b) => Exp (Either a b) -> Exp a
-fromLeft (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
+fromLeft (Exp e) = mkExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxLeft $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'fromRight' function extracts the element out of the 'Right'
 -- constructor. If the argument was actually 'Left', you will get an undefined
 -- value instead.
 --
 fromRight :: (Elt a, Elt b) => Exp (Either a b) -> Exp b
-fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
+fromRight (Exp e) = mkExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRight e
 
 -- | The 'either' function performs case analysis on the 'Either' type. If the
 -- value is @'Left' a@, apply the first function to @a@; if it is @'Right' b@,
@@ -88,8 +88,8 @@ fromRight (Exp e) = Exp $ SmartExp $ Prj PairIdxRight $ SmartExp $ Prj PairIdxRi
 --
 either :: (Elt a, Elt b, Elt c) => (Exp a -> Exp c) -> (Exp b -> Exp c) -> Exp (Either a b) -> Exp c
 either f g = match \case
-  Left_  x -> f x
-  Right_ x -> g x
+  Left  x -> f x
+  Right x -> g x
 
 -- | Extract from the array of 'Either' all of the 'Left' elements, together
 -- with a segment descriptor indicating how many elements along each dimension
@@ -111,32 +111,33 @@ rights es = compact (map isRight es) (map fromRight es)
 
 
 instance Elt a => Functor (Either a) where
-  fmap f = either Left_ (Right_ . f)
+  fmap f = either Left (Right . f)
 
 instance Elt a => Monad (Either a) where
-  return = Right_
-  x >>= f = either Left_ f x
+  return = Right
+  x >>= f = either Left f x
 
 instance (Eq a, Eq b) => Eq (Either a b) where
   (==) = match go
     where
-      go (Left_ x)  (Left_ y)  = x == y
-      go (Right_ x) (Right_ y) = x == y
-      go _          _          = False_
+      go (Left x)  (Left y)  = x == y
+      go (Right x) (Right y) = x == y
+      go _          _        = False
 
 instance (Ord a, Ord b) => Ord (Either a b) where
   compare = match go
     where
-      go (Left_ x)  (Left_ y)  = compare x y
-      go (Right_ x) (Right_ y) = compare x y
-      go Left_{}    Right_{}   = LT_
-      go Right_{}   Left_{}    = GT_
+      go :: Exp (Either a b) -> Exp (Either a b) -> Exp Ordering
+      go (Left x)  (Left y)  = compare x y
+      go (Right x) (Right y) = compare x y
+      go Left{}    Right{}   = LT
+      go Right{}   Left{}    = GT
 
 instance (Elt a, Elt b) => Semigroup (Exp (Either a b)) where
   ex <> ey = isLeft ex ? ( ey, ex )
 
 instance (Lift Exp a, Lift Exp b, Elt (Plain a), Elt (Plain b)) => Lift Exp (Either a b) where
   type Plain (Either a b) = Either (Plain a) (Plain b)
-  lift (Left a)  = Left_ (lift a)
-  lift (Right b) = Right_ (lift b)
+  lift (Left a)  = Left (lift a)
+  lift (Right b) = Right (lift b)
 

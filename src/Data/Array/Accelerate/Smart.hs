@@ -1,10 +1,11 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
-{-# LANGUAGE CPP                   #-}
 {-# LANGUAGE DataKinds             #-}
+{-# LANGUAGE EmptyCase             #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MagicHash             #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -45,45 +46,38 @@ module Data.Array.Accelerate.Smart (
   HasArraysR(..),
   HasTypeR(..),
 
-  -- ** Smart constructors for literals
+  -- ** Constants
   constant, undef,
 
-  -- ** Smart destructors for shapes
+  -- ** Shapes
   indexHead, indexTail,
 
-  -- ** Smart constructors for constants
-  mkMinBound, mkMaxBound, mkPi,
-  mkSin, mkCos, mkTan,
-  mkAsin, mkAcos, mkAtan,
-  mkSinh, mkCosh, mkTanh,
-  mkAsinh, mkAcosh, mkAtanh,
-  mkExpFloating, mkSqrt, mkLog,
-  mkFPow, mkLogBase,
-  mkTruncate, mkRound, mkFloor, mkCeiling,
-  mkAtan2,
+  -- ** SIMD vectors
+  splat, pack, unpack,
+  extract, mkExtract,
+  insert, mkInsert,
+  shuffle,
+  select,
 
-  -- ** Smart constructors for primitive functions
-  mkAdd, mkSub, mkMul, mkNeg, mkAbs, mkSig, mkQuot, mkRem, mkQuotRem, mkIDiv, mkMod, mkDivMod,
-  mkBAnd, mkBOr, mkBXor, mkBNot, mkBShiftL, mkBShiftR, mkBRotateL, mkBRotateR, mkPopCount, mkCountLeadingZeros, mkCountTrailingZeros,
-  mkFDiv, mkRecip, mkLt, mkGt, mkLtEq, mkGtEq, mkEq, mkNEq, mkMax, mkMin,
-  mkLAnd, mkLOr, mkLNot, mkIsNaN, mkIsInfinite,
-
-  -- ** Smart constructors for type coercion functions
-  mkFromIntegral, mkToFloating, mkBitcast, mkCoerce, Coerce(..),
-
-  -- ** Auxiliary functions
-  ($$), ($$$), ($$$$), ($$$$$),
-  ApplyAcc(..),
-  unAcc, unAccFunction, mkExp, unExp, unExpFunction, unExpBinaryFunction, unPair, mkPairToTuple,
+  -- ** Type coercions
+  mkBitcast,
+  mkCoerce, Coerce(..),
+  mkAcoerce, Acoerce(..),
 
   -- ** Miscellaneous
-  formatPreAccOp,
-  formatPreExpOp,
+  ($$), ($$$), ($$$$), ($$$$$),
+  ApplyAcc(..),
+  unAcc, unAccFunction,
+  mkExp, unExp, unExpFunction, unExpBinaryFunction, mkPrimUnary, mkPrimBinary,
+  unPair, mkPairToTuple,
+  formatPreAccOp, formatPreExpOp,
 
 ) where
 
 
+import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..), RescaleFactor, PrimBool, PrimMaybe, PrimFun(..), primFunType )
 import Data.Array.Accelerate.AST.Idx
+import Data.Array.Accelerate.Analysis.Match
 import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Representation.Array
 import Data.Array.Accelerate.Representation.Elt
@@ -92,27 +86,25 @@ import Data.Array.Accelerate.Representation.Slice
 import Data.Array.Accelerate.Representation.Stencil                 hiding ( StencilR, stencilR )
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
-import Data.Array.Accelerate.Representation.Vec
 import Data.Array.Accelerate.Sugar.Array                            ( Arrays )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Sugar.Shape                            ( (:.)(..) )
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 import qualified Data.Array.Accelerate.Representation.Stencil       as R
 import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Shape                  as Sugar
 
-import Data.Array.Accelerate.AST                                    ( Direction(..), Message(..)
-                                                                    , PrimBool, PrimMaybe
-                                                                    , PrimFun(..), primFunType
-                                                                    , PrimConst(..), primConstType )
-import Data.Primitive.Vec
+import qualified Data.Primitive.Vec                                 as Prim
 
 import Data.Kind
 import Data.Text.Lazy.Builder
-import Formatting
+import Formatting                                                   hiding ( splat )
 
+import GHC.Prim
 import GHC.TypeLits
+import GHC.TypeLits.Extra
 
 
 -- Array computations
@@ -361,6 +353,11 @@ data PreSmartAcc acc exp as where
                 -> acc arrs2
                 -> PreSmartAcc acc exp arrs2
 
+  Acoerce       :: RescaleFactor
+                -> TypeR b
+                -> acc (Array (sh, INT) a)
+                -> PreSmartAcc acc exp (Array (sh, INT) b)
+
   Use           :: ArrayR (Array sh e)
                 -> Array sh e
                 -> PreSmartAcc acc exp (Array sh e)
@@ -406,30 +403,30 @@ data PreSmartAcc acc exp as where
   Fold          :: TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
-                -> acc (Array (sh, Int) e)
+                -> acc (Array (sh, INT) e)
                 -> PreSmartAcc acc exp (Array sh e)
 
-  FoldSeg       :: IntegralType i
+  FoldSeg       :: SingleIntegralType i
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
-                -> acc (Array (sh, Int) e)
+                -> acc (Array (sh, INT) e)
                 -> acc (Segments i)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
+                -> PreSmartAcc acc exp (Array (sh, INT) e)
 
   Scan          :: Direction
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> Maybe (exp e)
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e)
+                -> acc (Array (sh, INT) e)
+                -> PreSmartAcc acc exp (Array (sh, INT) e)
 
   Scan'         :: Direction
                 -> TypeR e
                 -> (SmartExp e -> SmartExp e -> exp e)
                 -> exp e
-                -> acc (Array (sh, Int) e)
-                -> PreSmartAcc acc exp (Array (sh, Int) e, Array sh e)
+                -> acc (Array (sh, INT) e)
+                -> PreSmartAcc acc exp (Array (sh, INT) e, Array sh e)
 
   Permute       :: ArrayR (Array sh e)
                 -> (SmartExp e -> SmartExp e -> exp e)
@@ -510,24 +507,40 @@ data PreSmartExp acc exp t where
                 -> exp (t1, t2)
                 -> PreSmartExp acc exp t
 
-  VecPack       :: KnownNat n
-                => VecR n s tup
-                -> exp tup
-                -> PreSmartExp acc exp (Vec n s)
+  Extract       :: ScalarType (Prim.Vec n a)
+                -> SingleIntegralType i
+                -> exp (Prim.Vec n a)
+                -> exp i
+                -> PreSmartExp acc exp a
 
-  VecUnpack     :: KnownNat n
-                => VecR n s tup
-                -> exp (Vec n s)
-                -> PreSmartExp acc exp tup
+  Insert        :: ScalarType (Prim.Vec n a)
+                -> SingleIntegralType i
+                -> exp (Prim.Vec n a)
+                -> exp i
+                -> exp a
+                -> PreSmartExp acc exp (Prim.Vec n a)
+
+  Shuffle       :: ScalarType (Prim.Vec m a)
+                -> SingleIntegralType i
+                -> exp (Prim.Vec n a)
+                -> exp (Prim.Vec n a)
+                -> exp (Prim.Vec m i)
+                -> PreSmartExp acc exp (Prim.Vec m a)
+
+  Select        :: ScalarType (Prim.Vec n a)
+                -> exp (Prim.Vec n PrimBool)
+                -> exp (Prim.Vec n a)
+                -> exp (Prim.Vec n a)
+                -> PreSmartExp acc exp (Prim.Vec n a)
 
   ToIndex       :: ShapeR sh
                 -> exp sh
                 -> exp sh
-                -> PreSmartExp acc exp Int
+                -> PreSmartExp acc exp INT
 
   FromIndex     :: ShapeR sh
                 -> exp sh
-                -> exp Int
+                -> exp INT
                 -> PreSmartExp acc exp sh
 
   Case          :: exp a
@@ -545,9 +558,6 @@ data PreSmartExp acc exp t where
                 -> exp t
                 -> PreSmartExp acc exp t
 
-  PrimConst     :: PrimConst t
-                -> PreSmartExp acc exp t
-
   PrimApp       :: PrimFun (a -> r)
                 -> exp a
                 -> PreSmartExp acc exp r
@@ -559,7 +569,7 @@ data PreSmartExp acc exp t where
 
   LinearIndex   :: TypeR t
                 -> acc (Array sh t)
-                -> exp Int
+                -> exp INT
                 -> PreSmartExp acc exp t
 
   Shape         :: ShapeR sh
@@ -568,7 +578,7 @@ data PreSmartExp acc exp t where
 
   ShapeSize     :: ShapeR sh
                 -> exp sh
-                -> PreSmartExp acc exp Int
+                -> PreSmartExp acc exp INT
 
   Foreign       :: Foreign asm
                 => TypeR y
@@ -580,8 +590,7 @@ data PreSmartExp acc exp t where
   Undef         :: ScalarType t
                 -> PreSmartExp acc exp t
 
-  Coerce        :: BitSizeEq a b
-                => ScalarType a
+  Bitcast       :: ScalarType a
                 -> ScalarType b
                 -> exp a
                 -> PreSmartExp acc exp b
@@ -807,30 +816,32 @@ instance HasArraysR acc => HasArraysR (PreSmartAcc acc exp) where
                                    PairIdxRight -> t2
     Aprj _ _                  -> error "Ejector seat? You're joking!"
     Atrace _ _ a              -> arraysR a
+    Acoerce _ bR a            -> let ArrayR shR _ = arrayR a
+                                  in TupRsingle $ ArrayR shR bR
     Use repr _                -> TupRsingle repr
-    Unit tp _                 -> TupRsingle $ ArrayR ShapeRz $ tp
+    Unit aR _                 -> TupRsingle $ ArrayR ShapeRz aR
     Generate repr _ _         -> TupRsingle repr
-    Reshape shr _ a           -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    Replicate si _ a          -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR (sliceDomainR si) tp
-    Slice si a _              -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle $ ArrayR (sliceShapeR si) tp
-    Map _ tp _ a              -> let ArrayR shr _ = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    ZipWith _ _ tp _ a _      -> let ArrayR shr _ = arrayR a
-                                 in  TupRsingle $ ArrayR shr tp
-    Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) tp = arrayR a
-                                 in  TupRsingle (ArrayR shr tp)
+    Reshape shr _ a           -> let ArrayR _ aR = arrayR a
+                                 in  TupRsingle $ ArrayR shr aR
+    Replicate si _ a          -> let ArrayR _ aR = arrayR a
+                                 in  TupRsingle $ ArrayR (sliceDomainR si) aR
+    Slice si a _              -> let ArrayR _ aR = arrayR a
+                                 in  TupRsingle $ ArrayR (sliceShapeR si) aR
+    Map _ aR _ a              -> let ArrayR shr _ = arrayR a
+                                 in  TupRsingle $ ArrayR shr aR
+    ZipWith _ _ aR _ a _      -> let ArrayR shr _ = arrayR a
+                                 in  TupRsingle $ ArrayR shr aR
+    Fold _ _ _ a              -> let ArrayR (ShapeRsnoc shr) aR = arrayR a
+                                 in  TupRsingle (ArrayR shr aR)
     FoldSeg _ _ _ _ a _       -> arraysR a
     Scan _ _ _ _ a            -> arraysR a
-    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) tp) = arrayR a
-                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr tp)
+    Scan' _ _ _ _ a           -> let repr@(ArrayR (ShapeRsnoc shr) aR) = arrayR a
+                                 in  TupRsingle repr `TupRpair` TupRsingle (ArrayR shr aR)
     Permute _ _ a _ _         -> arraysR a
-    Backpermute shr _ _ a     -> let ArrayR _ tp = arrayR a
-                                 in  TupRsingle (ArrayR shr tp)
-    Stencil s tp _ _ _        -> TupRsingle $ ArrayR (stencilShapeR s) tp
-    Stencil2 s _ tp _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) tp
+    Backpermute shr _ _ a     -> let ArrayR _ aR = arrayR a
+                                 in  TupRsingle (ArrayR shr aR)
+    Stencil s aR _ _ _        -> TupRsingle $ ArrayR (stencilShapeR s) aR
+    Stencil2 s _ aR _ _ _ _ _ -> TupRsingle $ ArrayR (stencilShapeR s) aR
 
 
 class HasTypeR f where
@@ -841,9 +852,9 @@ instance HasTypeR SmartExp where
 
 instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
   typeR = \case
-    Tag tp _                        -> tp
+    Tag tR _                        -> tR
     Match _ e                       -> typeR e
-    Const tp _                      -> TupRsingle tp
+    Const tR _                      -> TupRsingle tR
     Nil                             -> TupRunit
     Pair e1 e2                      -> typeR e1 `TupRpair` typeR e2
     Prj idx e
@@ -851,23 +862,44 @@ instance HasTypeR exp => HasTypeR (PreSmartExp acc exp) where
                                          PairIdxLeft  -> t1
                                          PairIdxRight -> t2
     Prj _ _                         -> error "I never joke about my work"
-    VecPack   vecR _                -> TupRsingle $ VectorScalarType $ vecRvector vecR
-    VecUnpack vecR _                -> vecRtuple vecR
-    ToIndex _ _ _                   -> TupRsingle scalarTypeInt
+    Extract vR _ _ _                -> TupRsingle (scalar vR)
+      where
+        scalar :: ScalarType (Prim.Vec n a) -> ScalarType a
+        scalar (NumScalarType t) = NumScalarType (num t)
+        scalar (BitScalarType t) = BitScalarType (bit t)
+
+        bit :: BitType (Prim.Vec n a) -> BitType a
+        bit TypeMask{} = TypeBit
+
+        num :: NumType (Prim.Vec n a) -> NumType a
+        num (IntegralNumType t) = IntegralNumType (integral t)
+        num (FloatingNumType t) = FloatingNumType (floating t)
+
+        integral :: IntegralType (Prim.Vec n a) -> IntegralType a
+        integral (SingleIntegralType   t) = case t of
+        integral (VectorIntegralType _ t) = SingleIntegralType t
+
+        floating :: FloatingType (Prim.Vec n a) -> FloatingType a
+        floating (SingleFloatingType   t) = case t of
+        floating (VectorFloatingType _ t) = SingleFloatingType t
+    --
+    Insert t _ _ _ _                -> TupRsingle t
+    Shuffle t _ _ _ _               -> TupRsingle t
+    Select t _ _ _                  -> TupRsingle t
+    ToIndex _ _ _                   -> TupRsingle (scalarType @INT)
     FromIndex shr _ _               -> shapeType shr
     Case _ ((_,c):_)                -> typeR c
     Case{}                          -> internalError "encountered empty case"
     Cond _ e _                      -> typeR e
     While t _ _ _                   -> t
-    PrimConst c                     -> TupRsingle $ SingleScalarType $ primConstType c
     PrimApp f _                     -> snd $ primFunType f
-    Index tp _ _                    -> tp
-    LinearIndex tp _ _              -> tp
+    Index tR _ _                    -> tR
+    LinearIndex tR _ _              -> tR
     Shape shr _                     -> shapeType shr
-    ShapeSize _ _                   -> TupRsingle scalarTypeInt
-    Foreign tp _ _ _                -> tp
-    Undef tp                        -> TupRsingle tp
-    Coerce _ tp _                   -> TupRsingle tp
+    ShapeSize _ _                   -> TupRsingle (scalarType @INT)
+    Foreign tR _ _ _                -> tR
+    Undef tR                        -> TupRsingle tR
+    Bitcast _ tR _                  -> TupRsingle tR
 
 
 -- Smart constructors
@@ -890,8 +922,9 @@ constant = Exp . go (eltR @e) . fromElt
   where
     go :: HasCallStack => TypeR t -> t -> SmartExp t
     go TupRunit         ()       = SmartExp $ Nil
-    go (TupRsingle tp)  c        = SmartExp $ Const tp c
+    go (TupRsingle tR)  c        = SmartExp $ Const tR c
     go (TupRpair t1 t2) (c1, c2) = SmartExp $ go t1 c1 `Pair` go t2 c2
+
 
 -- | 'undef' can be used anywhere a constant is expected, and indicates that the
 -- consumer of the value can receive an unspecified bit pattern.
@@ -924,6 +957,7 @@ undef = Exp $ go $ eltR @e
     go (TupRsingle t)   = SmartExp $ Undef t
     go (TupRpair t1 t2) = SmartExp $ go t1 `Pair` go t2
 
+
 -- | Get the innermost dimension of a shape.
 --
 -- The innermost dimension (right-most component of the shape) is the index of
@@ -943,249 +977,247 @@ indexTail :: (Elt sh, Elt a) => Exp (sh :. a) -> Exp sh
 indexTail (Exp x) = mkExp $ Prj PairIdxLeft x
 
 
--- Smart constructor for constants
+-- | Fill all lanes of a SIMD vector with the given value
 --
-
-mkMinBound :: (Elt t, IsBounded (EltR t)) => Exp t
-mkMinBound = mkExp $ PrimConst (PrimMinBound boundedType)
-
-mkMaxBound :: (Elt t, IsBounded (EltR t)) => Exp t
-mkMaxBound = mkExp $ PrimConst (PrimMaxBound boundedType)
-
-mkPi :: (Elt r, IsFloating (EltR r)) => Exp r
-mkPi = mkExp $ PrimConst (PrimPi floatingType)
-
-
--- Smart constructors for primitive applications
+-- @since 1.4.0.0
 --
-
--- Operators from Floating
-
-mkSin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkSin = mkPrimUnary $ PrimSin floatingType
-
-mkCos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkCos = mkPrimUnary $ PrimCos floatingType
-
-mkTan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkTan = mkPrimUnary $ PrimTan floatingType
-
-mkAsin :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAsin = mkPrimUnary $ PrimAsin floatingType
-
-mkAcos :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAcos = mkPrimUnary $ PrimAcos floatingType
-
-mkAtan :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAtan = mkPrimUnary $ PrimAtan floatingType
-
-mkSinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkSinh = mkPrimUnary $ PrimSinh floatingType
-
-mkCosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkCosh = mkPrimUnary $ PrimCosh floatingType
-
-mkTanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkTanh = mkPrimUnary $ PrimTanh floatingType
-
-mkAsinh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAsinh = mkPrimUnary $ PrimAsinh floatingType
-
-mkAcosh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAcosh = mkPrimUnary $ PrimAcosh floatingType
-
-mkAtanh :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkAtanh = mkPrimUnary $ PrimAtanh floatingType
-
-mkExpFloating :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkExpFloating = mkPrimUnary $ PrimExpFloating floatingType
-
-mkSqrt :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkSqrt = mkPrimUnary $ PrimSqrt floatingType
-
-mkLog :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkLog = mkPrimUnary $ PrimLog floatingType
-
-mkFPow :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
-mkFPow = mkPrimBinary $ PrimFPow floatingType
-
-mkLogBase :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
-mkLogBase = mkPrimBinary $ PrimLogBase floatingType
-
--- Operators from Num
-
-mkAdd :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
-mkAdd = mkPrimBinary $ PrimAdd numType
-
-mkSub :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
-mkSub = mkPrimBinary $ PrimSub numType
-
-mkMul :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t -> Exp t
-mkMul = mkPrimBinary $ PrimMul numType
-
-mkNeg :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
-mkNeg = mkPrimUnary $ PrimNeg numType
-
-mkAbs :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
-mkAbs = mkPrimUnary $ PrimAbs numType
-
-mkSig :: (Elt t, IsNum (EltR t)) => Exp t -> Exp t
-mkSig = mkPrimUnary $ PrimSig numType
-
--- Operators from Integral
-
-mkQuot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkQuot = mkPrimBinary $ PrimQuot integralType
-
-mkRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkRem = mkPrimBinary $ PrimRem integralType
-
-mkQuotRem :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
-mkQuotRem (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimQuotRem integralType `PrimApp` SmartExp (Pair x y)
-  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
-
-mkIDiv :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkIDiv = mkPrimBinary $ PrimIDiv integralType
-
-mkMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkMod = mkPrimBinary $ PrimMod integralType
-
-mkDivMod :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> (Exp t, Exp t)
-mkDivMod (Exp x) (Exp y) =
-  let pair = SmartExp $ PrimDivMod integralType `PrimApp` SmartExp (Pair x y)
-  in  (mkExp $ Prj PairIdxLeft pair, mkExp $ Prj PairIdxRight pair)
-
--- Operators from Bits and FiniteBits
-
-mkBAnd :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkBAnd = mkPrimBinary $ PrimBAnd integralType
-
-mkBOr :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkBOr = mkPrimBinary $ PrimBOr integralType
-
-mkBXor :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t -> Exp t
-mkBXor = mkPrimBinary $ PrimBXor integralType
-
-mkBNot :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp t
-mkBNot = mkPrimUnary $ PrimBNot integralType
-
-mkBShiftL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
-mkBShiftL = mkPrimBinary $ PrimBShiftL integralType
-
-mkBShiftR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
-mkBShiftR = mkPrimBinary $ PrimBShiftR integralType
-
-mkBRotateL :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
-mkBRotateL = mkPrimBinary $ PrimBRotateL integralType
-
-mkBRotateR :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int -> Exp t
-mkBRotateR = mkPrimBinary $ PrimBRotateR integralType
-
-mkPopCount :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
-mkPopCount = mkPrimUnary $ PrimPopCount integralType
-
-mkCountLeadingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
-mkCountLeadingZeros = mkPrimUnary $ PrimCountLeadingZeros integralType
-
-mkCountTrailingZeros :: (Elt t, IsIntegral (EltR t)) => Exp t -> Exp Int
-mkCountTrailingZeros = mkPrimUnary $ PrimCountTrailingZeros integralType
-
-
--- Operators from Fractional
-
-mkFDiv :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
-mkFDiv = mkPrimBinary $ PrimFDiv floatingType
-
-mkRecip :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t
-mkRecip = mkPrimUnary $ PrimRecip floatingType
-
--- Operators from RealFrac
-
-mkTruncate :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkTruncate = mkPrimUnary $ PrimTruncate floatingType integralType
-
-mkRound :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkRound = mkPrimUnary $ PrimRound floatingType integralType
-
-mkFloor :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkFloor = mkPrimUnary $ PrimFloor floatingType integralType
-
-mkCeiling :: (Elt a, Elt b, IsFloating (EltR a), IsIntegral (EltR b)) => Exp a -> Exp b
-mkCeiling = mkPrimUnary $ PrimCeiling floatingType integralType
-
--- Operators from RealFloat
-
-mkAtan2 :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp t -> Exp t
-mkAtan2 = mkPrimBinary $ PrimAtan2 floatingType
-
-mkIsNaN :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
-mkIsNaN = mkPrimUnaryBool $ PrimIsNaN floatingType
-
-mkIsInfinite :: (Elt t, IsFloating (EltR t)) => Exp t -> Exp Bool
-mkIsInfinite = mkPrimUnaryBool $ PrimIsInfinite floatingType
-
--- FIXME: add missing operations from Floating, RealFrac & RealFloat
-
--- Relational and equality operators
-
-mkLt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkLt = mkPrimBinaryBool $ PrimLt singleType
-
-mkGt :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkGt = mkPrimBinaryBool $ PrimGt singleType
-
-mkLtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkLtEq = mkPrimBinaryBool $ PrimLtEq singleType
-
-mkGtEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkGtEq = mkPrimBinaryBool $ PrimGtEq singleType
-
-mkEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkEq = mkPrimBinaryBool $ PrimEq singleType
-
-mkNEq :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp Bool
-mkNEq = mkPrimBinaryBool $ PrimNEq singleType
-
-mkMax :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
-mkMax = mkPrimBinary $ PrimMax singleType
-
-mkMin :: (Elt t, IsSingle (EltR t)) => Exp t -> Exp t -> Exp t
-mkMin = mkPrimBinary $ PrimMin singleType
-
--- Logical operators
-
-mkLAnd :: Exp Bool -> Exp Bool -> Exp Bool
-mkLAnd (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLAnd (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+splat :: (SIMD n a, Elt a) => Exp a -> Exp (Vec n a)
+splat x = pack (repeat x)
+
+-- | Pack scalar expressions into a single SIMD vector
+--
+-- @since 1.4.0.0
+--
+pack :: forall n a. (SIMD n a, Elt a) => [Exp a] -> Exp (Vec n a)
+pack xs =
+  let go :: Word8 -> [Exp a] -> Exp (Vec n a) -> Exp (Vec n a)
+      go _ []     vec = vec
+      go i (v:vs) vec = go (i+1) vs (insert vec (constant i) v)
+      --
+      n = fromIntegral (natVal' (proxy# :: Proxy# n))
+  in
+  go 0 (take n xs) undef
+
+-- | Unpack the lanes of a SIMD vector into scalar elements
+--
+-- @since 1.4.0.0
+--
+unpack :: forall n a. (SIMD n a, Elt a) => Exp (Vec n a) -> [Exp a]
+unpack v =
+  let n = fromIntegral (natVal' (proxy# :: Proxy# n)) :: Word8
+   in map (extract v . constant) [0 .. n-1]
+
+-- | Extract a single scalar element from the given SIMD vector at the
+-- specified index
+--
+-- @since 1.4.0.0
+--
+extract :: forall n a i. (Elt a, SIMD n a, IsSingleIntegral (EltR i))
+        => Exp (Vec n a)
+        -> Exp i
+        -> Exp a
+extract (Exp v) (Exp i) = Exp $ mkExtract (vecR @n @a) (eltR @a) singleIntegralType v i
+
+mkExtract :: TypeR v -> TypeR e -> SingleIntegralType i -> SmartExp v -> SmartExp i -> SmartExp e
+mkExtract _vR _eR iR _v i = go _vR _eR _v
   where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+    go :: TypeR v -> TypeR e -> SmartExp v -> SmartExp e
+    go TupRunit           TupRunit           _ = SmartExp Nil
+    go (TupRsingle vR)    (TupRsingle eR)    v = scalar vR eR v
+    go (TupRpair vR1 vR2) (TupRpair eR1 eR2) v =
+      let (v1, v2) = unPair v
+       in SmartExp $ go vR1 eR1 v1 `Pair` go vR2 eR2 v2
+    go _ _ _ = error "impossible"
 
-mkLOr :: Exp Bool -> Exp Bool -> Exp Bool
-mkLOr (Exp a) (Exp b) = mkExp $ SmartExp (PrimApp PrimLOr (SmartExp $ Pair x y)) `Pair` SmartExp Nil
+    scalar :: ScalarType v -> ScalarType e -> SmartExp v -> SmartExp e
+    scalar (NumScalarType vR) (NumScalarType eR) = num vR eR
+    scalar (BitScalarType vR) (BitScalarType eR) = bit vR eR
+    scalar _ _ = error "impossible"
+
+    bit :: BitType v -> BitType e -> SmartExp v -> SmartExp e
+    bit TypeMask{} TypeBit v = SmartExp $ Extract scalarType iR v i
+    bit _ _ _ = error "impossible"
+
+    num :: NumType v -> NumType e -> SmartExp v -> SmartExp e
+    num (IntegralNumType vR) (IntegralNumType eR) = integral vR eR
+    num (FloatingNumType vR) (FloatingNumType eR) = floating vR eR
+    num _ _ = error "impossible"
+
+    integral :: IntegralType v -> IntegralType e -> SmartExp v -> SmartExp e
+    integral (VectorIntegralType n vR) (SingleIntegralType tR) v
+      | Just Refl <- matchSingleIntegralType vR tR
+      = SmartExp $ Extract (NumScalarType (IntegralNumType (VectorIntegralType n vR))) iR v i
+    integral _ _ _ = error "impossible"
+
+    floating :: FloatingType v -> FloatingType e -> SmartExp v -> SmartExp e
+    floating (VectorFloatingType n vR) (SingleFloatingType tR) v
+      | Just Refl <- matchSingleFloatingType vR tR
+      = SmartExp $ Extract (NumScalarType (FloatingNumType (VectorFloatingType n vR))) iR v i
+    floating _ _ _ = error "impossible"
+
+
+-- | Insert a scalar element into the given SIMD vector at the specified
+-- index
+--
+-- @since 1.4.0.0
+--
+insert :: forall n a i. (Elt a, SIMD n a, IsSingleIntegral (EltR i))
+       => Exp (Vec n a)
+       -> Exp i
+       -> Exp a
+       -> Exp (Vec n a)
+insert (Exp v) (Exp i) (Exp x) = Exp $ mkInsert (vecR @n @a) (eltR @a) singleIntegralType v i x
+
+mkInsert :: TypeR v -> TypeR e -> SingleIntegralType i -> SmartExp v -> SmartExp i -> SmartExp e -> SmartExp v
+mkInsert _vR _eR iR _v i _x = go _vR _eR _v _x
   where
-    x = SmartExp $ Prj PairIdxLeft a
-    y = SmartExp $ Prj PairIdxLeft b
+    go :: TypeR v -> TypeR e -> SmartExp v -> SmartExp e -> SmartExp v
+    go TupRunit           TupRunit           _ _ = SmartExp Nil
+    go (TupRsingle vR)    (TupRsingle eR)    v e = scalar vR eR v e
+    go (TupRpair vR1 vR2) (TupRpair eR1 eR2) v e =
+      let (v1, v2) = unPair v
+          (e1, e2) = unPair e
+       in SmartExp $ go vR1 eR1 v1 e1 `Pair` go vR2 eR2 v2 e2
+    go _ _ _ _ = error "impossible"
 
-mkLNot :: Exp Bool -> Exp Bool
-mkLNot (Exp a) = mkExp $ SmartExp (PrimApp PrimLNot x) `Pair` SmartExp Nil
+    scalar :: ScalarType v -> ScalarType e -> SmartExp v -> SmartExp e -> SmartExp v
+    scalar (NumScalarType vR) (NumScalarType eR) = num vR eR
+    scalar (BitScalarType vR) (BitScalarType eR) = bit vR eR
+    scalar _ _ = error "impossible"
+
+    bit :: BitType v -> BitType e -> SmartExp v -> SmartExp e -> SmartExp v
+    bit TypeMask{} TypeBit v = SmartExp . Insert scalarType iR v i
+    bit _ _ _ = error "impossible"
+
+    num :: NumType v -> NumType e -> SmartExp v -> SmartExp e -> SmartExp v
+    num (IntegralNumType vR) (IntegralNumType eR) = integral vR eR
+    num (FloatingNumType vR) (FloatingNumType eR) = floating vR eR
+    num _ _ = error "impossible"
+
+    integral :: IntegralType v -> IntegralType e -> SmartExp v -> SmartExp e -> SmartExp v
+    integral (VectorIntegralType n vR) (SingleIntegralType tR) v
+      | Just Refl <- matchSingleIntegralType vR tR
+      = SmartExp . Insert (NumScalarType (IntegralNumType (VectorIntegralType n vR))) iR v i
+    integral _ _ _ = error "impossible"
+
+    floating :: FloatingType v -> FloatingType e -> SmartExp v -> SmartExp e -> SmartExp v
+    floating (VectorFloatingType n vR) (SingleFloatingType tR) v
+      | Just Refl <- matchSingleFloatingType vR tR
+      = SmartExp . Insert (NumScalarType (FloatingNumType (VectorFloatingType n vR))) iR v i
+    floating _ _ _ = error "impossible"
+
+
+-- | Construct a permutation of elements from two input vectors
+--
+-- The elements of the two input vectors are concatenated and numbered from
+-- zero left-to-right. For each element in the result vector, the shuffle
+-- mask selects the corresponding element from this concatenated vector to
+-- copy to the result.
+--
+-- @since 1.4.0.0
+--
+shuffle :: forall m n a i. (SIMD n a, SIMD m a, SIMD m i, IsSingleIntegral (EltR i))
+        => Exp (Vec n a)
+        -> Exp (Vec n a)
+        -> Exp (Vec m i)
+        -> Exp (Vec m a)
+shuffle (Exp xs) (Exp ys) (Exp i) = Exp $ go (vecR @n @a) (vecR @m @a) xs ys
   where
-    x = SmartExp $ Prj PairIdxLeft a
+    go :: TypeR t -> TypeR r -> SmartExp t -> SmartExp t -> SmartExp r
+    go TupRunit           TupRunit           _ _ = SmartExp Nil
+    go (TupRsingle vR)    (TupRsingle rR)    x y = scalar vR rR x y
+    go (TupRpair vR1 vR2) (TupRpair rR1 rR2) x y =
+      let (x1, x2) = unPair x
+          (y1, y2) = unPair y
+       in SmartExp $ go vR1 rR1 x1 y1 `Pair` go vR2 rR2 x2 y2
+    go _ _ _ _ = error "impossible"
 
--- Numeric conversions
+    scalar :: ScalarType t -> ScalarType r -> SmartExp t -> SmartExp t -> SmartExp r
+    scalar (NumScalarType vR) (NumScalarType rR) = num vR rR
+    scalar (BitScalarType vR) (BitScalarType rR) = bit vR rR
+    scalar _ _ = error "impossible"
 
-mkFromIntegral :: (Elt a, Elt b, IsIntegral (EltR a), IsNum (EltR b)) => Exp a -> Exp b
-mkFromIntegral = mkPrimUnary $ PrimFromIntegral integralType numType
+    bit :: BitType t -> BitType r -> SmartExp t -> SmartExp t -> SmartExp r
+    bit (TypeMask _) (TypeMask m) x y
+      | TupRsingle (NumScalarType (IntegralNumType (VectorIntegralType m' iR))) <- vecR @m @i
+      , Just Refl <- sameNat' m m'
+      = SmartExp $ Shuffle (BitScalarType (TypeMask m)) iR x y i
+    bit _ _ _ _ = error "impossible"
 
-mkToFloating :: (Elt a, Elt b, IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
-mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
+    num :: NumType t -> NumType r -> SmartExp t -> SmartExp t -> SmartExp r
+    num (IntegralNumType vR) (IntegralNumType rR) = integral vR rR
+    num (FloatingNumType vR) (FloatingNumType rR) = floating vR rR
+    num _ _ = error "impossible"
 
--- Other conversions
+    integral :: IntegralType t -> IntegralType r -> SmartExp t -> SmartExp t -> SmartExp r
+    integral (VectorIntegralType _ vR) (VectorIntegralType m rR) x y
+      | TupRsingle (NumScalarType (IntegralNumType (VectorIntegralType m' iR))) <- vecR @m @i
+      , Just Refl <- matchSingleIntegralType vR rR
+      , Just Refl <- sameNat' m m'
+      = SmartExp $ Shuffle (NumScalarType (IntegralNumType (VectorIntegralType m vR))) iR x y i
+    integral _ _ _ _ = error "impossible"
 
--- NOTE: Restricted to scalar types with a type-level BitSizeEq constraint to
--- make this version "safe"
-mkBitcast :: forall b a. (Elt a, Elt b, IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
-mkBitcast (Exp a) = mkExp $ Coerce (scalarType @(EltR a)) (scalarType @(EltR b)) a
+    floating :: FloatingType t -> FloatingType r -> SmartExp t -> SmartExp t -> SmartExp r
+    floating (VectorFloatingType _ vR) (VectorFloatingType m rR) x y
+      | TupRsingle (NumScalarType (IntegralNumType (VectorIntegralType m' iR))) <- vecR @m @i
+      , Just Refl <- matchSingleFloatingType vR rR
+      , Just Refl <- sameNat' m m'
+      = SmartExp $ Shuffle (NumScalarType (FloatingNumType (VectorFloatingType m vR))) iR x y i
+    floating _ _ _ _ = error "impossible"
+
+
+-- | Choose one value based on a condition, without branching. This is strict in
+-- both arguments.
+--
+-- @since 1.4.0.0
+--
+select :: forall n a. SIMD n a
+       => Exp (Vec n Bool)
+       -> Exp (Vec n a)
+       -> Exp (Vec n a)
+       -> Exp (Vec n a)
+select (Exp mask) (Exp tt) (Exp ff) = Exp $ go (vecR @n @a) tt ff
+  where
+    go :: TypeR t -> SmartExp t -> SmartExp t -> SmartExp t
+    go TupRunit           _ _ = SmartExp Nil
+    go (TupRsingle vR)    t f = scalar vR t f
+    go (TupRpair vR1 vR2) t f =
+      let (t1, t2) = unPair t
+          (f1, f2) = unPair f
+       in SmartExp $ go vR1 t1 f1 `Pair` go vR2 t2 f2
+
+    scalar :: ScalarType t -> SmartExp t -> SmartExp t -> SmartExp t
+    scalar (NumScalarType vR) = num vR
+    scalar (BitScalarType vR) = bit vR
+
+    bit :: BitType t -> SmartExp t -> SmartExp t -> SmartExp t
+    bit (TypeMask n)
+      | Just Refl <- sameNat' n (proxy# :: Proxy# n)
+      = SmartExp $$ Select (BitScalarType (TypeMask n)) mask
+    bit _ = error "impossible"
+
+    num :: NumType t -> SmartExp t -> SmartExp t -> SmartExp t
+    num (IntegralNumType vR) = integral vR
+    num (FloatingNumType vR) = floating vR
+
+    integral :: IntegralType t -> SmartExp t -> SmartExp t -> SmartExp t
+    integral (VectorIntegralType n t)
+      | Just Refl <- sameNat' n (proxy# :: Proxy# n)
+      = SmartExp $$ Select (NumScalarType (IntegralNumType (VectorIntegralType n t))) mask
+    integral _ = error "impossible"
+
+    floating :: FloatingType t -> SmartExp t -> SmartExp t -> SmartExp t
+    floating (VectorFloatingType n t)
+      | Just Refl <- sameNat' n (proxy# :: Proxy# n)
+      = SmartExp $$ Select (NumScalarType (FloatingNumType (VectorFloatingType n t))) mask
+    floating _ = error "impossible"
+
+
+-- Coercions between types
+-- -----------------------
+
+mkBitcast :: forall b a. (IsScalar (EltR a), IsScalar (EltR b), BitSizeEq (EltR a) (EltR b)) => Exp a -> Exp b
+mkBitcast (Exp a) = mkExp $ Bitcast (scalarType @(EltR a)) (scalarType @(EltR b)) a
 
 mkCoerce :: Coerce (EltR a) (EltR b) => Exp a -> Exp b
 mkCoerce (Exp a) = Exp $ mkCoerce' a
@@ -1194,7 +1226,7 @@ class Coerce a b where
   mkCoerce' :: SmartExp a -> SmartExp b
 
 instance {-# OVERLAPS #-} (IsScalar a, IsScalar b, BitSizeEq a b) => Coerce a b where
-  mkCoerce' = SmartExp . Coerce (scalarType @a) (scalarType @b)
+  mkCoerce' = SmartExp . Bitcast (scalarType @a) (scalarType @b)
 
 instance (Coerce a1 b1, Coerce a2 b2) => Coerce (a1, a2) (b1, b2) where
   mkCoerce' a = SmartExp $ Pair (mkCoerce' $ SmartExp $ Prj PairIdxLeft a) (mkCoerce' $ SmartExp $ Prj PairIdxRight a)
@@ -1214,6 +1246,89 @@ instance Coerce (a, ()) a where
 instance Coerce a (a, ()) where
   mkCoerce' a = SmartExp (Pair a (SmartExp Nil))
 
+
+mkAcoerce
+    :: forall b a sh. (Acoerce (EltR a) (EltR b))
+    => Acc (Sugar.Array (sh :. Int) a)
+    -> Acc (Sugar.Array (sh :. Int) b)
+mkAcoerce (Acc a) =
+  let ArrayR _ aR = arrayR a
+      (bR, sz)    = mkAcoerce' @(EltR a) aR
+   in Acc $ SmartAcc (Acoerce sz bR a)
+
+class Acoerce a b where
+  mkAcoerce' :: TypeR a -> (TypeR b, RescaleFactor)
+
+instance {-# OVERLAPS #-} (IsScalar a, IsScalar b) => Acoerce a b where
+  mkAcoerce' _ =
+    let ta = scalarType @a
+        tb = scalarType @b
+        sa = scalar ta
+        sb = scalar tb
+        sz = case compare sa sb of
+               EQ -> 0  -- TLM: reuse this value for something else? rescale of ±1 achieves the same thing
+               GT ->          sa `quot` sb
+               LT -> negate $ sb `quot` sa
+        --
+        scalar :: ScalarType t -> RescaleFactor
+        scalar (NumScalarType t) = num t
+        scalar (BitScalarType t) = bit t
+
+        bit :: BitType t -> RescaleFactor
+        bit TypeBit      = 1
+        bit (TypeMask n) = fromInteger (natVal' n)
+
+        num :: NumType t -> RescaleFactor
+        num (IntegralNumType t) = integral t
+        num (FloatingNumType t) = floating t
+
+        integral :: IntegralType t -> RescaleFactor
+        integral (VectorIntegralType n t) = fromInteger (natVal' n) * integral (SingleIntegralType t)
+        integral (SingleIntegralType t)   = case t of
+          TypeInt  n -> fromIntegral n
+          TypeWord n -> fromIntegral n
+
+        floating :: FloatingType t -> RescaleFactor
+        floating (VectorFloatingType n t) = fromInteger (natVal' n) * floating (SingleFloatingType t)
+        floating (SingleFloatingType t)   = case t of
+          TypeFloat16  -> 16
+          TypeFloat32  -> 32
+          TypeFloat64  -> 64
+          TypeFloat128 -> 128
+    in
+    (TupRsingle tb, sz)
+
+-- TODO: Make this a compile time error. This should be possible with type
+-- families, but GHC seems to have problems normalising the BitSize of 'Vec's
+-- (and the GHC.TypeLits.Normalise package unfortunately does not seem to help).
+--
+instance (Acoerce a1 b1, Acoerce a2 b2) => Acoerce (a1, a2) (b1, b2) where
+  mkAcoerce' (TupRpair a1 a2) =
+    let (b1, s1) = mkAcoerce' a1
+        (b2, s2) = mkAcoerce' a2
+    in
+    if s1 == s2
+       then (TupRpair b1 b2, s1)
+       else error $ formatToString ("Could not coerce type `" % formatTypeR % "' to `" % formatTypeR % "'")
+                        (TupRpair a1 a2) (TupRpair b1 b2)
+  mkAcoerce' _ = error "impossible"
+
+instance Acoerce ((), a) a where
+  mkAcoerce' (TupRpair TupRunit a) = (a, 0)
+  mkAcoerce' _                     = error "impossible"
+
+instance Acoerce (a, ()) a where
+  mkAcoerce' (TupRpair a TupRunit) = (a, 0)
+  mkAcoerce' _                     = error "impossible"
+
+instance Acoerce a ((), a) where
+  mkAcoerce' a = (TupRpair TupRunit a, 0)
+
+instance Acoerce a (a, ()) where
+  mkAcoerce' a = (TupRpair a TupRunit, 0)
+
+instance Acoerce a a where
+  mkAcoerce' a = (a, 0)
 
 
 -- Auxiliary functions
@@ -1247,23 +1362,17 @@ mkExp = Exp . SmartExp
 unExp :: Exp e -> SmartExp (EltR e)
 unExp (Exp e) = e
 
-unExpFunction :: (Elt a, Elt b) => (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
+unExpFunction :: (Exp a -> Exp b) -> SmartExp (EltR a) -> SmartExp (EltR b)
 unExpFunction f = unExp . f . Exp
 
-unExpBinaryFunction :: (Elt a, Elt b, Elt c) => (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
+unExpBinaryFunction :: (Exp a -> Exp b -> Exp c) -> SmartExp (EltR a) -> SmartExp (EltR b) -> SmartExp (EltR c)
 unExpBinaryFunction f a b = unExp $ f (Exp a) (Exp b)
 
-mkPrimUnary :: (Elt a, Elt b) => PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
+mkPrimUnary :: PrimFun (EltR a -> EltR b) -> Exp a -> Exp b
 mkPrimUnary prim (Exp a) = mkExp $ PrimApp prim a
 
-mkPrimBinary :: (Elt a, Elt b, Elt c) => PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
+mkPrimBinary :: PrimFun ((EltR a, EltR b) -> EltR c) -> Exp a -> Exp b -> Exp c
 mkPrimBinary prim (Exp a) (Exp b) = mkExp $ PrimApp prim (SmartExp $ Pair a b)
-
-mkPrimUnaryBool :: Elt a => PrimFun (EltR a -> PrimBool) -> Exp a -> Exp Bool
-mkPrimUnaryBool = mkCoerce @PrimBool $$ mkPrimUnary
-
-mkPrimBinaryBool :: (Elt a, Elt b) => PrimFun ((EltR a, EltR b) -> PrimBool) -> Exp a -> Exp b -> Exp Bool
-mkPrimBinaryBool = mkCoerce @PrimBool $$$ mkPrimBinary
 
 unPair :: SmartExp (a, b) -> (SmartExp a, SmartExp b)
 unPair e = (SmartExp $ Prj PairIdxLeft e, SmartExp $ Prj PairIdxRight e)
@@ -1339,6 +1448,7 @@ formatPreAccOp = later $ \case
   Stencil{}           -> "Stencil"
   Stencil2{}          -> "Stencil2"
   Aforeign{}          -> "Aforeign"
+  Acoerce{}           -> "Acoerce"
 
 formatPreExpOp :: Format r (PreSmartExp acc exp t -> r)
 formatPreExpOp = later $ \case
@@ -1349,19 +1459,20 @@ formatPreExpOp = later $ \case
   Nil{}         -> "Nil"
   Pair{}        -> "Pair"
   Prj{}         -> "Prj"
-  VecPack{}     -> "VecPack"
-  VecUnpack{}   -> "VecUnpack"
+  Extract{}     -> "Extract"
+  Insert{}      -> "Insert"
+  Shuffle{}     -> "Shuffle"
+  Select{}      -> "Select"
   ToIndex{}     -> "ToIndex"
   FromIndex{}   -> "FromIndex"
   Case{}        -> "Case"
   Cond{}        -> "Cond"
   While{}       -> "While"
-  PrimConst{}   -> "PrimConst"
   PrimApp{}     -> "PrimApp"
   Index{}       -> "Index"
   LinearIndex{} -> "LinearIndex"
   Shape{}       -> "Shape"
   ShapeSize{}   -> "ShapeSize"
   Foreign{}     -> "Foreign"
-  Coerce{}      -> "Coerce"
+  Bitcast{}     -> "Bitcast"
 

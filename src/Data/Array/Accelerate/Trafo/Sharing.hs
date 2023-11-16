@@ -337,6 +337,7 @@ convertSharingAcc config alyt aenv (ScopedAcc lams (AccSharing _ preAcc))
       Aprj ix a                   -> let AST.OpenAcc a' = cvtAprj ix a
                                      in a'
       Atrace msg acc1 acc2        -> AST.Atrace msg (cvtA acc1) (cvtA acc2)
+      Acoerce scale bR acc        -> AST.Acoerce scale bR (cvtA acc)
       Use repr array              -> AST.Use repr array
       Unit tp e                   -> AST.Unit tp (cvtE e)
       Generate repr@(ArrayR shr _) sh f
@@ -758,21 +759,22 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
           Prj idx e             -> cvtPrj idx (cvt e)
           Nil                   -> AST.Nil
           Pair e1 e2            -> AST.Pair (cvt e1) (cvt e2)
-          VecPack   vec e       -> AST.VecPack   vec (cvt e)
-          VecUnpack vec e       -> AST.VecUnpack vec (cvt e)
+          Extract vR iR v i     -> AST.Extract vR iR (cvt v) (cvt i)
+          Insert vR iR v i x    -> AST.Insert vR iR (cvt v) (cvt i) (cvt x)
+          Shuffle eR iR x y i   -> AST.Shuffle eR iR (cvt x) (cvt y) (cvt i)
+          Select eR m x y       -> AST.Select eR (cvt m) (cvt x) (cvt y)
           ToIndex shr sh ix     -> AST.ToIndex shr (cvt sh) (cvt ix)
           FromIndex shr sh e    -> AST.FromIndex shr (cvt sh) (cvt e)
           Case e rhs            -> cvtCase (cvt e) (over (mapped . _2) cvt rhs)
           Cond e1 e2 e3         -> AST.Cond (cvt e1) (cvt e2) (cvt e3)
           While tp p it i       -> AST.While (cvtFun1 tp p) (cvtFun1 tp it) (cvt i)
-          PrimConst c           -> AST.PrimConst c
           PrimApp f e           -> cvtPrimFun f (cvt e)
           Index _ a e           -> AST.Index (cvtAvar a) (cvt e)
           LinearIndex _ a i     -> AST.LinearIndex (cvtAvar a) (cvt i)
           Shape _ a             -> AST.Shape (cvtAvar a)
           ShapeSize shr e       -> AST.ShapeSize shr (cvt e)
           Foreign repr ff f e   -> AST.Foreign repr ff (convertSmartFun config (typeR e) f) (cvt e)
-          Coerce t1 t2 e        -> AST.Coerce t1 t2 (cvt e)
+          Bitcast t1 t2 e       -> AST.Bitcast t1 t2 (cvt e)
 
     cvtPrj :: forall a b c env1 aenv1. PairIdx (a, b) c -> AST.OpenExp env1 aenv1 (a, b) -> AST.OpenExp env1 aenv1 c
     cvtPrj PairIdxLeft  (AST.Pair a _) = a
@@ -806,7 +808,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       AST.Let lhs bnd body -> AST.Let lhs bnd (cvtPrimFun f body)
       x                    -> AST.PrimApp f x
 
-    -- Convert the flat list of equations into nested case statement
+    -- Convert the flat list of equations into nested case statements
     -- directly on the tag variables.
     --
     cvtCase :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
@@ -817,26 +819,43 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       = AST.Let lhs s $ nested (expVars (value weakenId)) (over (mapped . _2) (weakenE (weakenWithLHS lhs)) es)
       where
         nested :: HasCallStack => AST.OpenExp env' aenv' a -> [(TagR a, AST.OpenExp env' aenv' b)] -> AST.OpenExp env' aenv' b
+        nested _ []      = internalError "empty case"
         nested _ [(_,r)] = r
-        nested s rs      =
-          let groups = groupBy (eqT `on` fst) rs
-              tags   = map (firstT . fst . head) groups
-              e      = prjT (fst (head rs)) s
-              rhs    = map (nested s . map (over _1 ignore)) groups
-          in
-          AST.Case e (zip tags rhs) Nothing
+        nested s rs@(r:_)
+          | Exists tag <- tagT (fst r)
+          = let groups = groupBy (eqT `on` fst) rs
+                rhs    = map (nested s . map (over _1 ignore)) groups
+                e      = prjT tag (fst r) s
+                tags   = map (firstT tag . fst . head) groups
+            in
+            AST.Case tag e (zip tags rhs) Nothing
+
+        tagT :: TagR a -> Exists TagType
+        tagT = fromJust . go
+          where
+            go ::TagR a -> Maybe (Exists TagType)
+            go (TagRcon t _ _) = Just (Exists t)
+            go (TagRenum t _)  = Just (Exists t)
+            go (TagRpair a b)
+              | Just t <- go a = Just t
+              | otherwise      = go b
+            go _ = Nothing
 
         -- Extract the variable representing this particular tag from the
         -- scrutinee. This is safe because we let-bind the argument first.
-        prjT :: TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' TAG
-        prjT = fromJust $$ go
+        prjT :: forall a t env' aenv'. TagType t -> TagR a -> AST.OpenExp env' aenv' a -> AST.OpenExp env' aenv' t
+        prjT t = fromJust $$ go
           where
-            go :: TagR a -> AST.OpenExp env' aenv' a -> Maybe (AST.OpenExp env' aenv' TAG)
-            go TagRtag{}        (AST.Pair l _) = Just l
-            go (TagRpair ta tb) (AST.Pair l r) =
-              case go ta l of
-                Just t  -> Just t
-                Nothing -> go tb r
+            go :: TagR s -> AST.OpenExp env' aenv' s -> Maybe (AST.OpenExp env' aenv' t)
+            go (TagRcon s _ _) (AST.Pair l _)
+              | Just Refl <- matchTagType s t
+              = Just l
+            go (TagRenum s _) x
+              | Just Refl <- matchTagType s t
+              = Just x
+            go (TagRpair ta tb) (AST.Pair l r)
+              | Just x <- go ta l = Just x
+              | otherwise         = go tb r
             go _ _ = Nothing
 
         -- Equality up to the first constructor tag encountered
@@ -844,26 +863,37 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
         eqT a b = snd $ go a b
           where
             go :: TagR a -> TagR a -> (Any, Bool)
-            go TagRunit          TagRunit          = no True
-            go TagRsingle{}      TagRsingle{}      = no True
-            go TagRundef{}       TagRundef{}       = no True
-            go (TagRtag v1 _)    (TagRtag v2 _)    = yes (v1 == v2)
-            go (TagRpair a1 b1)  (TagRpair a2 b2)  =
+            go TagRunit             TagRunit             = no True
+            go TagRsingle{}         TagRsingle{}         = no True
+            go TagRundef{}          TagRundef{}          = no True
+            go (TagRenum t1 v1)     (TagRenum t2 v2)
+              | Just Refl <- matchTagType t1 t2
+              , TagDict   <- tagDict t1
+              = yes (v1 == v2)
+            go (TagRcon t1 v1 _)    (TagRcon t2 v2 _)
+              | Just Refl <- matchTagType t1 t2
+              , TagDict   <- tagDict t1
+              = yes (v1 == v2)
+            go (TagRpair a1 b1) (TagRpair a2 b2) =
               let (Any r, s) = go a1 a2
                in case r of
                     True  -> yes s
                     False -> go b1 b2
             go _ _ = no False
 
-        firstT :: TagR a -> TAG
-        firstT = fromJust . go
+        firstT :: forall a t. TagType t -> TagR a -> t
+        firstT t = fromJust . go
           where
-            go :: TagR a -> Maybe TAG
-            go (TagRtag v _)  = Just v
-            go (TagRpair a b) =
-              case go a of
-                Just t  -> Just t
-                Nothing -> go b
+            go :: TagR s -> Maybe t
+            go (TagRcon s v _)
+              | Just Refl <- matchTagType s t
+              = Just v
+            go (TagRenum s v)
+              | Just Refl <- matchTagType s t
+              = Just v
+            go (TagRpair a b)
+              | Just v <- go a = Just v
+              | otherwise      = go b
             go _ = Nothing
 
         -- Replace the first constructor tag encountered with a regular
@@ -875,7 +905,16 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
             go TagRunit         = no  $ TagRunit
             go (TagRsingle t)   = no  $ TagRsingle t
             go (TagRundef t)    = no  $ TagRundef t
-            go (TagRtag _ a)    = yes $ TagRpair (TagRundef scalarType) a
+            go (TagRenum t _)   = yes $
+              case t of
+                TagBit    -> TagRundef scalarType
+                TagWord8  -> TagRundef scalarType
+                TagWord16 -> TagRundef scalarType
+            go (TagRcon t _ a)  = yes $
+              case t of
+                TagBit    -> TagRpair (TagRundef scalarType) a
+                TagWord8  -> TagRpair (TagRundef scalarType) a
+                TagWord16 -> TagRpair (TagRundef scalarType) a
             go (TagRpair a1 a2) =
               let (Any r, a1') = go a1
                in case r of
@@ -1240,7 +1279,7 @@ instance HasTypeR UnscopedExp where
   typeR (UnscopedExp _ exp) = Smart.typeR exp
 
 -- Specifies a scalar expression AST with sharing. For expressions rooted in functions the list
--- holds a sorted environment corresponding to the variables bound in the immediate surounding
+-- holds a sorted environment corresponding to the variables bound in the immediate surrounding
 -- lambdas.
 data ScopedExp t = ScopedExp [StableSharingExp] (SharingExp ScopedAcc ScopedExp t)
 
@@ -1519,6 +1558,9 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                                              (a', h1) <- traverseAcc lvl acc1
                                              (b', h2) <- traverseAcc lvl acc2
                                              return (Atrace msg a' b', h1 `max` h2 + 1)
+            Acoerce scale bR acc        -> do
+                                             (a', h) <- traverseAcc lvl acc
+                                             return (Acoerce scale bR a', h + 1)
             Use repr arr                -> return (Use repr arr, 1)
             Unit tp e                   -> do
                                              (e', h) <- traverseExp lvl e
@@ -1837,37 +1879,38 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                             return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
 
           reconstruct $ case pexp of
-            Tag tp i            -> return (Tag tp i, 0)      -- height is 0!
-            Const tp c          -> return (Const tp c, 1)
-            Undef tp            -> return (Undef tp, 1)
-            Nil                 -> return (Nil, 1)
-            Pair e1 e2          -> travE2 Pair e1 e2
-            Prj i e             -> travE1 (Prj i) e
-            VecPack   vec e     -> travE1 (VecPack   vec) e
-            VecUnpack vec e     -> travE1 (VecUnpack vec) e
-            ToIndex shr sh ix   -> travE2 (ToIndex shr) sh ix
-            FromIndex shr sh e  -> travE2 (FromIndex shr) sh e
-            Match t e           -> travE1 (Match t) e
-            Case e rhs          -> do
-                                     (e',   h1) <- travE lvl e
-                                     (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
-                                     return (Case e' rhs', h1 `max` maximum h2 + 1)
-            Cond e1 e2 e3       -> travE3 Cond e1 e2 e3
-            While t p iter init -> do
-                                     (p'   , h1) <- traverseFun1 lvl t p
-                                     (iter', h2) <- traverseFun1 lvl t iter
-                                     (init', h3) <- travE lvl init
-                                     return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
-            PrimConst c         -> return (PrimConst c, 1)
-            PrimApp p e         -> travE1 (PrimApp p) e
-            Index tp a e        -> travAE (Index tp) a e
-            LinearIndex tp a i  -> travAE (LinearIndex tp) a i
-            Shape shr a         -> travA (Shape shr) a
-            ShapeSize shr e     -> travE1 (ShapeSize shr) e
-            Foreign tp ff f e   -> do
-                                      (e', h) <- travE lvl e
-                                      return  (Foreign tp ff f e', h+1)
-            Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
+            Tag tp i               -> return (Tag tp i, 0)      -- height is 0!
+            Const tp c             -> return (Const tp c, 1)
+            Undef tp               -> return (Undef tp, 1)
+            Nil                    -> return (Nil, 1)
+            Pair e1 e2             -> travE2 Pair e1 e2
+            Prj i e                -> travE1 (Prj i) e
+            Extract vR iR v i      -> travE2 (Extract vR iR) v i
+            Insert vR iR v i x     -> travE3 (Insert vR iR) v i x
+            Shuffle eR iR x y i    -> travE3 (Shuffle eR iR) x y i
+            Select eR m x y        -> travE3 (Select eR) m x y
+            ToIndex shr sh ix      -> travE2 (ToIndex shr) sh ix
+            FromIndex shr sh e     -> travE2 (FromIndex shr) sh e
+            Match t e              -> travE1 (Match t) e
+            Case e rhs             -> do
+                                        (e',   h1) <- travE lvl e
+                                        (rhs', h2) <- unzip <$> sequence [ travE1 (t,) c | (t,c) <- rhs ]
+                                        return (Case e' rhs', h1 `max` maximum h2 + 1)
+            Cond e1 e2 e3          -> travE3 Cond e1 e2 e3
+            While t p iter init    -> do
+                                        (p'   , h1) <- traverseFun1 lvl t p
+                                        (iter', h2) <- traverseFun1 lvl t iter
+                                        (init', h3) <- travE lvl init
+                                        return (While t p' iter' init', h1 `max` h2 `max` h3 + 1)
+            PrimApp p e            -> travE1 (PrimApp p) e
+            Index tp a e           -> travAE (Index tp) a e
+            LinearIndex tp a i     -> travAE (LinearIndex tp) a i
+            Shape shr a            -> travA (Shape shr) a
+            ShapeSize shr e        -> travE1 (ShapeSize shr) e
+            Foreign tp ff f e      -> do
+                                         (e', h) <- travE lvl e
+                                         return  (Foreign tp ff f e', h+1)
+            Bitcast t1 t2 e        -> travE1 (Bitcast t1 t2) e
 
       where
         traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
@@ -2382,7 +2425,11 @@ determineScopesSharingAcc config accOccMap = scopesAcc
                                        (a1', accCount1) = scopesAcc a1
                                        (a2', accCount2) = scopesAcc a2
                                      in
-                                       reconstruct (Atrace msg a1' a2') (accCount1 +++ accCount2)
+                                     reconstruct (Atrace msg a1' a2') (accCount1 +++ accCount2)
+          Acoerce scale bR acc    -> let
+                                       (acc', accCount) = scopesAcc acc
+                                     in
+                                     reconstruct (Acoerce scale bR acc') accCount
           Use repr arr            -> reconstruct (Use repr arr) noNodeCounts
           Unit tp e               -> let
                                        (e', accCount) = scopesExp e
@@ -2614,12 +2661,14 @@ determineScopesSharingAcc config accOccMap = scopesAcc
         :: HasCallStack
         => (SmartAcc a1 -> UnscopedAcc a2)
         -> (SmartAcc a1 -> ScopedAcc a2, NodeCounts)
-    scopesAfun1 f = (const (ScopedAcc ssa body'), (counts', graph))
+    scopesAfun1 f
+      | not (null env) = internalError "unexpected unbound variables"
+      | otherwise      = (const (ScopedAcc ssa body'), (counts', graph))
       where
-        body@(UnscopedAcc fvs _)             = f undefined
-        (ScopedAcc [] body', (counts,graph)) = scopesAcc body
-        (freeCounts, counts')                = partition isBoundHere counts
-        ssa                                  = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
+        body@(UnscopedAcc fvs _)            = f undefined
+        (ScopedAcc env body', (counts,graph)) = scopesAcc body
+        (freeCounts, counts')               = partition isBoundHere counts
+        ssa                                 = buildInitialEnvAcc fvs [sa | AccNodeCount sa _ <- freeCounts]
 
         isBoundHere (AccNodeCount (StableSharingAcc _ (AccSharing _ (Atag _ i))) _) = i `elem` fvs
         isBoundHere _                                                               = False
@@ -2692,14 +2741,19 @@ determineScopesExp
     -> RootExp t
     -> (ScopedExp t, NodeCounts)          -- Root (closed) expression plus Acc node counts
 determineScopesExp config accOccMap (RootExp expOccMap exp@(UnscopedExp fvs _))
-  = let
-        (ScopedExp [] expWithScopes, (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
-        (expCounts, accCounts)                           = partition isExpNodeCount nodeCounts
+  | not (null env)
+  = internalError "unexpected unbound variables"
+  --
+  | otherwise
+  = ( ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes
+    , cleanCounts (accCounts,graph)
+    )
+  where
+    (ScopedExp env expWithScopes, (nodeCounts,graph)) = determineScopesSharingExp config accOccMap expOccMap exp
+    (expCounts, accCounts)                            = partition isExpNodeCount nodeCounts
 
-        isExpNodeCount ExpNodeCount{} = True
-        isExpNodeCount _              = False
-    in
-    (ScopedExp (buildInitialEnvExp fvs [se | ExpNodeCount se _ <- expCounts]) expWithScopes, cleanCounts (accCounts,graph))
+    isExpNodeCount ExpNodeCount{} = True
+    isExpNodeCount _              = False
 
 
 determineScopesSharingExp
@@ -2721,12 +2775,18 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         :: HasCallStack
         => (SmartExp a -> UnscopedExp b)
         -> (SmartExp a -> ScopedExp b, NodeCounts)
-    scopesFun1 f = tracePure (bformat ("LAMBDA " % list formatStableSharingExp) ssa) (bformat (list formatNodeCount) counts) (const (ScopedExp ssa body'), (counts',graph))
+    scopesFun1 f
+      | not (null env)
+      = internalError "unexpected unbound variables"
+      --
+      | otherwise
+      = tracePure (bformat ("LAMBDA " % list formatStableSharingExp) ssa) (bformat (list formatNodeCount) counts)
+      $ (const (ScopedExp ssa body'), (counts',graph))
       where
-        body@(UnscopedExp fvs _)              = f undefined
-        (ScopedExp [] body', (counts, graph)) = scopesExp body
-        (freeCounts, counts')                 = partition isBoundHere counts
-        ssa                                   = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
+        body@(UnscopedExp fvs _)               = f undefined
+        (ScopedExp env body', (counts, graph)) = scopesExp body
+        (freeCounts, counts')                  = partition isBoundHere counts
+        ssa                                    = buildInitialEnvExp fvs [se | ExpNodeCount se _ <- freeCounts]
 
         isBoundHere (ExpNodeCount (StableSharingExp _ (ExpSharing _ (Tag _ i))) _) = i `elem` fvs
         isBoundHere _                                                              = False
@@ -2749,8 +2809,10 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
           Pair e1 e2            -> travE2 Pair e1 e2
           Nil                   -> reconstruct Nil noNodeCounts
           Prj i e               -> travE1 (Prj i) e
-          VecPack   vec e       -> travE1 (VecPack   vec) e
-          VecUnpack vec e       -> travE1 (VecUnpack vec) e
+          Extract vR iR v i     -> travE2 (Extract vR iR) v i
+          Insert vR iR v i x    -> travE3 (Insert vR iR) v i x
+          Shuffle eR iR x y i   -> travE3 (Shuffle eR iR) x y i
+          Select eR m x y       -> travE3 (Select eR) m x y
           ToIndex shr sh ix     -> travE2 (ToIndex shr) sh ix
           FromIndex shr sh e    -> travE2 (FromIndex shr) sh e
           Match t e             -> travE1 (Match t) e
@@ -2762,14 +2824,13 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
                                        (it', accCount2) = scopesFun1 it
                                        (i' , accCount3) = scopesExp i
                                     in reconstruct (While tp p' it' i') (accCount1 +++ accCount2 +++ accCount3)
-          PrimConst c           -> reconstruct (PrimConst c) noNodeCounts
           PrimApp p e           -> travE1 (PrimApp p) e
           Index tp a e          -> travAE (Index tp) a e
           LinearIndex tp a e    -> travAE (LinearIndex tp) a e
           Shape shr a           -> travA (Shape shr) a
           ShapeSize shr e       -> travE1 (ShapeSize shr) e
           Foreign tp ff f e     -> travE1 (Foreign tp ff f) e
-          Coerce t1 t2 e        -> travE1 (Coerce t1 t2) e
+          Bitcast t1 t2 e       -> travE1 (Bitcast t1 t2) e
       where
         travE1 :: HasCallStack
                => (ScopedExp a -> PreSmartExp ScopedAcc ScopedExp t)
@@ -3144,6 +3205,18 @@ recoverSharingSeq config seq
     in
     (ScopedSeq sharingSeq, [a | SeqNodeCount a _ <- ns])
 --}
+
+
+-- Utilities
+-- ---------
+
+data TagDict t where
+  TagDict :: Eq t => TagDict t
+
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 
 
 -- Debugging

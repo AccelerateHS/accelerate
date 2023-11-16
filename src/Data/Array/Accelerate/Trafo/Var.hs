@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Var
 -- Copyright   : [2012..2020] The Accelerate Team
@@ -33,7 +34,7 @@ data DeclareVars s t aenv where
 
 declareVars :: TupR s t -> DeclareVars s t env
 declareVars TupRunit
-  = DeclareVars LeftHandSideUnit weakenId $ const $ TupRunit
+  = DeclareVars LeftHandSideUnit weakenId $ const TupRunit
 declareVars (TupRsingle s)
   = DeclareVars (LeftHandSideSingle s) (weakenSucc weakenId) $ \k -> TupRsingle $ Var s $ k >:> ZeroIdx
 declareVars (TupRpair r1 r2)

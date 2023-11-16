@@ -23,7 +23,7 @@ module Language.Haskell.TH.Extra (
 #if MIN_VERSION_template_haskell(2,17,0)
 import Language.Haskell.TH                                          hiding ( plainInvisTV, tupP, tupE )
 #else
-import Language.Haskell.TH                                          hiding ( TyVarBndr, tupP, tupE )
+import Language.Haskell.TH                                          hiding ( TyVarBndr, tupP, tupE, plainTV )
 import Language.Haskell.TH.Syntax                                   ( unTypeQ, unsafeTExpCoerce )
 #if MIN_VERSION_template_haskell(2,16,0)
 import GHC.Exts                                                     ( RuntimeRep, TYPE )
@@ -70,6 +70,9 @@ specifiedSpec = SpecifiedSpec
 tyVarBndrName :: TyVarBndr flag -> Name
 tyVarBndrName (PlainTV  n)   = n
 tyVarBndrName (KindedTV n _) = n
+
+plainTV :: Name -> TyVarBndr ()
+plainTV = PlainTV
 
 plainInvisTV :: Name -> Specificity -> TyVarBndr Specificity
 plainInvisTV n _ = PlainTV n

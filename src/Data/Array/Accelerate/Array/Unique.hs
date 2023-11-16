@@ -20,6 +20,7 @@ import Data.Array.Accelerate.Lifetime
 import Control.Applicative
 import Control.Concurrent.Unique
 import Control.DeepSeq
+import Data.Coerce
 import Data.Word
 import Foreign.ForeignPtr
 import Foreign.ForeignPtr.Unsafe
@@ -107,6 +108,15 @@ unsafeWriteArray !ua !i !e =
 {-# INLINE unsafeUniqueArrayPtr #-}
 unsafeUniqueArrayPtr :: UniqueArray a -> Ptr a
 unsafeUniqueArrayPtr = unsafeForeignPtrToPtr . unsafeGetValue . uniqueArrayData
+
+
+-- | Cast a unique array parameterised by one type into another type
+--
+-- @since 1.4.0.0
+--
+{-# INLINE castUniqueArray #-}
+castUniqueArray :: UniqueArray a -> UniqueArray b
+castUniqueArray = coerce
 
 
 -- | Ensure that the unique array is alive at the given place in a sequence of

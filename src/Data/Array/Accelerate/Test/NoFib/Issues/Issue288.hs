@@ -23,7 +23,7 @@ import Data.Array.Accelerate.Test.NoFib.Base
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Bool(..) )
 
 
 test_issue288 :: RunN -> TestTree
@@ -31,7 +31,7 @@ test_issue288 runN =
   testCase "288"  $ xs @=? runN (A.map f) xs
 
 f :: Exp (Int, Int) -> Exp (Int, Int)
-f e = while (const (lift False)) id e
+f e = while (const False) id e
 
 xs :: Vector (Int, Int)
 xs = fromList (Z:.10) (P.zip [1..] [1..])

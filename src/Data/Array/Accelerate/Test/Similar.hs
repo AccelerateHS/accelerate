@@ -64,33 +64,23 @@ instance Similar Int8
 instance Similar Int16
 instance Similar Int32
 instance Similar Int64
+instance Similar Int128
 instance Similar Word8
 instance Similar Word16
 instance Similar Word32
 instance Similar Word64
+instance Similar Word128
 instance Similar Char
 instance Similar Bool
-instance Similar CShort
-instance Similar CUShort
-instance Similar CInt
-instance Similar CUInt
-instance Similar CLong
-instance Similar CULong
-instance Similar CLLong
-instance Similar CULLong
-instance Similar CChar
-instance Similar CSChar
-instance Similar CUChar
 
 instance                   Similar (Any Z)
 instance (Eq sh, Eq sz) => Similar (sh:.sz)
 instance (Eq sh)        => Similar (Any (sh:.Int))
 
-instance Similar Half    where (~=) = absRelTol 0.05    0.5
-instance Similar Float   where (~=) = absRelTol 0.00005 0.005
-instance Similar Double  where (~=) = absRelTol 0.00005 0.005
-instance Similar CFloat  where (~=) = absRelTol 0.00005 0.005
-instance Similar CDouble where (~=) = absRelTol 0.00005 0.005
+instance Similar Float16  where (~=) = absRelTol 0.05   0.5
+instance Similar Float32  where (~=) = absRelTol 0.00005 0.005
+instance Similar Float64  where (~=) = absRelTol 0.000005 0.0005
+instance Similar Float128 where (~=) = absRelTol 0.0000005 0.0005
 
 instance (Similar a, Similar b) => Similar (a, b) where
   (x1, x2) ~= (y1, y2) = x1 ~= y1 && x2 ~= y2

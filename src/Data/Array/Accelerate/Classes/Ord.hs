@@ -1,9 +1,11 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE MagicHash           #-}
+{-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternSynonyms     #-}
-{-# LANGUAGE RebindableSyntax    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
@@ -24,27 +26,28 @@
 module Data.Array.Accelerate.Classes.Ord (
 
   Ord(..),
-  Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
+  Ordering, pattern LT, pattern EQ, pattern GT,
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Analysis.Match
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Classes.Eq
+import Data.Array.Accelerate.Classes.VEq
+import Data.Array.Accelerate.Error
 import Data.Array.Accelerate.Pattern.Ordering
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Sugar.Shape
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-
--- We must hide (==), as that operator is used for the literals 0, 1 and 2 in the pattern synonyms for Ordering.
--- As RebindableSyntax is enabled, a literal pattern is compiled to a call to (==), meaning that the Prelude.(==) should be in scope as (==).
-import Data.Array.Accelerate.Classes.Eq                             hiding ( (==) )
-import qualified Data.Array.Accelerate.Classes.Eq                   as A
+import {-# SOURCE #-} Data.Array.Accelerate.Classes.VOrd
 
 import Data.Char
 import Language.Haskell.TH.Extra                                    hiding ( Exp )
-import Prelude                                                      ( ($), (>>=), Ordering(..), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
+import Prelude                                                      ( ($), Num(..), Maybe(..), String, show, error, unlines, return, concat, map, mapM )
 import Text.Printf
 import qualified Prelude                                            as P
 
@@ -54,7 +57,7 @@ infix 4 >
 infix 4 <=
 infix 4 >=
 
--- | The 'Ord' class for totally ordered datatypes
+-- | The 'Ord' class for totally ordered data types
 --
 class Eq a => Ord a where
   {-# MINIMAL (<=) | compare #-}
@@ -66,41 +69,23 @@ class Eq a => Ord a where
   max     :: Exp a -> Exp a -> Exp a
   compare :: Exp a -> Exp a -> Exp Ordering
 
-  x <  y = if compare x y A.== constant LT then constant True  else constant False
-  x <= y = if compare x y A.== constant GT then constant False else constant True
-  x >  y = if compare x y A.== constant GT then constant True  else constant False
-  x >= y = if compare x y A.== constant LT then constant False else constant True
+  x <  y = cond (compare x y == LT) True  False
+  x <= y = cond (compare x y == GT) False True
+  x >  y = cond (compare x y == GT) True  False
+  x >= y = cond (compare x y == LT) False True
 
-  min x y = if x <= y then x else y
-  max x y = if x <= y then y else x
+  min x y = cond (x <= y) x y
+  max x y = cond (x <= y) y x
 
-  compare x y =
-    if x A.== y then constant EQ else
-    if x   <= y then constant LT
-                else constant GT
+  compare x y
+    = cond (x == y) EQ
+    $ cond (x <= y) LT
+         {- else -} GT
 
--- Local redefinition for use with RebindableSyntax (pulled forward from Prelude.hs)
+-- Local redefinition to prevent cyclic imports
 --
-ifThenElse :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
-ifThenElse (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond (mkCoerce' c) x y
-
-instance Ord () where
-  (<)     _ _ = constant False
-  (>)     _ _ = constant False
-  (>=)    _ _ = constant True
-  (<=)    _ _ = constant True
-  min     _ _ = constant ()
-  max     _ _ = constant ()
-  compare _ _ = constant EQ
-
-instance Ord Z where
-  (<)  _ _ = constant False
-  (>)  _ _ = constant False
-  (<=) _ _ = constant True
-  (>=) _ _ = constant True
-  min  _ _ = constant Z
-  max  _ _ = constant Z
-
+cond :: Elt a => Exp Bool -> Exp a -> Exp a -> Exp a
+cond (Exp c) (Exp x) (Exp y) = Exp $ SmartExp $ Cond (mkCoerce' c) x y
 
 -- Instances of 'Prelude.Ord' (mostly) don't make sense with the standard
 -- signatures as the return type is fixed to 'Bool'. This instance is provided
@@ -118,7 +103,7 @@ instance Ord a => P.Ord (Exp a) where
   min     = min
   max     = max
 
-preludeError :: String -> String -> a
+preludeError :: HasCallStack => String -> String -> a
 preludeError x y
   = error
   $ unlines [ printf "Prelude.%s applied to EDSL types: use Data.Array.Accelerate.%s instead" x y
@@ -137,11 +122,13 @@ runQ $ do
         , ''Int16
         , ''Int32
         , ''Int64
+        , ''Int128
         , ''Word
         , ''Word8
         , ''Word16
         , ''Word32
         , ''Word64
+        , ''Word128
         ]
 
       floatingTypes :: [Name]
@@ -149,6 +136,7 @@ runQ $ do
         [ ''Half
         , ''Float
         , ''Double
+        , ''Float128
         ]
 
       nonNumTypes :: [Name]
@@ -156,53 +144,36 @@ runQ $ do
         [ ''Char
         ]
 
-      cTypes :: [Name]
-      cTypes =
-        [ ''CInt
-        , ''CUInt
-        , ''CLong
-        , ''CULong
-        , ''CLLong
-        , ''CULLong
-        , ''CShort
-        , ''CUShort
-        , ''CChar
-        , ''CUChar
-        , ''CSChar
-        , ''CFloat
-        , ''CDouble
-        ]
-
       mkPrim :: Name -> Q [Dec]
       mkPrim t =
         [d| instance Ord $(conT t) where
-              (<)  = mkLt
-              (>)  = mkGt
-              (<=) = mkLtEq
-              (>=) = mkGtEq
-              min  = mkMin
-              max  = mkMax
+              (<)  = mkPrimBinary $ PrimLt scalarType
+              (>)  = mkPrimBinary $ PrimGt scalarType
+              (<=) = mkPrimBinary $ PrimLtEq scalarType
+              (>=) = mkPrimBinary $ PrimGtEq scalarType
+              min  = mkPrimBinary $ PrimMin scalarType
+              max  = mkPrimBinary $ PrimMax scalarType
           |]
 
-      mkLt' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkLt' [x] [y]       = [| $x < $y |]
-      mkLt' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLt' xs ys) ) |]
-      mkLt' _      _      = error "mkLt'"
+      mkLt :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLt [x] [y]       = [| $x < $y |]
+      mkLt (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLt xs ys) ) |]
+      mkLt _      _      = error "mkLt"
 
-      mkGt' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkGt' [x]    [y]    = [| $x > $y |]
-      mkGt' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGt' xs ys) ) |]
-      mkGt' _      _      = error "mkGt'"
+      mkGt :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGt [x]    [y]    = [| $x > $y |]
+      mkGt (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGt xs ys) ) |]
+      mkGt _      _      = error "mkGt"
 
-      mkLtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkLtEq' [x] [y]       = [| $x < $y |]
-      mkLtEq' (x:xs) (y:ys) = [| $x < $y || ( $x A.== $y && $(mkLtEq' xs ys) ) |]
-      mkLtEq' _      _      = error "mkLtEq'"
+      mkLtEq :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkLtEq [x] [y]       = [| $x <= $y |]
+      mkLtEq (x:xs) (y:ys) = [| $x < $y || ( $x == $y && $(mkLtEq xs ys) ) |]
+      mkLtEq _      _      = error "mkLtEq"
 
-      mkGtEq' :: [ExpQ] -> [ExpQ] -> ExpQ
-      mkGtEq' [x]    [y]    = [| $x > $y |]
-      mkGtEq' (x:xs) (y:ys) = [| $x > $y || ( $x A.== $y && $(mkGtEq' xs ys) ) |]
-      mkGtEq' _      _      = error "mkGtEq'"
+      mkGtEq :: [ExpQ] -> [ExpQ] -> ExpQ
+      mkGtEq [x]    [y]    = [| $x >= $y |]
+      mkGtEq (x:xs) (y:ys) = [| $x > $y || ( $x == $y && $(mkGtEq xs ys) ) |]
+      mkGtEq _      _      = error "mkGtEq"
 
       mkTup :: Int -> Q [Dec]
       mkTup n =
@@ -214,18 +185,36 @@ runQ $ do
             pat vs  = conP (mkName ('T':show n)) (map varP vs)
         in
         [d| instance $cst => Ord $res where
-              $(pat xs) <  $(pat ys) = $( mkLt' (map varE xs) (map varE ys) )
-              $(pat xs) >  $(pat ys) = $( mkGt' (map varE xs) (map varE ys) )
-              $(pat xs) >= $(pat ys) = $( mkGtEq' (map varE xs) (map varE ys) )
-              $(pat xs) <= $(pat ys) = $( mkLtEq' (map varE xs) (map varE ys) )
+              $(pat xs) <  $(pat ys) = $( mkLt (map varE xs) (map varE ys) )
+              $(pat xs) >  $(pat ys) = $( mkGt (map varE xs) (map varE ys) )
+              $(pat xs) >= $(pat ys) = $( mkGtEq (map varE xs) (map varE ys) )
+              $(pat xs) <= $(pat ys) = $( mkLtEq (map varE xs) (map varE ys) )
           |]
 
   is <- mapM mkPrim integralTypes
   fs <- mapM mkPrim floatingTypes
   ns <- mapM mkPrim nonNumTypes
-  cs <- mapM mkPrim cTypes
   ts <- mapM mkTup [2..16]
-  return $ concat (concat [is,fs,ns,cs,ts])
+  return $ concat (concat [is,fs,ns,ts])
+
+
+instance Ord () where
+  (<)     _ _ = constant False
+  (>)     _ _ = constant False
+  (>=)    _ _ = constant True
+  (<=)    _ _ = constant True
+  min     _ _ = constant ()
+  max     _ _ = constant ()
+  compare _ _ = constant EQ
+
+instance Ord Z where
+  (<)     _ _ = constant False
+  (>)     _ _ = constant False
+  (<=)    _ _ = constant True
+  (>=)    _ _ = constant True
+  min     _ _ = constant Z
+  max     _ _ = constant Z
+  compare _ _ = constant EQ
 
 instance Ord sh => Ord (sh :. Int) where
   x <= y = indexHead x <= indexHead y && indexTail x <= indexTail y
@@ -246,4 +235,20 @@ instance Ord Ordering where
   x >= y  = mkCoerce x >= (mkCoerce y :: Exp TAG)
   min x y = mkCoerce $ min (mkCoerce x) (mkCoerce y :: Exp TAG)
   max x y = mkCoerce $ max (mkCoerce x) (mkCoerce y :: Exp TAG)
+
+instance VOrd n a => Ord (Vec n a) where
+  (<)  = vcmp (<*)
+  (>)  = vcmp (>*)
+  (<=) = vcmp (<=*)
+  (>=) = vcmp (>=*)
+
+vcmp :: forall n a. VOrd n a
+     => (Exp (Vec n a) -> Exp (Vec n a) -> Exp (Vec n Bool))
+     -> (Exp (Vec n a) -> Exp (Vec n a) -> Exp Bool)
+vcmp cmp x y =
+  let go [u]    [_]    = u
+      go (u:us) (v:vs) = u || (v && go us vs)
+      go _      _      = internalError "unexpected vector encoding"
+  in
+  go (unpack (cmp x y)) (unpack (x ==* y))
 

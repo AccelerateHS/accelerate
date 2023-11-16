@@ -23,17 +23,16 @@ module Data.Array.Accelerate.Test.NoFib.Issues.Issue364 (
 
 ) where
 
-import Prelude                                            ( fromInteger, show )
-import qualified Prelude                                  as P
+import Prelude                                                      ( show )
+import qualified Prelude                                            as P
 
-import Data.Array.Accelerate                              hiding ( fromInteger )
-import Data.Array.Accelerate.Sugar.Elt                    as S
-import Data.Array.Accelerate.Sugar.Shape                  as S
+import Data.Array.Accelerate
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
-
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -55,8 +54,8 @@ test_issue364 runN =
               -> TestTree
       testElt _ =
         testGroup (show (eltR @e))
-          [ testCase "A" $ expectedArray @_ @e Z 64 @=? runN (scanl iappend one) (intervalArray Z 64)
-          , testCase "B" $ expectedArray @_ @e Z 65 @=? runN (scanl iappend one) (intervalArray Z 65) -- failed for integral types
+          [ testCase "A" $ expectedArray @Z @e Z 64 @=? runN (scanl iappend one) (intervalArray Z 64)
+          , testCase "B" $ expectedArray @Z @e Z 65 @=? runN (scanl iappend one) (intervalArray Z 65) -- failed for integral types
           ]
 
 

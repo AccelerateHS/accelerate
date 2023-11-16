@@ -85,13 +85,13 @@ mkArray n = use $ fromList (Z:.1) [n]
 
 test_blowup :: Int -> Acc (Array DIM1 Int)
 test_blowup 0 = (mkArray 0)
-test_blowup n = A.map (\_ -> newArr ! (lift (Z:.(0::Int))) +
-                             newArr ! (lift (Z:.(1::Int)))) (mkArray n)
+test_blowup n = A.map (\_ -> newArr ! (Z :. 0) +
+                             newArr ! (Z :. 1)) (mkArray n)
   where
     newArr = test_blowup (n-1)
 
 idx :: Int -> Exp DIM1
-idx i = lift (Z:.i)
+idx i = constant (Z:.i)
 
 test_bfs :: Acc (Array DIM1 Int)
 test_bfs = A.map (\x -> (map2 ! (idx 1)) +  (map1 ! (idx 2)) + x) arr

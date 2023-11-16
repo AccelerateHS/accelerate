@@ -39,7 +39,7 @@ import Test.Tasty
 import Test.Tasty.Hedgehog
 
 import System.IO.Unsafe
-import Prelude                                                      as P
+import Prelude                                                      as P hiding ( Bool(..), Maybe(..) )
 import qualified Data.Set                                           as Set
 
 

@@ -28,7 +28,6 @@ import Numeric.Half
 
 
 -- base
---
 deriving instance (Show a, Show b, Show c, Show d, Show e, Show f, Show g, Show h, Show i, Show j, Show k, Show l, Show m, Show n, Show o, Show p)
   => Show (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 
@@ -47,6 +46,5 @@ deriving instance Generic (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
 deriving instance Generic (Ratio a)
 
 -- primitive
---
 deriving instance Prim Half
 

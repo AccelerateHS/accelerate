@@ -23,12 +23,12 @@ module Data.Array.Accelerate.Test.NoFib.Imaginary.SAXPY (
 import Prelude                                                  as P
 
 import Data.Array.Accelerate                                    as A
-import Data.Array.Accelerate.Sugar.Array                        as S
-import Data.Array.Accelerate.Sugar.Elt                          as S
-import Data.Array.Accelerate.Sugar.Shape                        as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Array              as S
+import qualified Data.Array.Accelerate.Sugar.Shape              as S
 
 import Hedgehog
 import qualified Hedgehog.Gen                                   as Gen

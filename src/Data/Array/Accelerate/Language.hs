@@ -17,13 +17,6 @@
 -- Stability   : experimental
 -- Portability : non-portable (GHC extensions)
 --
--- We use the dictionary view of overloaded operations (such as arithmetic and
--- bit manipulation) to reify such expressions.  With non-overloaded
--- operations (such as, the logical connectives) and partially overloaded
--- operations (such as comparisons), we use the standard operator names with a
--- \'*\' attached.  We keep the standard alphanumeric names as they can be
--- easily qualified.
---
 
 module Data.Array.Accelerate.Language (
 
@@ -38,18 +31,6 @@ module Data.Array.Accelerate.Language (
 
   -- * Map-like functions
   map, zipWith,
-
-  -- -- * Sequence collection
-  -- collect,
-
-  -- -- * Sequence producers
-  -- streamIn, toSeq,
-
-  -- -- * Sequence transducers
-  -- mapSeq, zipWithSeq, scanSeq,
-
-  -- -- * Sequence consumers
-  -- foldSeq, foldSeqFlatten,
 
   -- * Reductions
   fold, fold1, foldSeg', fold1Seg',
@@ -66,7 +47,6 @@ module Data.Array.Accelerate.Language (
   -- ** Stencil specification
   Boundary, Stencil,
   clamp, mirror, wrap, function,
-
 
   -- ** Common stencil types
   Stencil3, Stencil5, Stencil7, Stencil9,
@@ -96,12 +76,13 @@ module Data.Array.Accelerate.Language (
   subtract, even, odd, gcd, lcm, (^), (^^),
 
   -- * Conversions
-  ord, chr, boolToInt, bitcast,
+  ord, chr, bitcast,
 
 ) where
 
 import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Maybe
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Array                   ( ArrayR(..) )
 import Data.Array.Accelerate.Representation.Shape                   ( ShapeR(..) )
 import Data.Array.Accelerate.Representation.Type
@@ -119,8 +100,8 @@ import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Classes.Ord
 
-import Prelude                                                      ( ($), (.), Maybe(..), Char )
-#if __GLASGOW_HASKELL__ >= 904
+import Prelude                                                      ( ($), (.), Char )
+#if __GLASGOW_HASKELL__ == 904
 import Data.Type.Equality
 #endif
 
@@ -193,7 +174,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- ...we can replicate these elements to form a two-dimensional array either by
 -- replicating those elements as new rows:
 --
--- >>> run $ replicate (constant (Z :. (4::Int) :. All)) (use vec)
+-- >>> run $ replicate @(Z :. Int :. All) (Z :. 4 :. All) (use vec)
 -- Matrix (Z :. 4 :. 10)
 --   [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 --     0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -202,7 +183,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- ...or as columns:
 --
--- >>> run $ replicate (lift (Z :. All :. (4::Int))) (use vec)
+-- >>> run $ replicate @(Z :. All :. Int) (Z :. All :. 4) (use vec)
 -- Matrix (Z :. 10 :. 4)
 --   [ 0, 0, 0, 0,
 --     1, 1, 1, 1,
@@ -218,7 +199,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 -- Replication along more than one dimension is also possible. Here we replicate
 -- twice across the first dimension and three times across the third dimension:
 --
--- >>> run $ replicate (constant (Z :. (2::Int) :. All :. (3::Int))) (use vec)
+-- >>> run $ replicate @(Z :. Int :. All :. Int) (Z :. 2 :. All :. 3) (use vec)
 -- Array (Z :. 2 :. 10 :. 3) [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9,0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8,9,9,9]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
@@ -227,7 +208,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- >>> :{
 --   let rep0 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array sh e) -> Acc (Array (sh :. Int) e)
---       rep0 n a = replicate (lift (Any @sh :. n)) a
+--       rep0 n a = replicate @(Any sh :. Int) (Any :. n) a
 -- :}
 --
 -- >>> let x = unit 42 :: Acc (Scalar Int)
@@ -251,7 +232,7 @@ unit (Exp e) = Acc $ SmartAcc $ Unit (eltR @e) e
 --
 -- >>> :{
 --   let rep1 :: forall sh e. (Shape sh, Elt e) => Exp Int -> Acc (Array (sh :. Int) e) -> Acc (Array (sh :. Int :. Int) e)
---       rep1 n a = replicate (lift (Any @sh :. n :. All)) a
+--       rep1 n a = replicate @(Any sh :. Int :. All) (Any :. n :. All) a
 -- :}
 --
 -- >>> run $ rep1 5 (use vec)
@@ -349,13 +330,13 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- ...will can select a specific row to yield a one dimensional result by fixing
 -- the row index (2) while allowing the column index to vary (via 'All'):
 --
--- >>> run $ slice (use mat) (constant (Z :. (2::Int) :. All))
+-- >>> run $ slice @(Z :. Int :. All) (use mat) (Z :. 2 :. All)
 -- Vector (Z :. 10) [20,21,22,23,24,25,26,27,28,29]
 --
 -- A fully specified index (with no 'All's) returns a single element (zero
 -- dimensional array).
 --
--- >>> run $ slice (use mat) (constant (Z :. 4 :. 2 :: DIM2))
+-- >>> run $ slice @DIM2 (use mat) (Z :. 4 :. 2)
 -- Scalar Z [42]
 --
 -- The marker 'Any' can be used in the slice specification to match against some
@@ -365,7 +346,7 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 -- >>> :{
 --   let
 --       sl0 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int) e) -> Exp Int -> Acc (Array sh e)
---       sl0 a n = slice a (lift (Any @sh :. n))
+--       sl0 a n = slice @(Any sh :. Int) a (Any :. n)
 -- :}
 --
 -- >>> let vec = fromList (Z:.10) [0..] :: Vector Int
@@ -379,7 +360,7 @@ reshape = Acc $$ applyAcc (Reshape $ shapeR @sh)
 --
 -- >>> :{
 --   let sl1 :: forall sh e. (Shape sh, Elt e) => Acc (Array (sh:.Int:.Int) e) -> Exp Int -> Acc (Array (sh:.Int) e)
---       sl1 a n = slice a (lift (Any @sh :. n :. All))
+--       sl1 a n = slice @(Any sh :. Int :. All) a (Any :. n :. All)
 -- :}
 --
 -- >>> run $ sl1 (use mat) 4
@@ -520,8 +501,7 @@ zipWith = Acc $$$ applyAcc (ZipWith (eltR @a) (eltR @b) (eltR @c))
 -- See also 'Data.Array.Accelerate.Data.Fold.Fold', which can be a useful way to
 -- compute multiple results from a single reduction.
 --
-fold :: forall sh a.
-        (Shape sh, Elt a)
+fold :: forall sh a. (Shape sh, Elt a)
      => (Exp a -> Exp a -> Exp a)
      -> Exp a
      -> Acc (Array (sh:.Int) a)
@@ -538,8 +518,7 @@ fold f (Exp x) = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) (Just x)
 -- The first argument needs to be an /associative/ function to enable an
 -- efficient parallel implementation, but does not need to be commutative.
 --
-fold1 :: forall sh a.
-         (Shape sh, Elt a)
+fold1 :: forall sh a. (Shape sh, Elt a)
       => (Exp a -> Exp a -> Exp a)
       -> Acc (Array (sh:.Int) a)
       -> Acc (Array sh a)
@@ -559,14 +538,13 @@ fold1 f = Acc . applyAcc (Fold (eltR @a) (unExpBinaryFunction f) Nothing)
 -- @since 1.3.0.0
 --
 foldSeg'
-    :: forall sh a i.
-       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltR i)
+    :: forall sh a i. (Shape sh, Elt a, Elt i, IsSingleIntegral (EltR i))
     => (Exp a -> Exp a -> Exp a)
     -> Exp a
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) (Just x))
+foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (singleIntegralType @(EltR i)) (eltR @a) (unExpBinaryFunction f) (Just x))
 
 -- | Variant of 'foldSeg'' that requires /all/ segments of the reduced
 -- array to be non-empty, and doesn't need a default value. The segment
@@ -576,13 +554,12 @@ foldSeg' f (Exp x) = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExp
 -- @since 1.3.0.0
 --
 fold1Seg'
-    :: forall sh a i.
-       (Shape sh, Elt a, Elt i, IsIntegral i, i ~ EltR i)
+    :: forall sh a i. (Shape sh, Elt a, Elt i, IsSingleIntegral (EltR i))
     => (Exp a -> Exp a -> Exp a)
     -> Acc (Array (sh:.Int) a)
     -> Acc (Segments i)
     -> Acc (Array (sh:.Int) a)
-fold1Seg' f = Acc $$ applyAcc (FoldSeg (integralType @i) (eltR @a) (unExpBinaryFunction f) Nothing)
+fold1Seg' f = Acc $$ applyAcc (FoldSeg (singleIntegralType @(EltR i)) (eltR @a) (unExpBinaryFunction f) Nothing)
 
 -- Scan functions
 -- --------------
@@ -720,7 +697,7 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 --         let zeros = fill (constant (Z:.10)) 0
 --             ones  = fill (shape xs)         1
 --         in
---         permute (+) zeros (\ix -> Just_ (I1 (xs!ix))) ones
+--         permute (+) zeros (\ix -> Just (I1 (xs!ix))) ones
 -- :}
 --
 -- >>> let xs = fromList (Z :. 20) [0,0,1,2,1,1,2,4,8,3,4,9,8,3,2,5,5,3,1,2] :: Vector Int
@@ -737,7 +714,7 @@ scanr1 f (Acc a) = Acc $ SmartAcc $ Scan RightToLeft (eltR @a) (unExpBinaryFunct
 --         let zeros = fill (I2 n n) 0
 --             ones  = fill (I1 n)   1
 --         in
---         permute const zeros (\(I1 i) -> Just_ (I2 i i)) ones
+--         permute const zeros (\(I1 i) -> Just (I2 i i)) ones
 -- :}
 --
 -- >>> run $ identity 5 :: Matrix Int
@@ -1267,11 +1244,7 @@ awhile :: forall a. Arrays a
        -> (Acc a -> Acc a)                -- ^ function to apply
        -> Acc a                           -- ^ initial value
        -> Acc a
-awhile f = Acc $$ applyAcc $ Awhile (arraysR @a) (unAccFunction g)
-  where
-    -- FIXME: This should be a no-op!
-    g :: Acc a -> Acc (Scalar PrimBool)
-    g = map mkCoerce . f
+awhile f = Acc $$ applyAcc $ Awhile (arraysR @a) (unAccFunction f)
 
 
 -- Shapes and indices
@@ -1302,7 +1275,7 @@ intersect (Exp shx) (Exp shy) = Exp $ intersect' (shapeR @sh) shx shy
     intersect' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ intersect' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMin singleType) $ SmartExp $ Pair x y)
+        SmartExp (PrimApp (PrimMin scalarType) $ SmartExp $ Pair x y)
 
 
 -- | Union of two shapes
@@ -1315,7 +1288,7 @@ union (Exp shx) (Exp shy) = Exp $ union' (shapeR @sh) shx shy
     union' (ShapeRsnoc shR) (unPair -> (xs, x)) (unPair -> (ys, y))
       = SmartExp
       $ union' shR xs ys `Pair`
-        SmartExp (PrimApp (PrimMax singleType) $ SmartExp $ Pair x y)
+        SmartExp (PrimApp (PrimMax scalarType) $ SmartExp $ Pair x y)
 
 
 -- Flow-control
@@ -1344,7 +1317,8 @@ while :: forall e. Elt e
 while c f (Exp e) =
   mkExp $ While @(EltR e) (eltR @e)
             (mkCoerce' . unExp . c . Exp)
-            (unExp . f . Exp) e
+            (unExp . f . Exp)
+            e
 
 
 -- Array operations with a scalar result
@@ -1493,18 +1467,12 @@ x ^^ n
 -- |Convert a character to an 'Int'.
 --
 ord :: Exp Char -> Exp Int
-ord = mkFromIntegral
+ord = mkPrimUnary $ PrimFromIntegral integralType numType
 
 -- |Convert an 'Int' into a character.
 --
 chr :: Exp Int -> Exp Char
-chr = mkFromIntegral
-
--- |Convert a Boolean value to an 'Int', where 'False' turns into '0' and 'True'
--- into '1'.
---
-boolToInt :: Exp Bool -> Exp Int
-boolToInt = mkFromIntegral . mkCoerce @_ @Word8
+chr = mkPrimUnary $ PrimFromIntegral integralType numType
 
 -- |Reinterpret a value as another type. The two representations must have the
 -- same bit size.

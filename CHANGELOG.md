@@ -9,12 +9,29 @@ Policy (PVP)](https://pvp.haskell.org)
 ## [next]
 ### Added
   * Added debugging functions in module `Data.Array.Accelerate.Debug.Trace` ([#485](https://github.com/AccelerateHS/accelerate/pull/485))
+  * Support for SIMD data types in expressions. Support for storing a type `a`
+    in a SIMD vector can be added by deriving an instance for the class `SIMD`.
+    Pattern synonyms `V2`, `V3`, `V4`, `V8` and `V16` are provided to work with
+    these at both the Haskell value and embedded expression level.
+  * Instances for SIMD types in basic numeric classes (e.g. `Num` for `<4 x Float>`)
+  * Support for 128-bit integers (signed and unsigned)
+  * Support for 128-bit floating point types (build with cabal flag `float128`)
 
 ### Changed
   * Removed dependency on lens ([#493](https://github.com/AccelerateHS/accelerate/pull/493))
+  * The shape constructors (e.g. `Z` and `(:.)`) are now pattern synonyms that
+    work on both Haskell values and embedded expressions Similarly for the
+    constructors of `Maybe`, `Either`, `Bool`, and `Ordering`.
 
 ### Fixed
   * Graphviz graph generation of `-ddump-dot` and `-ddump-simpl-dot` ([#384](https://github.com/AccelerateHS/accelerate/issues/384))
+  * Bug in `Semigroup` instance for `Maybe` ([#517](https://github.com/AccelerateHS/accelerate/issues/517))
+  * Bug in `Ord` instances or tuple types
+
+### Removed
+  * Pattern synonyms `Z_`, `(::.)`, `Any_`, `All_`, which are no longer required
+  * Pattern synonyms `Just_`, `Nothing_` etc., which have been renamed to no
+    longer require the trailing underscore.
 
 ### Contributors
 

@@ -61,7 +61,7 @@ test_map runN =
     testIntegralElt
         :: forall a. ( P.Integral a, P.FiniteBits a
                      , A.Integral a, A.FiniteBits a
-                     , A.FromIntegral a Double
+                     , A.FromIntegral a Int, A.FromIntegral a Double
                      , Similar a, Show a )
         => Gen a
         -> TestTree
@@ -94,7 +94,7 @@ test_map runN =
             ]
 
     testFloatingElt
-        :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a, Show a)
+        :: forall a. (P.RealFloat a, A.Floating a, A.RealFrac a, Similar a, Show a, FromIntegral (Significand a) Int)
         => (Range a -> Gen a)
         -> TestTree
     testFloatingElt e =
@@ -194,7 +194,7 @@ test_complement runN dim e =
     let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
 test_popCount
-    :: (Shape sh, Show sh, Show e, A.Bits e, P.Bits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.Bits e, P.Bits e, P.Eq sh, A.Ord e, A.Integral e, A.FromIntegral e Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -203,10 +203,10 @@ test_popCount runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (array sh e)
-    let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
+    let !go = runN (A.map (A.fromIntegral . A.popCount)) in go xs ~~~ mapRef P.popCount xs
 
 test_countLeadingZeros
-    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh, A.Ord e, A.Integral e, A.FromIntegral e Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -215,10 +215,10 @@ test_countLeadingZeros runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (array sh e)
-    let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
+    let !go = runN (A.map (A.fromIntegral . A.countLeadingZeros)) in go xs ~~~ mapRef countLeadingZerosRef xs
 
 test_countTrailingZeros
-    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
+    :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh, A.Ord e, A.Integral e, A.FromIntegral e Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -227,7 +227,7 @@ test_countTrailingZeros runN dim e =
   property $ do
     sh <- forAll dim
     xs <- forAll (array sh e)
-    let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
+    let !go = runN (A.map (A.fromIntegral . A.countTrailingZeros)) in go xs ~~~ mapRef countTrailingZerosRef xs
 
 test_fromIntegral
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
@@ -398,7 +398,7 @@ test_log runN dim e =
     let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
 test_truncate
-    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e, FromIntegral (Significand e) Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -410,7 +410,7 @@ test_truncate runN dim e =
     let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
 test_round
-    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e, FromIntegral (Significand e) Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -422,7 +422,7 @@ test_round runN dim e =
     let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
 test_floor
-    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e, FromIntegral (Significand e) Int)
     => RunN
     -> Gen sh
     -> Gen e
@@ -434,7 +434,7 @@ test_floor runN dim e =
     let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
 test_ceiling
-    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
+    :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e, FromIntegral (Significand e) Int)
     => RunN
     -> Gen sh
     -> Gen e

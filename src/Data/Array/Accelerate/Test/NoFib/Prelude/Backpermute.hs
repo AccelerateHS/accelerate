@@ -24,12 +24,11 @@ module Data.Array.Accelerate.Test.NoFib.Prelude.Backpermute (
 import Prelude                                                      as P
 
 import Data.Array.Accelerate                                        as A
-import Data.Array.Accelerate.Sugar.Array                            as S
-import Data.Array.Accelerate.Sugar.Elt                              as S
-import Data.Array.Accelerate.Sugar.Shape                            as S
+import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Config
 import Data.Array.Accelerate.Test.Similar
+import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Hedgehog
 import qualified Hedgehog.Gen                                       as Gen
@@ -71,7 +70,7 @@ test_backpermute runN =
             => Gen (sh:.Int)
             -> TestTree
         testDim sh =
-          testGroup ("DIM" P.++ show (rank @(sh:.Int)))
+          testGroup ("DIM" P.++ show (S.rank @(sh:.Int)))
             [
               testProperty "take"         $ test_take runN sh e
             , testProperty "drop"         $ test_drop runN sh e
@@ -127,7 +126,7 @@ test_gather runN dim dim' e =
     --
     let !go = runN $ \i -> A.backpermute (A.shape i) (i A.!)
     --
-    go ix xs ~~~ backpermuteRef sh' (ix S.!) xs
+    go ix xs ~~~ backpermuteRef sh' (ix `indexArray`) xs
 
 
 scalar :: Elt e => e -> Scalar e
@@ -140,7 +139,7 @@ backpermuteRef
     -> Array sh  e
     -> Array sh' e
 backpermuteRef sh' p arr =
-  fromFunction sh' (\ix -> arr S.! p ix)
+  fromFunction sh' (\ix -> arr `indexArray` p ix)
 
 takeRef
     :: (Shape sh, Slice sh, Elt e)
@@ -148,8 +147,8 @@ takeRef
     -> Array (sh:.Int) e
     -> Array (sh:.Int) e
 takeRef n arr =
-  let sh :. m = S.shape arr
-  in  fromFunction (sh :. P.min m n) (arr S.!)
+  let sh :. m = arrayShape arr
+  in  fromFunction (sh :. P.min m n) (arr `indexArray`)
 
 dropRef
     :: (Shape sh, Slice sh, Elt e)
@@ -157,7 +156,7 @@ dropRef
     -> Array (sh:.Int) e
     -> Array (sh:.Int) e
 dropRef n arr =
-  let sh :. m = S.shape arr
+  let sh :. m = arrayShape arr
       n' = P.max 0 n
-  in  fromFunction (sh :. P.max 0 (m - n')) (\(sz:.i) -> arr S.! (sz :. i+n'))
+  in  fromFunction (sh :. P.max 0 (m - n')) (\(sz:.i) -> arr `indexArray` (sz :. i+n'))
 

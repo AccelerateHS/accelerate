@@ -41,6 +41,7 @@ test_issue427 runN
   , testProperty "n-by-m"  $ test_indicesOfTruth runN dim2
   ]
   where
+    by :: Int -> Gen DIM2
     by x = do
       y <- Gen.int (Range.linear 0 1024)
       pure (Z :. y :. x)

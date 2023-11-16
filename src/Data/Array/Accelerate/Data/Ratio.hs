@@ -6,6 +6,7 @@
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TypeApplications      #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
@@ -31,10 +32,10 @@ module Data.Array.Accelerate.Data.Ratio (
 
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq
@@ -75,7 +76,7 @@ reduce x y =
 --
 infixl 7 %
 (%) :: Integral a => Exp a -> Exp a -> Exp (Ratio a)
-x % y =  reduce (x * signum y) (abs y)
+x % y = reduce (x * signum y) (abs y)
 
 infinity :: Integral a => Exp (Ratio a)
 infinity = 1 :% 0
@@ -109,16 +110,17 @@ instance Integral a => P.Fractional (Exp (Ratio a))  where
               else y :% x
   fromRational r = fromInteger (P.numerator r) % fromInteger (P.denominator r)
 
-instance (Integral a, FromIntegral a Int64) => RealFrac (Ratio a) where
+instance Integral a => RealFrac (Ratio a) where
+  type Significand (Ratio a) = a
   properFraction (x :% y) =
     let (q,r) = quotRem x y
-    in  (fromIntegral (fromIntegral q :: Exp Int64), r :% y)
+     in T2 (fromIntegral q) (r :% y)
 
 
 instance (Integral a, ToFloating a b) => ToFloating (Ratio a) b where
   toFloating (x :% y) =
     let x' :% y' = reduce x y
-    in  toFloating x' / toFloating y'
+     in toFloating x' / toFloating y'
 
 instance (FromIntegral a b, Integral b) => FromIntegral a (Ratio b) where
   fromIntegral x = fromIntegral x :% 1

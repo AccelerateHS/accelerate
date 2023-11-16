@@ -73,7 +73,10 @@ test_issue437 runN
         (alloc P.>  0 P.&& to P.== 4 P.&& from P.== 0)        -- remote memory space
   where
     xs :: (Scalar Float, Matrix Float)
-    xs = runN $ T2 (unit 42) (fill (constant $ Z:.10000:.10000) 1)
+    xs = runN g
+      where
+        g :: Acc (Scalar Float, Matrix Float)
+        g = T2 (unit 42) (fill (Z :. 10000 :. 10000) 1)
 
     go :: Arrays a => a -> a
     go = runN f

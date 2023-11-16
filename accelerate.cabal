@@ -207,6 +207,15 @@ custom-setup
     , directory         >= 1.0
     , filepath          >= 1.0
 
+flag float128
+  manual:               True
+  default:              False
+  description:
+    Enable support for 128-bit floating point numbers
+    .
+    This requires the library 'quadmath' to be installed. Note that not all
+    targets support 128-bit floating-point numbers.
+
 flag debug
   manual:               True
   default:              False
@@ -364,6 +373,11 @@ library
         , unique
         , unordered-containers          >= 0.2
         , vector                        >= 0.10
+        , wide-word                     >= 0.1
+
+  if impl(ghc < 9.0)
+    build-depends:
+          integer-gmp
 
   exposed-modules:
         -- The core language and reference implementation
@@ -392,14 +406,15 @@ library
         Data.Array.Accelerate.Analysis.Hash
         Data.Array.Accelerate.Analysis.Match
         Data.Array.Accelerate.Array.Data
-        Data.Array.Accelerate.Array.Remote
-        Data.Array.Accelerate.Array.Remote.Class
-        Data.Array.Accelerate.Array.Remote.LRU
-        Data.Array.Accelerate.Array.Remote.Table
+        -- Data.Array.Accelerate.Array.Remote
+        -- Data.Array.Accelerate.Array.Remote.Class
+        -- Data.Array.Accelerate.Array.Remote.LRU
+        -- Data.Array.Accelerate.Array.Remote.Table
         Data.Array.Accelerate.Array.Unique
         Data.Array.Accelerate.Async
-        Data.Array.Accelerate.Error
         Data.Array.Accelerate.Debug.Internal
+        Data.Array.Accelerate.Error
+        Data.Array.Accelerate.Interpreter.Arithmetic
         Data.Array.Accelerate.Lifetime
         Data.Array.Accelerate.Pretty
         Data.Array.Accelerate.Representation.Array
@@ -433,9 +448,11 @@ library
         Data.Array.Accelerate.Test.Similar
 
         -- Other
-        Data.BitSet
-        Data.Primitive.Vec
         Crypto.Hash.XKCP
+        Data.BitSet
+        Data.Primitive.Bit
+        Data.Primitive.Vec
+        Data.Numeric.Float128
 
   other-modules:
         Data.Array.Accelerate.Analysis.Hash.TH
@@ -445,6 +462,7 @@ library
         Data.Array.Accelerate.Classes.Eq
         Data.Array.Accelerate.Classes.Floating
         Data.Array.Accelerate.Classes.Fractional
+        Data.Array.Accelerate.Classes.FromBool
         Data.Array.Accelerate.Classes.FromIntegral
         Data.Array.Accelerate.Classes.Integral
         Data.Array.Accelerate.Classes.Num
@@ -454,6 +472,9 @@ library
         Data.Array.Accelerate.Classes.RealFloat
         Data.Array.Accelerate.Classes.RealFrac
         Data.Array.Accelerate.Classes.ToFloating
+        Data.Array.Accelerate.Classes.VEq
+        Data.Array.Accelerate.Classes.VNum
+        Data.Array.Accelerate.Classes.VOrd
         Data.Array.Accelerate.Debug.Internal.Clock
         Data.Array.Accelerate.Debug.Internal.Flags
         Data.Array.Accelerate.Debug.Internal.Graph
@@ -470,7 +491,10 @@ library
         Data.Array.Accelerate.Pattern.Either
         Data.Array.Accelerate.Pattern.Maybe
         Data.Array.Accelerate.Pattern.Ordering
+        Data.Array.Accelerate.Pattern.SIMD
+        Data.Array.Accelerate.Pattern.Shape
         Data.Array.Accelerate.Pattern.TH
+        Data.Array.Accelerate.Pattern.Tuple
         Data.Array.Accelerate.Prelude
         Data.Array.Accelerate.Pretty.Graphviz
         Data.Array.Accelerate.Pretty.Graphviz.Monad
@@ -489,6 +513,7 @@ library
         Data.Array.Accelerate.Test.NoFib.Config
 
         Language.Haskell.TH.Extra
+        GHC.TypeLits.Extra
 
   if flag(nofib)
     build-depends:
@@ -562,6 +587,7 @@ library
   cc-options:
         -O3
         -Wall
+        -std=c11
 
   cxx-options:
         -O3
@@ -589,6 +615,16 @@ library
   ghc-prof-options:
         -caf-all
         -auto-all
+
+  if flag(float128)
+    cc-options:
+        -DFLOAT128_ENABLE
+
+    cpp-options:
+        -DFLOAT128_ENABLE
+
+    extra-libraries:
+        quadmath
 
   if flag(debug)
     cc-options:

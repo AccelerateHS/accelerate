@@ -19,7 +19,10 @@ module Data.Array.Accelerate.Classes.ToFloating (
 
 ) where
 
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Elt
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Floating
@@ -39,42 +42,49 @@ class ToFloating a b where
   -- | General coercion to floating types
   toFloating :: (Num a, Floating b) => Exp a -> Exp b
 
--- instance (Elt a, Elt b, IsNum a, IsFloating b) => ToFloating a b where
---   toFloating = mkToFloating
+mkToFloating :: (IsNum (EltR a), IsFloating (EltR b)) => Exp a -> Exp b
+mkToFloating = mkPrimUnary $ PrimToFloating numType floatingType
+
 
 -- Generate standard instances explicitly. See also: 'FromIntegral'.
 --
-$(runQ $ do
-    let
-        -- Get all the types that our dictionaries reify
-        digItOut :: Name -> Q [Name]
-        digItOut name = do
-          TyConI (DataD _ _ _ _ cons _) <- reify name
-          let
-            -- This is what a constructor such as IntegralNumType will be reified
-            -- as prior to GHC 8.4...
-            dig (NormalC _ [(_, AppT (ConT n) (VarT _))])               = digItOut n
-            -- ...but this is what IntegralNumType will be reified as on GHC 8.4
-            -- and later, after the changes described in
-            -- https://ghc.haskell.org/trac/ghc/wiki/Migration/8.4#TemplateHaskellreificationchangesforGADTs
-            dig (ForallC _ _ (GadtC _ [(_, AppT (ConT n) (VarT _))] _)) = digItOut n
-            dig (GadtC _ _ (AppT (ConT _) (ConT n)))                    = return [n]
-            dig _ = error "Unexpected case generating ToFloating instances"
-            --
-          concat `fmap` mapM dig cons
+runQ $
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Int128
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        , ''Word128
+        ]
 
-        thToFloating :: Name -> Name -> Q Dec
-        thToFloating a b =
-          let
-              ty  = AppT (AppT (ConT (mkName "ToFloating")) (ConT a)) (ConT b)
-              dec = ValD (VarP (mkName "toFloating")) (NormalB (VarE (mkName f))) []
-              f | a == b    = "id"
-                | otherwise = "mkToFloating"
-          in
-          instanceD (return []) (return ty) [return dec]
-    --
-    as <- digItOut ''NumType
-    bs <- digItOut ''FloatingType
-    sequence [ thToFloating a b | a <- as, b <- bs ]
- )
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
+
+      numTypes :: [Name]
+      numTypes = integralTypes ++ floatingTypes
+
+      thToFloating :: Name -> Name -> Q [Dec]
+      thToFloating a b =
+        [d| instance ToFloating $(conT a) $(conT b) where
+              toFloating = $(varE $ if a == b then 'id else 'mkToFloating)
+
+            instance KnownNat n => ToFloating (Vec n $(conT a)) (Vec n $(conT b)) where
+              toFloating = $(varE $ if a == b then 'id else 'mkToFloating)
+          |]
+  in
+  concat <$> sequence [ thToFloating from to | from <- numTypes, to <- floatingTypes ]
 

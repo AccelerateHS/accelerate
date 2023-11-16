@@ -58,7 +58,7 @@ unsafeCheck = withFrozenCallStack $ check Unsafe
 
 -- | Throw an error if the index is not in range, otherwise evaluate the result.
 --
-indexCheck :: HasCallStack => Int -> Int -> a -> a
+indexCheck :: (HasCallStack, Integral i) => i -> i -> a -> a
 indexCheck i n =
   boundsCheck (bformat ("index out of bounds: i=" % int % ", n=" % int) i n) (i >= 0 && i < n)
 

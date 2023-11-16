@@ -1,11 +1,12 @@
-{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeOperators       #-}
 {-# LANGUAGE ViewPatterns        #-}
@@ -208,18 +209,19 @@ strengthenShrunkLHS
     -> env1 :?> env1'
     -> env2 :?> env2'
 strengthenShrunkLHS (LeftHandSideWildcard _) (LeftHandSideWildcard _) k = k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideSingle _)   k = \case
   ZeroIdx     -> Just ZeroIdx
   SuccIdx ix' -> SuccIdx <$> k ix'
-strengthenShrunkLHS (LeftHandSidePair lA hA) (LeftHandSidePair lB hB) k = strengthenShrunkLHS hA hB $ strengthenShrunkLHS lA lB k
-strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \ix -> case ix of
+strengthenShrunkLHS (LeftHandSidePair lA hA) (LeftHandSidePair lB hB) k =
+  strengthenShrunkLHS hA hB $ strengthenShrunkLHS lA lB k
+strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \case
   ZeroIdx     -> Nothing
   SuccIdx ix' -> k ix'
-strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = strengthenShrunkLHS h (LeftHandSideWildcard t2) $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
-  where
-    TupRpair t1 t2 = t
-strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = internalError "Second LHS defines more variables"
-strengthenShrunkLHS _                        _                        _ = internalError "Mismatch LHS single with LHS pair"
+strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard (TupRpair t1 t2)) k
+  = strengthenShrunkLHS h (LeftHandSideWildcard t2)
+  $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
+strengthenShrunkLHS (LeftHandSideWildcard _) _ _ = internalError "Second LHS defines more variables"
+strengthenShrunkLHS _                        _ _ = internalError "Mismatch LHS single with LHS pair"
 
 
 -- Shrinking
@@ -240,14 +242,13 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
     lIMIT = 1
 
     cheap :: OpenExp env aenv t -> Bool
-    cheap (Evar _)       = True
-    cheap (Pair e1 e2)   = cheap e1 && cheap e2
-    cheap Nil            = True
-    cheap Const{}        = True
-    cheap PrimConst{}    = True
-    cheap Undef{}        = True
-    cheap (Coerce _ _ e) = cheap e
-    cheap _              = False
+    cheap (Evar _)        = True
+    cheap (Pair e1 e2)    = cheap e1 && cheap e2
+    cheap Nil             = True
+    cheap Const{}         = True
+    cheap Undef{}         = True
+    cheap (Bitcast _ _ e) = cheap e
+    cheap _               = False
 
     shrinkE :: HasCallStack => OpenExp env aenv t -> (Any, OpenExp env aenv t)
     shrinkE exp = case exp of
@@ -291,23 +292,24 @@ shrinkExp = Stats.substitution "shrinkE" . first getAny . shrinkE
       Undef t                   -> pure (Undef t)
       Nil                       -> pure Nil
       Pair x y                  -> Pair <$> shrinkE x <*> shrinkE y
-      VecPack   vec e           -> VecPack   vec <$> shrinkE e
-      VecUnpack vec e           -> VecUnpack vec <$> shrinkE e
+      Extract vR iR v i         -> Extract vR iR <$> shrinkE v <*> shrinkE i
+      Insert vR iR v i x        -> Insert vR iR <$> shrinkE v <*> shrinkE i <*> shrinkE x
+      Shuffle eR iR x y i       -> Shuffle eR iR <$> shrinkE x <*> shrinkE y <*> shrinkE i
+      Select eR m x y           -> Select eR <$> shrinkE m <*> shrinkE x <*> shrinkE y
       IndexSlice x ix sh        -> IndexSlice x <$> shrinkE ix <*> shrinkE sh
       IndexFull x ix sl         -> IndexFull x <$> shrinkE ix <*> shrinkE sl
       ToIndex shr sh ix         -> ToIndex shr <$> shrinkE sh <*> shrinkE ix
       FromIndex shr sh i        -> FromIndex shr <$> shrinkE sh <*> shrinkE i
-      Case e rhs def            -> Case <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
+      Case eR e rhs def         -> Case eR <$> shrinkE e <*> sequenceA [ (t,) <$> shrinkE c | (t,c) <- rhs ] <*> shrinkMaybeE def
       Cond p t e                -> Cond <$> shrinkE p <*> shrinkE t <*> shrinkE e
       While p f x               -> While <$> shrinkF p <*> shrinkF f <*> shrinkE x
-      PrimConst c               -> pure (PrimConst c)
       PrimApp f x               -> PrimApp f <$> shrinkE x
       Index a sh                -> Index a <$> shrinkE sh
       LinearIndex a i           -> LinearIndex a <$> shrinkE i
       Shape a                   -> pure (Shape a)
       ShapeSize shr sh          -> ShapeSize shr <$> shrinkE sh
       Foreign repr ff f e       -> Foreign repr ff <$> shrinkF f <*> shrinkE e
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> shrinkE e
+      Bitcast t1 t2 e           -> Bitcast t1 t2 <$> shrinkE e
 
     shrinkF :: HasCallStack => OpenFun env aenv t -> (Any, OpenFun env aenv t)
     shrinkF = first Any . shrinkFun
@@ -447,7 +449,6 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
       FromIndex sh i            -> FromIndex (shrinkE sh) (shrinkE i)
       Cond p t e                -> Cond (shrinkE p) (shrinkE t) (shrinkE e)
       While p f x               -> While (shrinkF p) (shrinkF f) (shrinkE x)
-      PrimConst c               -> PrimConst c
       PrimApp f x               -> PrimApp f (shrinkE x)
       Index a sh                -> Index (shrinkAcc a) (shrinkE sh)
       LinearIndex a i           -> LinearIndex (shrinkAcc a) (shrinkE i)
@@ -456,7 +457,7 @@ shrinkPreAcc shrinkAcc reduceAcc = Stats.substitution "shrinkA" shrinkA
       Intersect sh sz           -> Intersect (shrinkE sh) (shrinkE sz)
       Union sh sz               -> Union (shrinkE sh) (shrinkE sz)
       Foreign ff f e            -> Foreign ff (shrinkF f) (shrinkE e)
-      Coerce e                  -> Coerce (shrinkE e)
+      Bitcast e                 -> Bitcast (shrinkE e)
 
     shrinkF :: OpenFun env aenv' f -> OpenFun env aenv' f
     shrinkF (Lam f)  = Lam (shrinkF f)
@@ -492,23 +493,24 @@ usesOfExp range = countE
       Undef _                   -> Finite 0
       Nil                       -> Finite 0
       Pair e1 e2                -> countE e1 <> countE e2
-      VecPack   _ e             -> countE e
-      VecUnpack _ e             -> countE e
+      Extract _ _ v i           -> countE v <> countE i
+      Insert _ _ v i x          -> countE v <> countE i <> countE x
+      Shuffle _ _ x y i         -> countE x <> countE y <> countE i
+      Select _ m x y            -> countE m <> countE x <> countE y
       IndexSlice _ ix sh        -> countE ix <> countE sh
       IndexFull _ ix sl         -> countE ix <> countE sl
       FromIndex _ sh i          -> countE sh <> countE i
       ToIndex _ sh e            -> countE sh <> countE e
-      Case e rhs def            -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
+      Case _ e rhs def          -> countE e  <> mconcat [ countE c | (_,c) <- rhs ] <> maybe (Finite 0) countE def
       Cond p t e                -> countE p  <> countE t <> countE e
       While p f x               -> countE x  <> loopCount (usesOfFun range p) <> loopCount (usesOfFun range f)
-      PrimConst _               -> Finite 0
       PrimApp _ x               -> countE x
       Index _ sh                -> countE sh
       LinearIndex _ i           -> countE i
       Shape _                   -> Finite 0
       ShapeSize _ sh            -> countE sh
       Foreign _ _ _ e           -> countE e
-      Coerce _ _ e              -> countE e
+      Bitcast _ _ e             -> countE e
 
 usesOfFun :: VarsRange env -> OpenFun env aenv f -> Count
 usesOfFun range (Lam lhs f) = usesOfFun (weakenVarsRange lhs range) f
@@ -544,6 +546,7 @@ usesOfPreAcc withShape countAcc idx = count
       Apair a1 a2                -> countA a1 + countA a2
       Anil                       -> 0
       Atrace _ a1 a2             -> countA a1 + countA a2
+      Acoerce _ _ a              -> countA a
       Apply _ f a                -> countAF f idx + countA a
       Aforeign _ _ _ a           -> countA a
       Acond p t e                -> countE p + countA t + countA e
@@ -579,16 +582,17 @@ usesOfPreAcc withShape countAcc idx = count
       Undef _                    -> 0
       Nil                        -> 0
       Pair x y                   -> countE x + countE y
-      VecPack   _ e              -> countE e
-      VecUnpack _ e              -> countE e
+      Extract _ _ v i            -> countE v + countE i
+      Insert _ _ v i x           -> countE v + countE i + countE x
+      Shuffle _ _ x y i          -> countE x + countE y + countE i
+      Select _ m x y             -> countE m + countE x + countE y
       IndexSlice _ ix sh         -> countE ix + countE sh
       IndexFull _ ix sl          -> countE ix + countE sl
       ToIndex _ sh ix            -> countE sh + countE ix
       FromIndex _ sh i           -> countE sh + countE i
-      Case e rhs def             -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
+      Case _ e rhs def           -> countE e  + sum [ countE c | (_,c) <- rhs ] + maybe 0 countE def
       Cond p t e                 -> countE p  + countE t + countE e
       While p f x                -> countF p  + countF f + countE x
-      PrimConst _                -> 0
       PrimApp _ x                -> countE x
       Index a sh                 -> countAvar a + countE sh
       LinearIndex a i            -> countAvar a + countE i
@@ -597,7 +601,7 @@ usesOfPreAcc withShape countAcc idx = count
         | withShape              -> countAvar a
         | otherwise              -> 0
       Foreign _ _ _ e            -> countE e
-      Coerce _ _ e               -> countE e
+      Bitcast _ _ e              -> countE e
 
     countME :: Maybe (OpenExp env aenv e) -> Int
     countME = maybe 0 countE

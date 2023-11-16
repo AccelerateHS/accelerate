@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -23,47 +24,50 @@ module Data.Array.Accelerate.Classes.RealFrac (
 
 ) where
 
-import Data.Array.Accelerate.Language                               ( (^), cond, even )
-import Data.Array.Accelerate.Lift                                   ( unlift )
-import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.AST                                    ( PrimFun(..) )
+import Data.Array.Accelerate.Language                               ( cond, even )
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Data.Array.Accelerate.Classes.Eq
-import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
+import Data.Array.Accelerate.Classes.Ord
 import Data.Array.Accelerate.Classes.ToFloating
-import {-# SOURCE #-} Data.Array.Accelerate.Classes.RealFloat       -- defaultProperFraction
 
 import Data.Maybe
+import Data.Kind
+import Prelude                                                      ( ($), String, error, otherwise, unlines )
 import Text.Printf
-import Prelude                                                      ( ($), String, error, unlines, otherwise )
 import qualified Prelude                                            as P
 
 
 -- | Generalisation of 'P.div' to any instance of 'RealFrac'
 --
-div' :: (RealFrac a, FromIntegral Int64 b, Integral b) => Exp a -> Exp a -> Exp b
+div' :: (RealFrac a, FromIntegral (Significand a) b, Integral b) => Exp a -> Exp a -> Exp b
 div' n d = floor (n / d)
 
 -- | Generalisation of 'P.mod' to any instance of 'RealFrac'
 --
-mod' :: (Floating a, RealFrac a, ToFloating Int64 a) => Exp a -> Exp a -> Exp a
+mod' :: forall a. (Floating a, RealFrac a, Integral (Significand a), ToFloating (Significand a) a, FromIntegral (Significand a) (Significand a))
+     => Exp a
+     -> Exp a
+     -> Exp a
 mod' n d = n - (toFloating f) * d
   where
-    f :: Exp Int64
+    f :: Exp (Significand a)
     f = div' n d
 
 -- | Generalisation of 'P.divMod' to any instance of 'RealFrac'
 --
 divMod'
-    :: (Floating a, RealFrac a, Integral b, FromIntegral Int64 b, ToFloating b a)
+    :: (Floating a, RealFrac a, Integral b, FromIntegral (Significand a) b, ToFloating b a)
     => Exp a
     -> Exp a
     -> (Exp b, Exp a)
@@ -74,7 +78,15 @@ divMod' n d = (f, n - (toFloating f) * d)
 
 -- | Extracting components of fractions.
 --
-class (Ord a, Fractional a) => RealFrac a where
+class (Ord a, Fractional a, Integral (Significand a)) => RealFrac a where
+  -- | The significand (also known as the mantissa) is the part of a number in
+  -- floating point representation consisting of the significant digits.
+  -- Generally speaking, this is the integral part of a fractional number.
+  --
+  type Significand a :: Type
+
+  {-# MINIMAL properFraction #-}
+
   -- | The function 'properFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
   --
@@ -85,7 +97,7 @@ class (Ord a, Fractional a) => RealFrac a where
   --
   -- The default definitions of the 'ceiling', 'floor', 'truncate'
   -- and 'round' functions are in terms of 'properFraction'.
-  properFraction :: (Integral b, FromIntegral Int64 b) => Exp a -> (Exp b, Exp a)
+  properFraction :: (FromIntegral (Significand a) b, Integral b) => Exp a -> Exp (b, a)
 
   -- The function 'splitFraction' takes a real fractional number @x@ and
   -- returns a pair @(n,f)@ such that @x = n+f@, and:
@@ -104,109 +116,58 @@ class (Ord a, Fractional a) => RealFrac a where
   -- splitFraction / fraction are from numeric-prelude Algebra.RealRing
 
   -- | @truncate x@ returns the integer nearest @x@ between zero and @x@
-  truncate :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+  truncate :: (Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
   truncate = defaultTruncate
 
   -- | @'round' x@ returns the nearest integer to @x@; the even integer if @x@
   -- is equidistant between two integers
-  round    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  round    = defaultRound
+  round :: (Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
+  round = defaultRound
 
   -- | @'ceiling' x@ returns the least integer not less than @x@
-  ceiling  :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  ceiling  = defaultCeiling
+  ceiling :: (Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
+  ceiling = defaultCeiling
 
   -- | @'floor' x@ returns the greatest integer not greater than @x@
-  floor    :: (Integral b, FromIntegral Int64 b) => Exp a -> Exp b
-  floor    = defaultFloor
-
-instance RealFrac Half where
-  properFraction  = defaultProperFraction
-
-instance RealFrac Float where
-  properFraction  = defaultProperFraction
-
-instance RealFrac Double where
-  properFraction  = defaultProperFraction
-
-instance RealFrac CFloat where
-  properFraction  = defaultProperFraction
-  truncate        = defaultTruncate
-  round           = defaultRound
-  ceiling         = defaultCeiling
-  floor           = defaultFloor
-
-instance RealFrac CDouble where
-  properFraction  = defaultProperFraction
-  truncate        = defaultTruncate
-  round           = defaultRound
-  ceiling         = defaultCeiling
-  floor           = defaultFloor
+  floor :: (Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
+  floor = defaultFloor
 
 
--- Must test for ±0.0 to avoid returning -0.0 in the second component of the
--- pair. Unfortunately the branching costs a lot of performance.
---
--- defaultProperFraction
---     :: (ToFloating b a, RealFrac a, IsIntegral b, Num b, Floating a)
---     => Exp a
---     -> (Exp b, Exp a)
--- defaultProperFraction x =
---   unlift $ Exp
---          $ Cond (x == 0) (tup2 (0, 0))
---                          (tup2 (n, f))
---   where
---     n = truncate x
---     f = x - toFloating n
-
-defaultProperFraction
-    :: (RealFloat a, FromIntegral Int64 b, Integral b)
-    => Exp a
-    -> (Exp b, Exp a)
-defaultProperFraction x
-  = unlift
-  $ cond (n >= 0)
-      (T2 (fromIntegral m * (2 ^ n)) 0.0)
-      (T2 (fromIntegral q) (encodeFloat r n))
-  where
-    (m, n) = decodeFloat x
-    (q, r) = quotRem m (2 ^ (negate n))
-
-defaultTruncate :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultTruncate :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
 defaultTruncate x
-  | Just IsFloatingDict <- isFloating @a
-  , Just IsIntegralDict <- isIntegral @b
-  = mkTruncate x
+  | Just FloatingDict <- floatingDict @a
+  , Just IntegralDict <- integralDict @b
+  = mkPrimUnary (PrimTruncate floatingType integralType) x
   --
   | otherwise
-  = let (n, _) = properFraction x in n
+  = let T2 n _ = properFraction x in n
 
-defaultCeiling :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultCeiling :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
 defaultCeiling x
-  | Just IsFloatingDict <- isFloating @a
-  , Just IsIntegralDict <- isIntegral @b
-  = mkCeiling x
+  | Just FloatingDict <- floatingDict @a
+  , Just IntegralDict <- integralDict @b
+  = mkPrimUnary (PrimCeiling floatingType integralType) x
   --
   | otherwise
-  = let (n, r) = properFraction x in cond (r > 0) (n+1) n
+  = let T2 n r = properFraction x in cond (r > 0) (n+1) n
 
-defaultFloor :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultFloor :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
 defaultFloor x
-  | Just IsFloatingDict <- isFloating @a
-  , Just IsIntegralDict <- isIntegral @b
-  = mkFloor x
+  | Just FloatingDict <- floatingDict @a
+  , Just IntegralDict <- integralDict @b
+  = mkPrimUnary (PrimFloor floatingType integralType) x
   --
   | otherwise
-  = let (n, r) = properFraction x in cond (r < 0) (n-1) n
+  = let T2 n r = properFraction x in cond (r < 0) (n-1) n
 
-defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral Int64 b) => Exp a -> Exp b
+defaultRound :: forall a b. (RealFrac a, Integral b, FromIntegral (Significand a) b) => Exp a -> Exp b
 defaultRound x
-  | Just IsFloatingDict <- isFloating @a
-  , Just IsIntegralDict <- isIntegral @b
-  = mkRound x
+  | Just FloatingDict <- floatingDict @a
+  , Just IntegralDict <- integralDict @b
+  = mkPrimUnary (PrimRound floatingType integralType) x
   --
   | otherwise
-  = let (n, r)    = properFraction x
+  = let T2 n r    = properFraction x
         m         = cond (r < 0.0) (n-1) (n+1)
         half_down = abs r - 0.5
         p         = compare half_down 0.0
@@ -216,46 +177,81 @@ defaultRound x
             {- otherwise -} m
 
 
-data IsFloatingDict a where
-  IsFloatingDict :: IsFloating a => IsFloatingDict a
+data FloatingDict a where
+  FloatingDict :: IsFloating a => FloatingDict a
 
-data IsIntegralDict a where
-  IsIntegralDict :: IsIntegral a => IsIntegralDict a
+data IntegralDict a where
+  IntegralDict :: IsIntegral a => IntegralDict a
 
-isFloating :: forall a. Elt a => Maybe (IsFloatingDict (EltR a))
-isFloating
-  | TupRsingle t       <- eltR @a
-  , SingleScalarType s <- t
-  , NumSingleType n    <- s
-  , FloatingNumType f  <- n
-  = case f of
-      TypeHalf{}   -> Just IsFloatingDict
-      TypeFloat{}  -> Just IsFloatingDict
-      TypeDouble{} -> Just IsFloatingDict
-  --
-  | otherwise
-  = Nothing
+floatingDict :: forall a. Elt a => Maybe (FloatingDict (EltR a))
+floatingDict = go (eltR @a)
+  where
+    go :: TypeR t -> Maybe (FloatingDict t)
+    go (TupRsingle t) = scalar t
+    go _              = Nothing
 
-isIntegral :: forall a. Elt a => Maybe (IsIntegralDict (EltR a))
-isIntegral
-  | TupRsingle t       <- eltR @a
-  , SingleScalarType s <- t
-  , NumSingleType n    <- s
-  , IntegralNumType i  <- n
-  = case i of
-      TypeInt{}    -> Just IsIntegralDict
-      TypeInt8{}   -> Just IsIntegralDict
-      TypeInt16{}  -> Just IsIntegralDict
-      TypeInt32{}  -> Just IsIntegralDict
-      TypeInt64{}  -> Just IsIntegralDict
-      TypeWord{}   -> Just IsIntegralDict
-      TypeWord8{}  -> Just IsIntegralDict
-      TypeWord16{} -> Just IsIntegralDict
-      TypeWord32{} -> Just IsIntegralDict
-      TypeWord64{} -> Just IsIntegralDict
-  --
-  | otherwise
-  = Nothing
+    scalar :: ScalarType t -> Maybe (FloatingDict t)
+    scalar (NumScalarType t) = num t
+    scalar _                 = Nothing
+
+    num :: NumType t -> Maybe (FloatingDict t)
+    num (FloatingNumType t) = floating t
+    num _                   = Nothing
+
+    floating :: forall t. FloatingType t -> Maybe (FloatingDict t)
+    floating (SingleFloatingType   t) =
+      case t of
+        TypeFloat16  -> Just FloatingDict
+        TypeFloat32  -> Just FloatingDict
+        TypeFloat64  -> Just FloatingDict
+        TypeFloat128 -> Just FloatingDict
+    floating (VectorFloatingType _ t) =
+      case t of
+        TypeFloat16  -> Just FloatingDict
+        TypeFloat32  -> Just FloatingDict
+        TypeFloat64  -> Just FloatingDict
+        TypeFloat128 -> Just FloatingDict
+
+integralDict :: forall a. Elt a => Maybe (IntegralDict (EltR a))
+integralDict = go (eltR @a)
+  where
+    go :: TypeR t -> Maybe (IntegralDict t)
+    go (TupRsingle t) = scalar t
+    go _              = Nothing
+
+    scalar :: ScalarType t -> Maybe (IntegralDict t)
+    scalar (NumScalarType t) = num t
+    scalar _                 = Nothing
+
+    num :: NumType t -> Maybe (IntegralDict t)
+    num (IntegralNumType t) = integral t
+    num _                   = Nothing
+
+    integral :: forall t. IntegralType t -> Maybe (IntegralDict t)
+    integral (SingleIntegralType   t) =
+      case t of
+        TypeInt8    -> Just IntegralDict
+        TypeInt16   -> Just IntegralDict
+        TypeInt32   -> Just IntegralDict
+        TypeInt64   -> Just IntegralDict
+        TypeInt128  -> Just IntegralDict
+        TypeWord8   -> Just IntegralDict
+        TypeWord16  -> Just IntegralDict
+        TypeWord32  -> Just IntegralDict
+        TypeWord64  -> Just IntegralDict
+        TypeWord128 -> Just IntegralDict
+    integral (VectorIntegralType _ t) =
+      case t of
+        TypeInt8    -> Just IntegralDict
+        TypeInt16   -> Just IntegralDict
+        TypeInt32   -> Just IntegralDict
+        TypeInt64   -> Just IntegralDict
+        TypeInt128  -> Just IntegralDict
+        TypeWord8   -> Just IntegralDict
+        TypeWord16  -> Just IntegralDict
+        TypeWord32  -> Just IntegralDict
+        TypeWord64  -> Just IntegralDict
+        TypeWord128 -> Just IntegralDict
 
 
 -- To satisfy superclass constraints
@@ -275,4 +271,7 @@ preludeError x
             , "These Prelude.RealFrac instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
+
+-- Instances declared in Data.Array.Accelerate.Classes.RealFloat to avoid
+-- recursive modules
 

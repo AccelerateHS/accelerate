@@ -91,6 +91,7 @@ simplifyPreOpenAcc = \case
   Apair a1 a2                     -> Apair (simplifyOpenAcc a1) (simplifyOpenAcc a2)
   Anil                            -> Anil
   Atrace msg as bs                -> Atrace msg (simplifyOpenAcc as) (simplifyOpenAcc bs)
+  Acoerce scale bR a              -> Acoerce scale bR (simplifyOpenAcc a)
   Apply repr f a                  -> Apply repr (simplifyOpenAfun f) (simplifyOpenAcc a)
   Aforeign repr asm f a           -> Aforeign repr asm (simplifyOpenAfun f) (simplifyOpenAcc a)
   Acond e a1 a2                   -> Acond (simplifyExp e) (simplifyOpenAcc a1) (simplifyOpenAcc a2)
@@ -276,15 +277,16 @@ simplifyOpenExp env = first getAny . cvtE
       Undef tp                  -> pure $ Undef tp
       Nil                       -> pure Nil
       Pair e1 e2                -> Pair <$> cvtE e1 <*> cvtE e2
-      VecPack   vec e           -> VecPack   vec <$> cvtE e
-      VecUnpack vec e           -> VecUnpack vec <$> cvtE e
+      Extract vR iR v i         -> Extract vR iR <$> cvtE v <*> cvtE i
+      Insert vR iR v i x        -> Insert vR iR <$> cvtE v <*> cvtE i <*> cvtE x
+      Shuffle eR iR x y i       -> Shuffle eR iR <$> cvtE x <*> cvtE y <*> cvtE i
+      Select eR m x y           -> Select eR <$> cvtE m <*> cvtE x <*> cvtE y
       IndexSlice x ix sh        -> IndexSlice x <$> cvtE ix <*> cvtE sh
       IndexFull x ix sl         -> IndexFull x <$> cvtE ix <*> cvtE sl
       ToIndex shr sh ix         -> toIndex shr (cvtE sh) (cvtE ix)
       FromIndex shr sh ix       -> fromIndex shr (cvtE sh) (cvtE ix)
-      Case e rhs def            -> caseof (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
+      Case eR e rhs def         -> caseof eR (cvtE e) (sequenceA [ (t,) <$> cvtE c | (t,c) <- rhs ]) (cvtMaybeE def)
       Cond p t e                -> cond (cvtE p) (cvtE t) (cvtE e)
-      PrimConst c               -> pure $ PrimConst c
       PrimApp f x               -> (u<>v, fx)
         where
           (u, x') = cvtE x
@@ -295,7 +297,7 @@ simplifyOpenExp env = first getAny . cvtE
       ShapeSize shr sh          -> shapeSize shr (cvtE sh)
       Foreign tp ff f e         -> Foreign tp ff <$> first Any (simplifyOpenFun EmptyExp f) <*> cvtE e
       While p f x               -> While <$> cvtF env p <*> cvtF env f <*> cvtE x
-      Coerce t1 t2 e            -> Coerce t1 t2 <$> cvtE e
+      Bitcast t1 t2 e           -> Bitcast t1 t2 <$> cvtE e
 
     cvtE' :: Gamma env' env' aenv -> OpenExp env' aenv e' -> (Any, OpenExp env' aenv e')
     cvtE' env' = first Any . simplifyOpenExp env'
@@ -333,12 +335,14 @@ simplifyOpenExp env = first getAny . cvtE
       | Just Refl <- matchOpenExp t' e' = Stats.knownBranch "redundant" (yes e')
       | otherwise                       = Cond <$> p <*> t <*> e
 
-    caseof :: (Any, OpenExp env aenv TAG)
-           -> (Any, [(TAG, OpenExp env aenv b)])
+    caseof :: TagType tag
+           -> (Any, OpenExp env aenv tag)
+           -> (Any, [(tag, OpenExp env aenv b)])
            -> (Any, Maybe (OpenExp env aenv b))
            -> (Any, OpenExp env aenv b)
-    caseof x@(_,x') xs@(_,xs') md@(_,md')
+    caseof tagR x@(_,x') xs@(_,xs') md@(_,md')
       | Const _ t   <- x'
+      , TagDict     <- tagDict tagR
       = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
       | Just d      <- md'
       , []          <- xs'
@@ -346,26 +350,27 @@ simplifyOpenExp env = first getAny . cvtE
       | Just d      <- md'
       , [(_,(_,u))] <- us
       , Just Refl   <- matchOpenExp d u
-      = Stats.caseDefault "merge" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "merge" $ yes (Case tagR x' (map snd vs) (Just u))
       | Nothing     <- md'
       , []          <- vs
       , [(_,(_,u))] <- us
       = Stats.caseElim "overlap" (yes u)
       | Nothing     <- md'
       , [(_,(_,u))] <- us
-      = Stats.caseDefault "introduction" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "introduction" $ yes (Case tagR x' (map snd vs) (Just u))
       | otherwise
-      = Case <$> x <*> xs <*> md
+      = Case tagR <$> x <*> xs <*> md
       where
         (us,vs) = partition (\(n,_) -> n > 1)
                 $ Map.elems
-                . Map.fromListWith merge
+                . Map.fromListWith (merge tagR)
                 $ [ (hashOpenExp e, (1,(t, e))) | (t,e) <- xs' ]
 
-        merge :: (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b)) -> (Int, (TAG, OpenExp env aenv b))
-        merge (n,(_,a)) (m,(_,b))
+        merge :: TagType tag -> (Int, (tag, OpenExp env aenv b)) -> (Int, (tag, OpenExp env aenv b)) -> (Int, (tag, OpenExp env aenv b))
+        merge t (n,(_,a)) (m,(_,b))
+          | TagDict <- tagDict t
           = internalCheck "hashOpenExp/collision" (maybe False (const True) (matchOpenExp a b))
-          $ (n+m, (0xff, a))
+          $ (n+m, (maxBound, a))
 
     -- Shape manipulations
     --
@@ -375,24 +380,24 @@ simplifyOpenExp env = first getAny . cvtE
     shape a
       = pure $ Shape a
 
-    shapeSize :: ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv Int)
+    shapeSize :: ShapeR sh -> (Any, OpenExp env aenv sh) -> (Any, OpenExp env aenv INT)
     shapeSize shr (_, sh)
       | Just c <- extractConstTuple sh
-      = Stats.ruleFired "shapeSize/const" $ yes (Const scalarTypeInt (product (shapeToList shr c)))
+      = Stats.ruleFired "shapeSize/const" $ yes (Const (scalarType @INT) (product (shapeToList shr c)))
     shapeSize shr sh
       = ShapeSize shr <$> sh
 
     toIndex :: ShapeR sh
             -> (Any, OpenExp env aenv sh)
             -> (Any, OpenExp env aenv sh)
-            -> (Any, OpenExp env aenv Int)
+            -> (Any, OpenExp env aenv INT)
     toIndex _ (_,sh) (_,FromIndex _ sh' ix)
       | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "toIndex/fromIndex" $ yes ix
     toIndex shr sh ix                    = ToIndex shr <$> sh <*> ix
 
     fromIndex :: ShapeR sh
               -> (Any, OpenExp env aenv sh)
-              -> (Any, OpenExp env aenv Int)
+              -> (Any, OpenExp env aenv INT)
               -> (Any, OpenExp env aenv sh)
     fromIndex _ (_,sh) (_,ToIndex _ sh' ix)
       | Just Refl <- matchOpenExp sh sh' = Stats.ruleFired "fromIndex/toIndex" $ yes ix
@@ -403,6 +408,7 @@ simplifyOpenExp env = first getAny . cvtE
 
     yes :: x -> (Any, x)
     yes x = (Any True, x)
+
 
 extractConstTuple :: OpenExp env aenv t -> Maybe t
 extractConstTuple Nil          = Just ()
@@ -555,37 +561,22 @@ summariseOpenExp = (terms +~ 1) . goE
     travA :: acc aenv a -> Stats
     travA _ = zero & vars +~ 1  -- assume an array index, else we should have failed elsewhere
 
-    travC :: PrimConst c -> Stats
-    travC (PrimMinBound t) = travBoundedType t & terms +~ 1
-    travC (PrimMaxBound t) = travBoundedType t & terms +~ 1
-    travC (PrimPi t)       = travFloatingType t & terms +~ 1
-
     travIntegralType :: IntegralType t -> Stats
     travIntegralType _ = zero & types +~ 1
 
     travFloatingType :: FloatingType t -> Stats
     travFloatingType _ = zero & types +~ 1
 
+    travBitType :: BitType t -> Stats
+    travBitType _ = zero & types +~ 1
+
     travNumType :: NumType t -> Stats
     travNumType (IntegralNumType t) = travIntegralType t & types +~ 1
     travNumType (FloatingNumType t) = travFloatingType t & types +~ 1
 
-    travBoundedType :: BoundedType t -> Stats
-    travBoundedType (IntegralBoundedType t) = travIntegralType t & types +~ 1
-
-    -- travScalarType :: ScalarType t -> Stats
-    -- travScalarType (SingleScalarType t) = travSingleType t & types +~ 1
-    -- travScalarType (VectorScalarType t) = travVectorType t & types +~ 1
-
-    travSingleType :: SingleType t -> Stats
-    travSingleType (NumSingleType t) = travNumType t & types +~ 1
-
-    -- travVectorType :: VectorType t -> Stats
-    -- travVectorType (Vector2Type t)  = travSingleType t & types +~ 1
-    -- travVectorType (Vector3Type t)  = travSingleType t & types +~ 1
-    -- travVectorType (Vector4Type t)  = travSingleType t & types +~ 1
-    -- travVectorType (Vector8Type t)  = travSingleType t & types +~ 1
-    -- travVectorType (Vector16Type t) = travSingleType t & types +~ 1
+    travScalarType :: ScalarType t -> Stats
+    travScalarType (NumScalarType t) = travNumType t & types +~ 1
+    travScalarType (BitScalarType _) = zero          & types +~ 1
 
     -- The scrutinee has already been counted
     goE :: OpenExp env aenv t -> Stats
@@ -597,23 +588,24 @@ summariseOpenExp = (terms +~ 1) . goE
         Const{}               -> zero
         Undef _               -> zero
         Nil                   -> zero & terms +~ 1
-        Pair e1 e2            -> travE e1 +++ travE e2 & terms +~ 1
-        VecPack   _ e         -> travE e
-        VecUnpack _ e         -> travE e
+        Pair e1 e2            -> travE e1 +++ travE e2
+        Extract _ _ v i       -> travE v +++ travE i
+        Insert _ _ v i x      -> travE v +++ travE i +++ travE x
+        Shuffle _ _ x y i     -> travE x +++ travE y +++ travE i
+        Select _ m x y        -> travE m +++ travE x +++ travE y
         IndexSlice _ slix sh  -> travE slix +++ travE sh & terms +~ 1 -- +1 for sliceIndex
         IndexFull _ slix sl   -> travE slix +++ travE sl & terms +~ 1 -- +1 for sliceIndex
         ToIndex _ sh ix       -> travE sh +++ travE ix
         FromIndex _ sh ix     -> travE sh +++ travE ix
-        Case e rhs def        -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
+        Case _ e rhs def      -> travE e +++ mconcat [ travE c | (_,c) <- rhs ] +++ maybe zero travE def
         Cond p t e            -> travE p +++ travE t +++ travE e
         While p f x           -> travF p +++ travF f +++ travE x
-        PrimConst c           -> travC c
         Index a ix            -> travA a +++ travE ix
         LinearIndex a ix      -> travA a +++ travE ix
         Shape a               -> travA a
         ShapeSize _ sh        -> travE sh
         PrimApp f x           -> travPrimFun f +++ travE x
-        Coerce _ _ e          -> travE e
+        Bitcast _ _ e         -> travE e
 
     travPrimFun :: PrimFun f -> Stats
     travPrimFun = (ops +~ 1) . goF
@@ -621,66 +613,91 @@ summariseOpenExp = (terms +~ 1) . goE
         goF :: PrimFun f -> Stats
         goF fun =
           case fun of
-            PrimAdd                t -> travNumType t
-            PrimSub                t -> travNumType t
-            PrimMul                t -> travNumType t
-            PrimNeg                t -> travNumType t
-            PrimAbs                t -> travNumType t
-            PrimSig                t -> travNumType t
-            PrimQuot               t -> travIntegralType t
-            PrimRem                t -> travIntegralType t
-            PrimQuotRem            t -> travIntegralType t
-            PrimIDiv               t -> travIntegralType t
-            PrimMod                t -> travIntegralType t
-            PrimDivMod             t -> travIntegralType t
-            PrimBAnd               t -> travIntegralType t
-            PrimBOr                t -> travIntegralType t
-            PrimBXor               t -> travIntegralType t
-            PrimBNot               t -> travIntegralType t
-            PrimBShiftL            t -> travIntegralType t
-            PrimBShiftR            t -> travIntegralType t
-            PrimBRotateL           t -> travIntegralType t
-            PrimBRotateR           t -> travIntegralType t
-            PrimPopCount           t -> travIntegralType t
-            PrimCountLeadingZeros  t -> travIntegralType t
+            PrimAdd t                -> travNumType t
+            PrimSub t                -> travNumType t
+            PrimMul t                -> travNumType t
+            PrimNeg t                -> travNumType t
+            PrimAbs t                -> travNumType t
+            PrimSig t                -> travNumType t
+            PrimVAdd t               -> travNumType t
+            PrimVMul t               -> travNumType t
+            PrimQuot t               -> travIntegralType t
+            PrimRem t                -> travIntegralType t
+            PrimQuotRem t            -> travIntegralType t
+            PrimIDiv t               -> travIntegralType t
+            PrimMod t                -> travIntegralType t
+            PrimDivMod t             -> travIntegralType t
+            PrimBAnd t               -> travIntegralType t
+            PrimBOr t                -> travIntegralType t
+            PrimBXor t               -> travIntegralType t
+            PrimBNot t               -> travIntegralType t
+            PrimBShiftL t            -> travIntegralType t
+            PrimBShiftR t            -> travIntegralType t
+            PrimBRotateL t           -> travIntegralType t
+            PrimBRotateR t           -> travIntegralType t
+            PrimPopCount t           -> travIntegralType t
+            PrimCountLeadingZeros t  -> travIntegralType t
             PrimCountTrailingZeros t -> travIntegralType t
-            PrimFDiv               t -> travFloatingType t
-            PrimRecip              t -> travFloatingType t
-            PrimSin                t -> travFloatingType t
-            PrimCos                t -> travFloatingType t
-            PrimTan                t -> travFloatingType t
-            PrimAsin               t -> travFloatingType t
-            PrimAcos               t -> travFloatingType t
-            PrimAtan               t -> travFloatingType t
-            PrimSinh               t -> travFloatingType t
-            PrimCosh               t -> travFloatingType t
-            PrimTanh               t -> travFloatingType t
-            PrimAsinh              t -> travFloatingType t
-            PrimAcosh              t -> travFloatingType t
-            PrimAtanh              t -> travFloatingType t
-            PrimExpFloating        t -> travFloatingType t
-            PrimSqrt               t -> travFloatingType t
-            PrimLog                t -> travFloatingType t
-            PrimFPow               t -> travFloatingType t
-            PrimLogBase            t -> travFloatingType t
-            PrimTruncate         f i -> travFloatingType f +++ travIntegralType i
-            PrimRound            f i -> travFloatingType f +++ travIntegralType i
-            PrimFloor            f i -> travFloatingType f +++ travIntegralType i
-            PrimCeiling          f i -> travFloatingType f +++ travIntegralType i
-            PrimIsNaN              t -> travFloatingType t
-            PrimIsInfinite         t -> travFloatingType t
-            PrimAtan2              t -> travFloatingType t
-            PrimLt                 t -> travSingleType t
-            PrimGt                 t -> travSingleType t
-            PrimLtEq               t -> travSingleType t
-            PrimGtEq               t -> travSingleType t
-            PrimEq                 t -> travSingleType t
-            PrimNEq                t -> travSingleType t
-            PrimMax                t -> travSingleType t
-            PrimMin                t -> travSingleType t
-            PrimLAnd                 -> zero
-            PrimLOr                  -> zero
-            PrimLNot                 -> zero
-            PrimFromIntegral     i n -> travIntegralType i +++ travNumType n
-            PrimToFloating       n f -> travNumType n +++ travFloatingType f
+            PrimBReverse t           -> travIntegralType t
+            PrimBSwap t              -> travIntegralType t
+            PrimVBAnd t              -> travIntegralType t
+            PrimVBOr t               -> travIntegralType t
+            PrimVBXor t              -> travIntegralType t
+            PrimFDiv t               -> travFloatingType t
+            PrimRecip t              -> travFloatingType t
+            PrimSin t                -> travFloatingType t
+            PrimCos t                -> travFloatingType t
+            PrimTan t                -> travFloatingType t
+            PrimAsin t               -> travFloatingType t
+            PrimAcos t               -> travFloatingType t
+            PrimAtan t               -> travFloatingType t
+            PrimSinh t               -> travFloatingType t
+            PrimCosh t               -> travFloatingType t
+            PrimTanh t               -> travFloatingType t
+            PrimAsinh t              -> travFloatingType t
+            PrimAcosh t              -> travFloatingType t
+            PrimAtanh t              -> travFloatingType t
+            PrimExpFloating t        -> travFloatingType t
+            PrimSqrt t               -> travFloatingType t
+            PrimLog t                -> travFloatingType t
+            PrimFPow t               -> travFloatingType t
+            PrimLogBase t            -> travFloatingType t
+            PrimTruncate f i         -> travFloatingType f +++ travIntegralType i
+            PrimRound f i            -> travFloatingType f +++ travIntegralType i
+            PrimFloor f i            -> travFloatingType f +++ travIntegralType i
+            PrimCeiling f i          -> travFloatingType f +++ travIntegralType i
+            PrimIsNaN t              -> travFloatingType t
+            PrimIsInfinite t         -> travFloatingType t
+            PrimAtan2 t              -> travFloatingType t
+            PrimLt t                 -> travScalarType t
+            PrimGt t                 -> travScalarType t
+            PrimLtEq t               -> travScalarType t
+            PrimGtEq t               -> travScalarType t
+            PrimEq t                 -> travScalarType t
+            PrimNEq t                -> travScalarType t
+            PrimMin t                -> travScalarType t
+            PrimMax t                -> travScalarType t
+            PrimVMin t               -> travScalarType t
+            PrimVMax t               -> travScalarType t
+            PrimLAnd t               -> travBitType t
+            PrimLOr t                -> travBitType t
+            PrimLNot t               -> travBitType t
+            PrimVLAnd t              -> travBitType t
+            PrimVLOr t               -> travBitType t
+            PrimFromIntegral i n     -> travIntegralType i +++ travNumType n
+            PrimToFloating n f       -> travNumType n +++ travFloatingType f
+            PrimToBool i b           -> travIntegralType i +++ travBitType b
+            PrimFromBool b i         -> travBitType b +++ travIntegralType i
+
+
+-- Utilities
+-- ---------
+
+data TagDict t where
+  TagDict :: (Eq t, Bounded t) => TagDict t
+
+tagDict :: TagType t -> TagDict t
+tagDict TagBit    = TagDict
+tagDict TagWord8  = TagDict
+tagDict TagWord16 = TagDict
 

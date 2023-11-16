@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds   #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MonoLocalBinds    #-}
+{-# LANGUAGE TemplateHaskell   #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 -- |
 -- Module      : Data.Array.Accelerate.Classes.Enum
@@ -22,155 +22,19 @@ module Data.Array.Accelerate.Classes.Enum (
 
 import Data.Array.Accelerate.Classes.Num
 import Data.Array.Accelerate.Smart
+import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import Text.Printf
 
-import Prelude                                                      ( ($), String, error, unlines, succ, pred )
+import Control.Monad
+import Language.Haskell.TH                                          hiding ( Exp )
+import Text.Printf
+import Prelude                                                      hiding ( Num, Enum )
 import qualified Prelude                                            as P
 
 
 -- | Operations over sequentially ordered types
 --
 type Enum a = P.Enum (Exp a)
-
-
-instance P.Enum (Exp Int) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Int8) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Int16) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Int32) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Int64) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Word) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Word8) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Word16) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Word32) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Word64) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CInt) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CUInt) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CULong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CLLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CULLong) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CShort) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CUShort) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Half) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Float) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp Double) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CFloat) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
-
-instance P.Enum (Exp CDouble) where
-  succ      = defaultSucc
-  pred      = defaultPred
-  toEnum    = defaultToEnum
-  fromEnum  = defaultFromEnum
 
 defaultSucc :: Num a => Exp a -> Exp a
 defaultSucc x = x + 1
@@ -187,9 +51,54 @@ defaultFromEnum = preludeError "fromEnum"
 preludeError :: String -> a
 preludeError x
   = error
-  $ unlines [ printf "Prelude.%s is not supported for Accelerate types" x
-            , ""
+  $ unlines [ printf "Prelude.%s is not supported for Accelerate types" x , ""
             , "These Prelude.Enum instances are present only to fulfil superclass"
             , "constraints for subsequent classes in the standard Haskell numeric hierarchy."
             ]
+
+runQ $
+  let
+      integralTypes :: [Name]
+      integralTypes =
+        [ ''Int
+        , ''Int8
+        , ''Int16
+        , ''Int32
+        , ''Int64
+        , ''Int128
+        , ''Word
+        , ''Word8
+        , ''Word16
+        , ''Word32
+        , ''Word64
+        , ''Word128
+        ]
+
+      floatingTypes :: [Name]
+      floatingTypes =
+        [ ''Half
+        , ''Float
+        , ''Double
+        , ''Float128
+        ]
+
+      numTypes :: [Name]
+      numTypes = integralTypes ++ floatingTypes
+
+      mkEnum :: Name -> Q [Dec]
+      mkEnum a =
+        [d| instance P.Enum (Exp $(conT a)) where
+              succ      = defaultSucc
+              pred      = defaultPred
+              toEnum    = defaultToEnum
+              fromEnum  = defaultFromEnum
+
+            instance KnownNat n => P.Enum (Exp (Vec n $(conT a))) where
+              succ      = defaultSucc
+              pred      = defaultPred
+              toEnum    = defaultToEnum
+              fromEnum  = defaultFromEnum
+          |]
+  in
+  concat <$> mapM mkEnum numTypes
 

@@ -51,7 +51,7 @@
 --   reference implementation defining the semantics of the Accelerate language
 --
 -- * <http://hackage.haskell.org/package/accelerate-llvm-native accelerate-llvm-native>:
---   implementation supporting parallel execution on multicore CPUs (e.g. x86).
+--   implementation supporting parallel execution on multicore CPUs (e.g. x86-64, AARCH64).
 --
 -- * <http://hackage.haskell.org/package/accelerate-llvm-ptx accelerate-llvm-ptx>:
 --   implementation supporting parallel execution on CUDA-capable NVIDIA GPUs.
@@ -179,9 +179,9 @@ module Data.Array.Accelerate (
   -- *** Array shapes & indices
   -- $shapes_and_indices
   --
-  Z(..), (:.)(..),
+  Z, (:.),
   DIM0, DIM1, DIM2, DIM3, DIM4, DIM5, DIM6, DIM7, DIM8, DIM9,
-  Shape, Slice(..), All(..), Any(..),
+  Shape, Slice(..), All, Any,
   -- Split(..), Divide(..), Division(..),
 
   -- ** Array access
@@ -309,19 +309,21 @@ module Data.Array.Accelerate (
   Exp,
 
   -- ** SIMD vectors
-  Vec, VecElt,
+  Vec, SIMD,
 
   -- ** Type classes
   -- *** Basic type classes
-  Eq(..),
-  Ord(..), Ordering(..), pattern LT_, pattern EQ_, pattern GT_,
+  Eq(..), VEq(..),
+  Ord(..), VOrd(..), Ordering, pattern LT, pattern EQ, pattern GT,
   Enum, succ, pred,
   Bounded, minBound, maxBound,
+
   -- Functor(..), (<$>), ($>), void,
   -- Monad(..),
 
   -- *** Numeric type classes
   Num, (+), (-), (*), negate, abs, signum, fromInteger,
+  VNum(..),
   Integral, quot, rem, div, mod, quotRem, divMod,
   Rational(..),
   Fractional, (/), recip, fromRational,
@@ -330,6 +332,7 @@ module Data.Array.Accelerate (
   RealFloat(..),
 
   -- *** Numeric conversion classes
+  FromBool(..),
   FromIntegral(..),
   ToFloating(..),
 
@@ -348,15 +351,16 @@ module Data.Array.Accelerate (
   pattern T7,  pattern T8,  pattern T9,  pattern T10, pattern T11,
   pattern T12, pattern T13, pattern T14, pattern T15, pattern T16,
 
-  pattern Z_, pattern Ix, pattern (::.), pattern All_, pattern Any_,
+  pattern Z, pattern (:.), pattern All, pattern Any,
   pattern I0, pattern I1, pattern I2, pattern I3, pattern I4,
   pattern I5, pattern I6, pattern I7, pattern I8, pattern I9,
 
-  pattern Vec2, pattern V2,
-  pattern Vec3, pattern V3,
-  pattern Vec4, pattern V4,
-  pattern Vec8, pattern V8,
-  pattern Vec16, pattern V16,
+  pattern SIMD,
+  V2, pattern V2,
+  V3, pattern V3,
+  V4, pattern V4,
+  V8, pattern V8,
+  V16, pattern V16,
 
   mkPattern, mkPatterns,
 
@@ -367,14 +371,20 @@ module Data.Array.Accelerate (
   -- *** Tuples
   fst, afst, snd, asnd, curry, uncurry,
 
+  -- *** SIMD vectors
+  splat, pack, unpack, insert, extract, shuffle,
+
   -- *** Flow control
-  (?), match, cond, while, iterate,
+  (?), select, match, cond, while, iterate,
 
   -- *** Scalar reduction
   sfoldl,
 
   -- *** Logical operations
-  (&&), (||), not,
+  not, vnot,
+  (&&), (&&!), (&&*),
+  (||), (||!), (||*),
+  vand, vor,
 
   -- *** Numeric operations
   subtract, even, odd, gcd, lcm, (^), (^^),
@@ -386,7 +396,7 @@ module Data.Array.Accelerate (
   intersect,
 
   -- *** Conversions
-  ord, chr, boolToInt, bitcast,
+  ord, chr, bitcast,
 
   -- ---------------------------------------------------------------------------
   -- * Foreign Function Interface (FFI)
@@ -418,17 +428,13 @@ module Data.Array.Accelerate (
 
   -- ---------------------------------------------------------------------------
   -- Types
-  Int, Int8, Int16, Int32, Int64,
-  Word, Word8, Word16, Word32, Word64,
-  Half(..), Float, Double,
-  Bool(..),   pattern True_,    pattern False_,
-  Maybe(..),  pattern Nothing_, pattern Just_,
-  Either(..), pattern Left_,    pattern Right_,
+  Int, Int8, Int16, Int32, Int64, Int128,
+  Word, Word8, Word16, Word32, Word64, Word128,
+  Half(..), Float, Double, Float16, Float32, Float64, Float128,
+  Bool,   pattern True,    pattern False,
+  Maybe,  pattern Nothing, pattern Just,
+  Either, pattern Left,    pattern Right,
   Char,
-
-  CFloat, CDouble,
-  CShort, CUShort, CInt, CUInt, CLong, CULong, CLLong, CULLong,
-  CChar, CSChar, CUChar,
 
 ) where
 
@@ -437,6 +443,7 @@ import Data.Array.Accelerate.Classes.Enum
 import Data.Array.Accelerate.Classes.Eq
 import Data.Array.Accelerate.Classes.Floating
 import Data.Array.Accelerate.Classes.Fractional
+import Data.Array.Accelerate.Classes.FromBool
 import Data.Array.Accelerate.Classes.FromIntegral
 import Data.Array.Accelerate.Classes.Integral
 import Data.Array.Accelerate.Classes.Num
@@ -445,20 +452,25 @@ import Data.Array.Accelerate.Classes.Rational
 import Data.Array.Accelerate.Classes.RealFloat
 import Data.Array.Accelerate.Classes.RealFrac
 import Data.Array.Accelerate.Classes.ToFloating
+import Data.Array.Accelerate.Classes.VEq
+import Data.Array.Accelerate.Classes.VNum
+import Data.Array.Accelerate.Classes.VOrd
 import Data.Array.Accelerate.Data.Either
 import Data.Array.Accelerate.Data.Maybe
 import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Pattern
+import Data.Array.Accelerate.Pattern.SIMD
+import Data.Array.Accelerate.Pattern.Shape
+import Data.Array.Accelerate.Pattern.Tuple
 import Data.Array.Accelerate.Pattern.TH
 import Data.Array.Accelerate.Prelude
 import Data.Array.Accelerate.Pretty                                 () -- show instances
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Array                            ( Array, Arrays, Scalar, Vector, Matrix, Segments, fromFunction, fromFunctionM, toList, fromList )
 import Data.Array.Accelerate.Sugar.Elt
-import Data.Array.Accelerate.Sugar.Shape                            hiding ( size, toIndex, fromIndex, intersect )
+import Data.Array.Accelerate.Sugar.Shape                            hiding ( Z(..), (:.)(..), Any(..), All(..), size, toIndex, fromIndex, intersect )
 import Data.Array.Accelerate.Sugar.Vec
 import Data.Array.Accelerate.Type
-import Data.Primitive.Vec
 import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
@@ -688,4 +700,3 @@ arrayReshape = S.reshape
 --  * <https://hackage.haskell.org/package/accelerate-io-serialise accelerate-io-serialise>: binary serialisation of arrays using <https://hackage.haskell.org/package/serialise serialise>
 --  * <https://hackage.haskell.org/package/accelerate-io-vector accelerate-io-vector>: efficient boxed and unboxed one-dimensional arrays
 --
-
