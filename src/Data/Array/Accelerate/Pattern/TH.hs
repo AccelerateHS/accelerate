@@ -70,9 +70,16 @@ mkPattern nm = do
 mkDec :: Dec -> DecsQ
 mkDec dec =
   case dec of
-    DataD    _ nm tv _ cs _ -> mkDataD nm tv cs
-    NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
+    DataD    _ nm tv _ cs _ -> mkDataD nm (fixTVList tv) cs
+    NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm (fixTVList tv) c
     _                       -> fail "mkPatterns: expected the name of a newtype or datatype"
+  
+fixTV :: TyVarBndr a -> TyVarBndr ()
+fixTV (PlainTV n _ ) = PlainTV n ()
+fixTV (KindedTV n _ k) = KindedTV n () k
+
+fixTVList :: [TyVarBndr a] -> [TyVarBndr ()]
+fixTVList list = map fixTV list
 
 mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
