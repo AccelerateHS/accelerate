@@ -74,10 +74,10 @@ mkDec dec =
     NewtypeD _ nm tv _ c  _ -> mkNewtypeD nm tv c
     _                       -> fail "mkPatterns: expected the name of a newtype or datatype"
 
-mkNewtypeD :: Name -> [TyVarBndr ()] -> Con -> DecsQ
+mkNewtypeD :: Name -> [TyVarBndr a] -> Con -> DecsQ
 mkNewtypeD tn tvs c = mkDataD tn tvs [c]
 
-mkDataD :: Name -> [TyVarBndr ()] -> [Con] -> DecsQ
+mkDataD :: Name -> [TyVarBndr a] -> [Con] -> DecsQ
 mkDataD tn tvs cs = do
   (pats, decs) <- unzip <$> go cs
   comp         <- pragCompleteD pats Nothing
@@ -122,7 +122,7 @@ mkDataD tn tvs cs = do
       map bitsToTag (l ++ r)
 
 
-mkConP :: Name -> [TyVarBndr ()] -> Con -> Q (Name, [Dec])
+mkConP :: Name -> [TyVarBndr a] -> Con -> Q (Name, [Dec])
 mkConP tn' tvs' con' = do
   checkExts [ PatternSynonyms ]
   case con' of
@@ -192,7 +192,7 @@ mkConP tn' tvs' con' = do
                        [t| Exp $(foldl' appT (conT tn) (map varT tvs)) |]
                        (map (\t -> [t| Exp $(return t) |]) fs))
 
-mkConS :: Name -> [TyVarBndr ()] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
+mkConS :: Name -> [TyVarBndr a] -> [[Type]] -> [[Type]] -> Word8 -> Con -> Q (Name, [Dec])
 mkConS tn' tvs' prev' next' tag' con' = do
   checkExts [GADTs, PatternSynonyms, ScopedTypeVariables, TypeApplications, ViewPatterns]
   case con' of
