@@ -166,6 +166,7 @@ extra-source-files:
     cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
     -- Used by the Tracy's client tools
     cbits/tracy/capture/src/*.cpp
+    cbits/tracy/dtl/*.hpp
     cbits/tracy/imgui/*.cpp
     cbits/tracy/imgui/*.h
     cbits/tracy/imgui/misc/freetype/*.cpp
@@ -174,11 +175,14 @@ extra-source-files:
     cbits/tracy/nfd/*.h
     cbits/tracy/nfd/*.m
     cbits/tracy/profiler/src/*.cpp
+    cbits/tracy/profiler/src/*.c
     cbits/tracy/profiler/src/*.h
     cbits/tracy/profiler/src/*.hpp
     cbits/tracy/profiler/src/font/*.hpp
     cbits/tracy/profiler/src/imgui/*.cpp
     cbits/tracy/profiler/src/imgui/*.h
+    cbits/tracy/profiler/src/wayland/*.c
+    cbits/tracy/profiler/src/wayland/*.h
     cbits/tracy/public/libbacktrace/*.cpp
     cbits/tracy/public/libbacktrace/*.h
     cbits/tracy/public/libbacktrace/*.hpp
