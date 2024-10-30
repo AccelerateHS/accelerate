@@ -216,7 +216,7 @@ static void parse_options(int argc, char *argv[])
  * not update the 'argc' length of the vector, the removed entries are replaced
  * with "-RTS" (see the comment at the end of the function).
  */
-__attribute__((constructor)) void process_options(int argc, char *argv[])
+static void process_options(int argc, char *argv[])
 {
   /* Find the command line options which need to be processed. These will be
    * between +ACC ... [-ACC] (similar to the Haskell RTS options).
@@ -405,3 +405,24 @@ __attribute__((constructor)) void process_options(int argc, char *argv[])
   if (env) free(env);
 }
 
+/* On Windows, the GHC RTS uses GetCommandLineW() to get the actual command line
+ * using the Windows API; the memory that this function reads from cannot easily
+ * be modified. Supposedly one can locate the PEB and modify the string
+ * in-place, but that is too much hackery. So we'll just disable +ACC parsing on
+ * Windows. */
+#ifndef _WIN32
+/* Register process_options() as a constructor function in the new style by
+ * putting a reference to it in the .init_array section. The advantage of this
+ * approach over simply using __attribute__((constructor)) is that this way, the
+ * function will predictably be called with the same arguments as main(). A
+ * simple constructor might _accidentally_ be called with the same arguments as
+ * main(), but it isn't defined to be, and sometimes will not be. (In
+ * particular, this failed with clang on Windows.)
+ * Source: https://stackoverflow.com/a/37358751 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+/* Add 'used' so that the variable is not optimised away. */
+__attribute__((section(".init_array"), used))
+  static void *process_options_ctor_entry = &process_options;
+#pragma GCC diagnostic pop
+#endif
