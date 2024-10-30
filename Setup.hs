@@ -30,6 +30,10 @@ preConfHook args config_flags = do
       debugging = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
 
   when debugging $ do
+    dieNoVerbosity $ "In this version of Accelerate, debug mode is disabled to \
+                     \prevent problems with cabal on Windows. The problems will\
+                     \be fixed in Cabal 3.14, which is not yet released."
+
     yes <- doesFileExist "cbits/tracy/public/TracyClient.cpp"
     if yes
       then
