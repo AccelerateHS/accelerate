@@ -422,7 +422,11 @@ static void process_options(int argc, char *argv[])
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
 /* Add 'used' so that the variable is not optimised away. */
+#if defined(__APPLE__) && defined(__MACH__)
+__attribute__((section("__ACCELERATE_HS,.init_array"), used))
+#else
 __attribute__((section(".init_array"), used))
+#endif
   static void *process_options_ctor_entry = &process_options;
 #pragma GCC diagnostic pop
 #endif
