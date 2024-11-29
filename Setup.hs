@@ -78,7 +78,8 @@ postBuildHook args build_flags pkg_desc lbi = do
           -- means that some duplicate work is done (building capstone twice).
           -- Could we share a build directory between the two?
 
-          rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release"]
+          -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
+          rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
 
           -- Build in parallel with 2 jobs because likely, accelerate is one of
           -- the last dependencies in a build, so we aren't stealing CPU time
