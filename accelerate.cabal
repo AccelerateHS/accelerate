@@ -356,7 +356,7 @@ library
         , prettyprinter-ansi-terminal   >= 1.1.2
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11
-        , template-haskell
+        , template-haskell              < 2.23
         , terminal-size                 >= 0.3
         , text                          >= 1.2.4
         , transformers                  >= 0.3
