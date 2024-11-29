@@ -71,21 +71,27 @@ postBuildHook args build_flags pkg_desc lbi = do
               hs_builddir = buildDir lbi </> hs_exe
               hs_tmpdir   = hs_builddir </> hs_exe ++ "-tmp"
 
-          setupMessage verbosity (printf "Building executable '%s' from Tracy C++ sources for" hs_exe) (package pkg_desc)
-
           -- TODO: This creates a separate build directory for each tracy
           -- executable (of which we build two, at the time of writing). This
           -- means that some duplicate work is done (building capstone twice).
           -- Could we share a build directory between the two?
 
-          -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
-          rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
+          hs_exe_modtime <- getModificationTime (hs_builddir </> hs_exe)
+          tracy_modtime <- getModificationTime "cbits/tracy"
 
-          -- Build in parallel with 2 jobs because likely, accelerate is one of
-          -- the last dependencies in a build, so we aren't stealing CPU time
-          -- from other packages, and tracy takes way too long to build
-          rawSystemExit verbosity "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
+          when (tracy_modtime > hs_exe_modtime) $ do
+            setupMessage verbosity (printf "Building executable '%s' from Tracy C++ sources for" hs_exe) (package pkg_desc)
 
-          renameFile (hs_tmpdir </> c_exe) (hs_builddir </> hs_exe)
+            -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
+            rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
+
+            -- Build in parallel with 2 jobs because likely, accelerate is one of
+            -- the last dependencies in a build, so we aren't stealing CPU time
+            -- from other packages, and tracy takes way too long to build
+            rawSystemExit verbosity "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
+
+            -- Copy, not rename, to prevent cmake from linking again on the next
+            -- reconfigure
+            copyFile (hs_tmpdir </> c_exe) (hs_builddir </> hs_exe)
 
   postBuild simpleUserHooks args build_flags pkg_desc lbi
