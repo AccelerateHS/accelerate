@@ -14,7 +14,7 @@
 module Data.BitSet where
 
 import Data.Bits
-import Prelude                                            hiding ( foldl, foldr )
+import Prelude                                            hiding ( foldl, foldr, foldl' )
 import qualified Data.List                                as List
 
 import GHC.Exts                                           ( IsList, build )
