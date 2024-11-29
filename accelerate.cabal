@@ -154,19 +154,14 @@ extra-source-files:
     cbits/tracy/public/client/*.hpp
     cbits/tracy/public/client/*.cpp
     -- These are used to build Tracy's client tools in Setup.hs
-    cbits/tracy/capture/build/unix/Makefile
-    cbits/tracy/capture/build/unix/*.mk
-    cbits/tracy/profiler/build/unix/Makefile
-    cbits/tracy/profiler/build/unix/*.mk
-    cbits/tracy/common/*.mk
-    -- The Makefiles fetch the source files from these Visual Studio project files
-    cbits/tracy/capture/build/win32/capture.vcxproj
-    cbits/tracy/capture/build/win32/capture.vcxproj.filters
-    cbits/tracy/profiler/build/win32/Tracy.vcxproj
-    cbits/tracy/profiler/build/win32/Tracy.vcxproj.filters
+    cbits/tracy/cmake/*.cmake
+    cbits/tracy/capture/CMakeLists.txt
+    cbits/tracy/profiler/CMakeLists.txt
     -- Used by the Tracy's client tools
     cbits/tracy/capture/src/*.cpp
     cbits/tracy/dtl/*.hpp
+    cbits/tracy/getopt/*.c
+    cbits/tracy/getopt/*.h
     cbits/tracy/imgui/*.cpp
     cbits/tracy/imgui/*.h
     cbits/tracy/imgui/misc/freetype/*.cpp
@@ -181,8 +176,9 @@ extra-source-files:
     cbits/tracy/profiler/src/font/*.hpp
     cbits/tracy/profiler/src/imgui/*.cpp
     cbits/tracy/profiler/src/imgui/*.h
-    cbits/tracy/profiler/src/wayland/*.c
-    cbits/tracy/profiler/src/wayland/*.h
+    cbits/tracy/profiler/src/profiler/*.cpp
+    cbits/tracy/profiler/src/profiler/*.h
+    cbits/tracy/profiler/src/profiler/*.hpp
     cbits/tracy/public/libbacktrace/*.cpp
     cbits/tracy/public/libbacktrace/*.h
     cbits/tracy/public/libbacktrace/*.hpp
@@ -194,7 +190,6 @@ extra-source-files:
     cbits/tracy/zstd/common/*.h
     cbits/tracy/zstd/compress/*.c
     cbits/tracy/zstd/compress/*.h
-    cbits/tracy/zstd/decompress/*.S
     cbits/tracy/zstd/decompress/*.c
     cbits/tracy/zstd/decompress/*.h
     cbits/tracy/zstd/dictBuilder/*.c
@@ -221,9 +216,9 @@ flag debug
     built to collect and view profiling data from supported backends. This
     requires several external dependencies:
     .
-      * pkg-config
+      * camke
     .
-      * capstone
+      * pkg-config
     .
       * freetype2
     .
@@ -235,11 +230,11 @@ flag debug
     .
     For example on Debian/Ubuntu you can install all of these via:
     .
-      > sudo apt install pkg-config libcapstone-dev libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+      > sudo apt install cmake pkg-config libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
     .
     Or on macOS via:
     .
-      > brew install pkg-config capstone freetype glfw
+      > brew install cmake pkg-config freetype glfw
     .
     With debugging enabled, applications will read the following options from
     the environment variable @ACCELERATE_FLAGS@, and via the command-line as:
