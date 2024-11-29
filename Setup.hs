@@ -76,10 +76,17 @@ postBuildHook args build_flags pkg_desc lbi = do
           -- means that some duplicate work is done (building capstone twice).
           -- Could we share a build directory between the two?
 
-          hs_exe_modtime <- getModificationTime (hs_builddir </> hs_exe)
-          tracy_modtime <- getModificationTime "cbits/tracy"
+          -- Existence of the hs_exe doesn't mean anything because before we
+          -- overwrite it it's just a dummy executable. So check existence (and
+          -- mtime) of the c_exe instead.
+          c_exe_exists <- doesFileExist (hs_tmpdir </> c_exe)
+          tracy_newer <- if c_exe_exists
+                           then do c_exe_modtime <- getModificationTime (hs_tmpdir </> c_exe)
+                                   tracy_modtime <- getModificationTime "cbits/tracy"
+                                   return (tracy_modtime > c_exe_modtime)
+                           else return True
 
-          when (tracy_modtime > hs_exe_modtime) $ do
+          when tracy_newer $ do
             setupMessage verbosity (printf "Building executable '%s' from Tracy C++ sources for" hs_exe) (package pkg_desc)
 
             -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
