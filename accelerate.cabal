@@ -729,8 +729,7 @@ executable tracy
       , formatting
 
   pkgconfig-depends:
-        capstone
-      , freetype2
+        freetype2
       , glfw3
 
   if !os(windows) && !os(darwin)
@@ -756,9 +755,6 @@ executable tracy-capture
         base                            >= 4.10
       , accelerate
       , formatting
-
-  pkgconfig-depends:
-        capstone
 
   cpp-options:
         -DEXECUTABLE="tracy-capure"
