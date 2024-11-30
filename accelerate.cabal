@@ -646,11 +646,11 @@ library
   -- We assume only SSE2 to make Accelerate widely compatible; Windows 8
   -- assumes SSE2. However, we tune for native, see the next block.
   if !arch(aarch64)
-    cc-options: -march=sse2
-    cxx-options: -march=sse2
-    ghc-options: -optc=-march=sse2
+    cc-options: -msse2
+    cxx-options: -msse2
+    ghc-options: -optc=-msse2
     if impl(ghc >= 8.10)
-      ghc-options: -optcxx=-march=sse2
+      ghc-options: -optcxx=-msse2
 
   -- https://stackoverflow.com/questions/65966969/why-does-march-native-not-work-on-apple-m1
   if !(os(darwin) && arch(aarch64))
