@@ -643,17 +643,22 @@ library
     build-depends:
         unix
 
+  -- We assume only SSE2 to make Accelerate widely compatible; Windows 8
+  -- assumes SSE2. However, we tune for native, see the next block.
+  if !arch(aarch64)
+    cc-options: -march=sse2
+    cxx-options: -march=sse2
+    ghc-options: -optc=-march=sse2
+    if impl(ghc >= 8.10)
+      ghc-options: -optcxx=-march=sse2
+
   -- https://stackoverflow.com/questions/65966969/why-does-march-native-not-work-on-apple-m1
   if !(os(darwin) && arch(aarch64))
-    cc-options:
-        -march=native
-    cxx-options:
-        -march=native
-    ghc-options:
-        -optc=-march=native
+    cc-options: -mtune=native
+    cxx-options: -mtune=native
+    ghc-options: -optc=-mtune=native
     if impl(ghc >= 8.10)
-      ghc-options:
-        -optcxx=-march=native
+      ghc-options: -optcxx=-mtune=native
 
   -- Don't add the extensions list here. Instead, place individual LANGUAGE
   -- pragmas in the files that require a specific extension. This means the
