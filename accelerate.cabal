@@ -216,7 +216,7 @@ flag debug
     built to collect and view profiling data from supported backends. This
     requires several external dependencies:
     .
-      * camke
+      * cmake
     .
       * pkg-config
     .
