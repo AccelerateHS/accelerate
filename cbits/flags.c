@@ -411,13 +411,23 @@ static void process_options(int argc, char *argv[])
  * in-place, but that is too much hackery. So we'll just disable +ACC parsing on
  * Windows. */
 #ifndef _WIN32
-/* Register process_options() as a constructor function in the new style by
- * putting a reference to it in the .init_array section. The advantage of this
- * approach over simply using __attribute__((constructor)) is that this way, the
- * function will predictably be called with the same arguments as main(). A
- * simple constructor might _accidentally_ be called with the same arguments as
- * main(), but it isn't defined to be, and sometimes will not be. (In
- * particular, this failed with clang on Windows.)
+
+/* On MacOS, we use a constructor attribute, because .init_array seems to be a
+ * Linux-only thing. */
+#if defined(__APPLE__) && defined(__MACH__)
+__attribute__((constructor))
+static void process_options_constructor(int argc, char *argv[]) {
+  process_options(argc, argv);
+}
+#else
+/* On Linux(/BSD? Do we even support that?), register process_options() as a
+ * constructor function in the new style by putting a reference to it in the
+ * .init_array section. The advantage of this approach over simply using
+ * __attribute__((constructor)) is that this way, the function will predictably
+ * be called with the same arguments as main(). A simple constructor might
+ * _accidentally_ be called with the same arguments as main(), but it isn't
+ * defined to be, and sometimes will not be. (In particular, this failed with
+ * clang on Windows, which is a bad reason to do this on Linux, but whatever.)
  * Source: https://stackoverflow.com/a/37358751 */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-variable"
@@ -425,4 +435,5 @@ static void process_options(int argc, char *argv[])
 __attribute__((section(".init_array"), used))
   static void *process_options_ctor_entry = &process_options;
 #pragma GCC diagnostic pop
-#endif
+#endif /* APPLE */
+#endif /* WIN32 */
