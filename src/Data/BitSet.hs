@@ -14,6 +14,7 @@
 module Data.BitSet where
 
 import Data.Bits
+-- foldl' is exported by Prelude from GHC 9.10
 import Prelude                                            hiding ( foldl, foldr, foldl' )
 import qualified Data.List                                as List
 
