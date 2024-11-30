@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP              #-}
 {-# LANGUAGE TemplateHaskell  #-}
 {-# LANGUAGE TypeApplications #-}
 -- |
@@ -181,7 +182,13 @@ mkConP tn' tvs' con' = do
                      ]
       r' <- case mf of
               Nothing -> return r
+-- Since template-haskell 2.22, NamespaceSpecifier has been added
+-- https://hackage.haskell.org/package/template-haskell-2.22.0.0/changelog
+#if MIN_VERSION_template_haskell(2,22,0)
+              Just f  -> return (InfixD f NoNamespaceSpecifier pat : r)
+#else
               Just f  -> return (InfixD f pat : r)
+#endif
       return (pat, r')
       where
         pat = mkName (':' : nameBase cn)
@@ -273,7 +280,13 @@ mkConS tn' tvs' prev' next' tag' con' = do
                      ]
       r' <- case mf of
               Nothing -> return r
+-- Since template-haskell 2.22, NamespaceSpecifier has been added
+-- https://hackage.haskell.org/package/template-haskell-2.22.0.0/changelog
+#if MIN_VERSION_template_haskell(2,22,0)
+              Just f  -> return (InfixD f NoNamespaceSpecifier pat : r)
+#else
               Just f  -> return (InfixD f pat : r)
+#endif
       return r'
       where
         sig = forallT
