@@ -481,7 +481,6 @@ library
         Data.Atomic
 
         -- Data.Array.Accelerate.Array.Lifted
-        -- Data.Array.Accelerate.Trafo.Vectorise
 
         -- nofib test suite
         Data.Array.Accelerate.Test.NoFib.Base
