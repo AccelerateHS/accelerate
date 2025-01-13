@@ -69,7 +69,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import qualified Data.Array.Accelerate.Sugar.Elt                    as Sugar
 import qualified Data.Array.Accelerate.Trafo.Delayed                as AST
 
-import Control.DeepSeq
+import Control.DeepSeq                                              ( ($!!) )
 import Control.Exception
 import Control.Monad
 import Control.Monad.ST

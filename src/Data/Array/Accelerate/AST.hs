@@ -149,7 +149,7 @@ import Data.Array.Accelerate.Sugar.Foreign
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
 
-import Control.DeepSeq
+import Control.DeepSeq                                              ( NFData(..) )
 import Data.Kind
 import Data.Maybe
 import Data.Text                                                    ( Text )
