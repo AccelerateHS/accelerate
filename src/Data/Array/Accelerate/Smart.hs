@@ -625,17 +625,22 @@ class Stencil sh e stencil where
   stencilPrj :: SmartExp (StencilR sh stencil) -> stencil
 
 -- DIM1
-instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e) where
-  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e)
-    = EltR (e, e, e)
+-- These instances are written with verbose e1, e2, e3, etc. to ensure that
+-- they match for _any_ tuple of Exps, not just tuples for GHC already knows
+-- that the types are equal. This significantly improves type inference.
+instance (Elt e, e1 ~ e, e2 ~ e, e3 ~ e)
+      => Stencil Sugar.DIM1 e (Exp e1, Exp e2, Exp e3) where
+  type StencilR Sugar.DIM1 (Exp e1, Exp e2, Exp e3)
+    = EltR (e1, e2, e3)
   stencilR = StencilRunit3 @(EltR e) $ eltR @e
   stencilPrj s = (Exp $ prj2 s,
                   Exp $ prj1 s,
                   Exp $ prj0 s)
 
-instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
-  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e)
+instance (Elt e, e1 ~ e, e2 ~ e, e3 ~ e, e4 ~ e, e5 ~ e)
+      => Stencil Sugar.DIM1 e (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5) where
+  type StencilR Sugar.DIM1 (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5)
+    = EltR (e1, e2, e3, e4, e5)
   stencilR = StencilRunit5 $ eltR @e
   stencilPrj s = (Exp $ prj4 s,
                   Exp $ prj3 s,
@@ -643,9 +648,10 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e) where
                   Exp $ prj1 s,
                   Exp $ prj0 s)
 
-instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e) where
-  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e)
+instance (Elt e, e1 ~ e, e2 ~ e, e3 ~ e, e4 ~ e, e5 ~ e, e6 ~ e, e7 ~ e)
+      => Stencil Sugar.DIM1 e (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5, Exp e6, Exp e7) where
+  type StencilR Sugar.DIM1 (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5, Exp e6, Exp e7)
+    = EltR (e1, e2, e3, e4, e5, e6, e7)
   stencilR = StencilRunit7 $ eltR @e
   stencilPrj s = (Exp $ prj6 s,
                   Exp $ prj5 s,
@@ -655,10 +661,10 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e
                   Exp $ prj1 s,
                   Exp $ prj0 s)
 
-instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-  where
-  type StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp e)
-    = EltR (e, e, e, e, e, e, e, e, e)
+instance (Elt e, e1 ~ e, e2 ~ e, e3 ~ e, e4 ~ e, e5 ~ e, e6 ~ e, e7 ~ e, e8 ~ e, e9 ~ e)
+      => Stencil Sugar.DIM1 e (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5, Exp e6, Exp e7, Exp e8, Exp e9) where
+  type StencilR Sugar.DIM1 (Exp e1, Exp e2, Exp e3, Exp e4, Exp e5, Exp e6, Exp e7, Exp e8, Exp e9)
+    = EltR (e1, e2, e3, e4, e5, e6, e7, e8, e9)
   stencilR = StencilRunit9 $ eltR @e
   stencilPrj s = (Exp $ prj8 s,
                   Exp $ prj7 s,
@@ -674,7 +680,8 @@ instance Elt e => Stencil Sugar.DIM1 e (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e
 instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0,
-          i1 ~ Int, i2 ~ Int) => Stencil (sh:.i1:.i2) a (row2, row1, row0) where
+          i1 ~ Int, i2 ~ Int)
+      => Stencil (sh:.i1:.i2) a (row2, row1, row0) where
   type StencilR (sh:.i1:.i2) (row2, row1, row0)
     = Tup3 (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
   stencilR = StencilRtup3 (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
@@ -687,12 +694,13 @@ instance (Stencil (sh:.Int) a row4,
           Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0,
-          i1 ~ Int, i2 ~ Int) => Stencil (sh:.i1:.i2) a (row4, row3, row2, row1, row0) where
+          i1 ~ Int, i2 ~ Int)
+      => Stencil (sh:.i1:.i2) a (row4, row3, row2, row1, row0) where
   type StencilR (sh:.i1:.i2) (row4, row3, row2, row1, row0)
     = Tup5 (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2)
-       (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
-  stencilR = StencilRtup5 (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+           (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup5 (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3) (stencilR @(sh:.Int) @a @row2)
+                          (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
   stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj4 s,
                   stencilPrj @(sh:.Int) @a $ prj3 s,
                   stencilPrj @(sh:.Int) @a $ prj2 s,
@@ -707,14 +715,14 @@ instance (Stencil (sh:.Int) a row6,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0,
           i1 ~ Int, i2 ~ Int)
-  => Stencil (sh:.i1:.i2) a (row6, row5, row4, row3, row2, row1, row0) where
+      => Stencil (sh:.i1:.i2) a (row6, row5, row4, row3, row2, row1, row0) where
   type StencilR (sh:.i1:.i2) (row6, row5, row4, row3, row2, row1, row0)
     = Tup7 (StencilR (sh:.Int) row6) (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4)
-       (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1)
-       (StencilR (sh:.Int) row0)
-  stencilR = StencilRtup7 (stencilR @(sh:.Int) @a @row6)
-                  (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+           (StencilR (sh:.Int) row3) (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1)
+           (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup7 (stencilR @(sh:.Int) @a @row6) (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4)
+                          (stencilR @(sh:.Int) @a @row3) (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1)
+                          (stencilR @(sh:.Int) @a @row0)
   stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj6 s,
                   stencilPrj @(sh:.Int) @a $ prj5 s,
                   stencilPrj @(sh:.Int) @a $ prj4 s,
@@ -733,15 +741,14 @@ instance (Stencil (sh:.Int) a row8,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0,
           i1 ~ Int, i2 ~ Int)
-  => Stencil (sh:.i1:.i2) a (row8, row7, row6, row5, row4, row3, row2, row1, row0) where
+      => Stencil (sh:.i1:.i2) a (row8, row7, row6, row5, row4, row3, row2, row1, row0) where
   type StencilR (sh:.i1:.i2) (row8, row7, row6, row5, row4, row3, row2, row1, row0)
     = Tup9 (StencilR (sh:.Int) row8) (StencilR (sh:.Int) row7) (StencilR (sh:.Int) row6)
-       (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3)
-       (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
-  stencilR = StencilRtup9
-                  (stencilR @(sh:.Int) @a @row8) (stencilR @(sh:.Int) @a @row7) (stencilR @(sh:.Int) @a @row6)
-                  (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
-                  (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
+           (StencilR (sh:.Int) row5) (StencilR (sh:.Int) row4) (StencilR (sh:.Int) row3)
+           (StencilR (sh:.Int) row2) (StencilR (sh:.Int) row1) (StencilR (sh:.Int) row0)
+  stencilR = StencilRtup9 (stencilR @(sh:.Int) @a @row8) (stencilR @(sh:.Int) @a @row7) (stencilR @(sh:.Int) @a @row6)
+                          (stencilR @(sh:.Int) @a @row5) (stencilR @(sh:.Int) @a @row4) (stencilR @(sh:.Int) @a @row3)
+                          (stencilR @(sh:.Int) @a @row2) (stencilR @(sh:.Int) @a @row1) (stencilR @(sh:.Int) @a @row0)
   stencilPrj s = (stencilPrj @(sh:.Int) @a $ prj8 s,
                   stencilPrj @(sh:.Int) @a $ prj7 s,
                   stencilPrj @(sh:.Int) @a $ prj6 s,
