@@ -2213,10 +2213,10 @@ instance IfThenElse Bool a where
       True  -> t
       False -> e
 
-instance Elt a => IfThenElse (Exp Bool) (Exp a) where
+instance (Elt a, b ~ Bool) => IfThenElse (Exp b) (Exp a) where
   ifThenElse = cond
 
-instance Arrays a => IfThenElse (Exp Bool) (Acc a) where
+instance (Arrays a, b ~ Bool) => IfThenElse (Exp b) (Acc a) where
   ifThenElse = acond
 
 
