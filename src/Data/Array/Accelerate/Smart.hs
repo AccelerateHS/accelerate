@@ -689,6 +689,10 @@ type instance StencilR Sugar.DIM1 (Exp e, Exp e, Exp e, Exp e, Exp e, Exp e, Exp
   = EltR (e, e, e, e, e, e, e, e, e)
 
 -- DIM(n+1)
+-- TODO: These instances allow stencils with unequal sub-stencil sizes (i.e.
+-- unequal row lengths for a 2D stencil). This is rather odd, probably unused,
+-- and makes type inference a little less eager to deduce the stencil type in
+-- case of underspecified rows. Can we just require the rows to be equal?
 instance (Stencil (sh:.Int) a row2,
           Stencil (sh:.Int) a row1,
           Stencil (sh:.Int) a row0,
