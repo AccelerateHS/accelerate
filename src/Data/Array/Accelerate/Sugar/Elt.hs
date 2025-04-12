@@ -29,9 +29,13 @@ import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 
-import Data.Bits
+import Control.Applicative                                          ( (<|>) )
+import qualified Control.Monad.State.Lazy                           as LState
+import Control.Monad.Fix                                            ( mfix )
 import Data.Char
 import Data.Kind
+import Data.Maybe                                                   ( fromMaybe )
+import Data.Proxy
 import Language.Haskell.TH.Extra                                    hiding ( Type )
 
 import GHC.Generics
@@ -110,15 +114,61 @@ class Elt a where
   toElt = to . snd . gtoElt @(Rep a) @()
 
 
+-- | Given:
+--
+-- > data Test = A Int | B Int Float | C Float | D Double deriving (Show, Generic, Elt)
+--
+-- the call `geltR @(Rep Test) t` produces:
+--
+-- > TupRsingle Word8 :* (t :* tInt :* tInt :* tFloat :* tFloat :* tDouble)
+--
+-- where we abbreviate:
+--
+-- * TupRpair as (:*), infixl (i.e. "a :* b :* c" means "(a :* b) :* c")
+-- * TupRsingle Int as tInt
+-- * TupRsingle Float as tFloat
+--
+-- The first Word8 is the sum type tag.
+--
+-- This tag is not generated if there is only one constructor, so for example, given:
+--
+-- > data Test2 = T Int Float deriving (Show, Generic, Elt)
+--
+-- the call `geltR @Test2 t` produces: (using the same abbreviations)
+--
+-- > t :* tInt :* tFloat
+--
+-- To make sure the tag gets included conditionally, but only once if there are
+-- many levels of (:+:) in the Generics representation -- and to furthermore
+-- avoid needing a third type class -- we do a bit of a strange dance.
+--
+-- * The Elt default methods invoke GElt at the Rep of the data type. This may
+--   be a (:+:) if it has more than 1 constructor, and something else
+--   otherwise.
+-- * GElt generates the tag in its instance for (:+:), and calls out to GSumElt
+--   to actually handle the sum type constructors. Whenever GSumElt reaches a
+--   non-(:+:), it calls back into GElt, which, from now on, will never
+--   encounter (:+:) any more.
+-- * GElt then handles the products (i.e. the data type constructor fields) and
+--   finishes.
+--
+-- So to understand the full, precise control flow, one should start reading in
+-- Elt, proceed with the GElt class and its (:+:) instance, then the full
+-- definition of GSumElt, and finally the remaining instances of GElt.
 class GElt f where
+  -- | The @t@ variable is an additional uninterpreted type that's paired up
+  -- all the way at the left of the produced (left-associated) product. The
+  -- functions here are written in "CPS-style", in order to produce a long list
+  -- instead of a tree structure.
   type GEltR t f
   geltR    :: TypeR t -> TypeR (GEltR t f)
+  -- | This expands all sum types recursively; see the doc comment on 'TagR'.
   gtagsR   :: TagR t -> [TagR (GEltR t f)]
   gfromElt :: t -> f a -> GEltR t f
   gtoElt   :: GEltR t f -> (t, f a)
   --
   gundef   :: t -> GEltR t f
-  guntag   :: TagR t -> TagR (GEltR t f)
+  guntag   :: TagR t -> TagR (GEltR t f)  -- ^ generate TagRundef for all leaves
 
 instance GElt U1 where
   type GEltR t U1 = t
@@ -163,9 +213,11 @@ instance (GElt a, GElt b) => GElt (a :*: b) where
 instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
   type GEltR t (a :+: b) = (TAG, GSumEltR t (a :+: b))
   geltR t      = TupRpair (TupRsingle scalarType) (gsumEltR @(a :+: b) t)
-  gtagsR t     = uncurry TagRtag <$> gsumTagsR @(a :+: b) 0 t
-  gfromElt     = gsumFromElt 0
-  gtoElt (k,x) = gsumToElt k x
+  gtagsR t     = uncurry TagRtag <$> LState.evalState (gsumTagsR @(a :+: b) t) 0
+  gfromElt t x = LState.evalState (gsumFromElt t x) 0
+  gtoElt (k,x) = let (t, x') = LState.evalState (gsumToElt k x) 0
+                 in (t, fromMaybe (error err) x')
+    where err = "Elt: no sum type tag matched (k=" ++ show k ++ ")"
   gundef t     = (0xff, gsumUndef @(a :+: b) t)
   guntag t     = TagRpair (TagRundef scalarType) (gsumUntag @(a :+: b) t)
 
@@ -173,18 +225,25 @@ instance (GElt a, GElt b, GSumElt (a :+: b)) => GElt (a :+: b) where
 class GSumElt f where
   type GSumEltR t f
   gsumEltR     :: TypeR t -> TypeR (GSumEltR t f)
-  gsumTagsR    :: TAG -> TagR t -> [(TAG, TagR (GSumEltR t f))]
-  gsumFromElt  :: TAG -> t -> f a -> (TAG, GSumEltR t f)
-  gsumToElt    :: TAG -> GSumEltR t f -> (t, f a)
+  -- | The state monad here is a /lazy/ state monad. We need this for 'gsumToElt' of '(:+:)'.
+  gsumTagsR    :: TagR t -> LState.State TAG [(TAG, TagR (GSumEltR t f))]
+  gsumFromElt  :: t -> f a -> LState.State TAG (TAG, GSumEltR t f)
+  gsumCountTags :: Proxy f -> LState.State TAG ()
+  gsumToElt    :: TAG -> GSumEltR t f -> LState.State TAG (t, Maybe (f a))
   gsumUndef    :: t -> GSumEltR t f
   gsumUntag    :: TagR t -> TagR (GSumEltR t f)
+
+genTag :: LState.State TAG TAG
+genTag = LState.state (\s -> (s, s + 1))
 
 instance GSumElt U1 where
   type GSumEltR t U1 = t
   gsumEltR t         = t
-  gsumTagsR n t      = [(n, t)]
-  gsumFromElt n t U1 = (n, t)
-  gsumToElt _ t      = (t, U1)
+  gsumTagsR t        = do n <- genTag; pure [(n, t)]
+  gsumFromElt t U1   = do n <- genTag; pure (n, t)
+  gsumCountTags _    = () <$ genTag
+  gsumToElt k t      = do n <- genTag
+                          pure (t, if n == k then Just U1 else Nothing)
   gsumUndef t        = t
   gsumUntag t        = t
 
@@ -192,30 +251,34 @@ instance GSumElt a => GSumElt (M1 i c a) where
   type GSumEltR t (M1 i c a) = GSumEltR t a
   gsumEltR               = gsumEltR @a
   gsumTagsR              = gsumTagsR @a
-  gsumFromElt n t (M1 x) = gsumFromElt n t x
-  gsumToElt k x          = let (t, x') = gsumToElt k x in (t, M1 x')
-  gsumUntag              = gsumUntag @a
+  gsumFromElt t (M1 x)   = gsumFromElt t x
+  gsumCountTags _        = gsumCountTags (Proxy @a)
+  gsumToElt k x          = (\(t, x') -> (t, fmap M1 x')) <$> gsumToElt k x
   gsumUndef              = gsumUndef @a
+  gsumUntag              = gsumUntag @a
 
 instance Elt a => GSumElt (K1 i a) where
   type GSumEltR t (K1 i a) = (t, EltR a)
   gsumEltR t             = TupRpair t (eltR @a)
-  gsumTagsR n t          = (n,) . TagRpair t <$> tagsR @a
-  gsumFromElt n t (K1 x) = (n, (t, fromElt x))
-  gsumToElt _ (t, x)     = (t, K1 (toElt x))
-  gsumUntag t            = TagRpair t (untag (eltR @a))
+  gsumTagsR t            = do n <- genTag; pure ((n,) . TagRpair t <$> tagsR @a)
+  gsumFromElt t (K1 x)   = do n <- genTag; pure (n, (t, fromElt x))
+  gsumCountTags _        = () <$ genTag
+  gsumToElt k ~(t, x)    = do n <- genTag
+                              pure (t, if n == k then Just (K1 (toElt x)) else Nothing)
   gsumUndef t            = (t, undefElt (eltR @a))
+  gsumUntag t            = TagRpair t (untag (eltR @a))
 
 instance (GElt a, GElt b) => GSumElt (a :*: b) where
   type GSumEltR t (a :*: b) = GEltR t (a :*: b)
   gsumEltR                  = geltR @(a :*: b)
-  gsumTagsR n t             = (n,) <$> gtagsR @(a :*: b) t
-  gsumFromElt n t (a :*: b) = (n, gfromElt (gfromElt t a) b)
-  gsumToElt _ t0 =
-    let (t1, b) = gtoElt t0
-        (t2, a) = gtoElt t1
-     in
-     (t2, a :*: b)
+  gsumTagsR t               = do n <- genTag; pure ((n,) <$> gtagsR @(a :*: b) t)
+  gsumFromElt t (a :*: b)   = do n <- genTag; pure (n, gfromElt t (a :*: b))
+  gsumCountTags _           = () <$ genTag
+  gsumToElt k t0            = do n <- genTag
+                                 -- Note that gtoElt produces x lazily, so this
+                                 -- does not read any spurious undefs.
+                                 let (t, x) = gtoElt t0
+                                 pure (t, if n == k then Just x else Nothing)
   gsumUndef       = gundef @(a :*: b)
   gsumUntag       = guntag @(a :*: b)
 
@@ -223,25 +286,37 @@ instance (GSumElt a, GSumElt b) => GSumElt (a :+: b) where
   type GSumEltR t (a :+: b) = GSumEltR (GSumEltR t a) b
   gsumEltR = gsumEltR @b . gsumEltR @a
 
-  gsumFromElt n t (L1 a) = let (m,r) = gsumFromElt n t a
-                            in (shiftL m 1, gsumUndef @b r)
-  gsumFromElt n t (R1 b) = let (m,r) = gsumFromElt n (gsumUndef @a t) b
-                            in (setBit (m `shiftL` 1) 0, r)
+  gsumTagsR t = do
+    a <- gsumTagsR @a t
+    -- join b (filled with undefs) to the TagR's for 'a':
+    let a' = map (\(tag, tagrA) -> (tag, gsumUntag @b tagrA)) a
+    b <- gsumTagsR @b (gsumUntag @a t)
+    pure (a' ++ b)
 
-  gsumToElt k t0 =
-    let (t1, b) = gsumToElt (shiftR k 1) t0
-        (t2, a) = gsumToElt (shiftR k 1) t1
-     in
-     if testBit k 0
-        then (t2, R1 b)
-        else (t2, L1 a)
+  gsumFromElt t (L1 a) = do
+    (n, reprA) <- gsumFromElt t a
+    pure (n, gsumUndef @b reprA)  -- join undef-filled b to this rep of A
+  gsumFromElt t (R1 b) = do
+    gsumCountTags (Proxy @a)  -- skip the tags in the left alternatives
+    gsumFromElt (gsumUndef @a t) b
 
-  gsumTagsR k t =
-    let a = gsumTagsR @a k t
-        b = gsumTagsR @b k (gsumUntag @a t)
-     in
-     map (\(x,y) ->         (x `shiftL` 1, gsumUntag @b y)) a ++
-     map (\(x,y) -> (setBit (x `shiftL` 1) 0, y)) b
+  gsumCountTags _ = gsumCountTags (Proxy @a) >> gsumCountTags (Proxy @b)
+
+  gsumToElt k t0 = do
+    -- The starting tag for the traversal of 'b' depends on the number of tags
+    -- generated when traversing 'a'. However, in t0, the data for 'b' is
+    -- on the outside, meaning that we can only get the initial 't' for the 'a'
+    -- traversal by traversing 'b' first. We solve this circular dependency by
+    -- observing that gsumToElt can count the tags before it needs its 't'
+    -- argument, so we can tie a knot.
+    -- We could also escape the State monad here with evalState, and explicitly
+    -- gsumCountTags first, then traverse 'b', and finally traverse 'a'. But
+    -- that would be ugly.
+    (_t1, t2, mres1, mres2) <- mfix $ \ ~(t1, _t2, _mres1, _mres2) ->do
+      (t2', mres2) <- gsumToElt @a k t1
+      (t1', mres1) <- gsumToElt @b k t0
+      pure (t1', t2', mres1, mres2)
+    pure (t2, (R1 <$> mres1) <|> (L1 <$> mres2))
 
   gsumUndef t = gsumUndef @b (gsumUndef @a t)
   gsumUntag t = gsumUntag @b (gsumUntag @a t)
@@ -256,7 +331,7 @@ untag (TupRpair ta tb) = TagRpair (untag ta) (untag tb)
 -- Note: [Deriving Elt]
 --
 -- We can't use the cunning generalised newtype deriving mechanism, because
--- the generated 'eltR function does not type check. For example, it will
+-- the generated 'eltR' function does not type check. For example, it will
 -- generate the following implementation for 'CShort':
 --
 -- > eltR

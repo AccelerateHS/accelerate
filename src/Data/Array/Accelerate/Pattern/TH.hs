@@ -26,7 +26,6 @@ import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
 
 import Control.Monad
-import Data.Bits
 import Data.Char
 import Data.List                                                    ( (\\), foldl' )
 import Language.Haskell.TH.Extra                                    hiding ( Exp, Match, match )
@@ -88,7 +87,7 @@ mkDataD tn tvs cs = do
     -- type directly in terms of Pattern
     go []  = fail "mkPatterns: empty data declarations not supported"
     go [c] = return <$> mkConP tn tvs c
-    go _   = go' [] (map fieldTys cs) ctags cs
+    go _   = go' [] (map fieldTys cs) [0 .. fromIntegral (length cs - 1)] cs
 
     -- For sum-types, when creating the pattern for an individual
     -- constructor we need to know about the types of the fields all other
@@ -104,23 +103,6 @@ mkDataD tn tvs cs = do
     fieldTys (RecC _ fs)    = map (\(_,_,t) -> t) fs
     fieldTys (InfixC a _ b) = [snd a, snd b]
     fieldTys _              = fail "mkPatterns: only constructors for \"vanilla\" syntax are supported"
-
-    -- TODO: The GTags class demonstrates a way to generate the tags for
-    -- a given constructor, rather than backwards-engineering the structure
-    -- as we've done here. We should use that instead!
-    --
-    ctags =
-      let n = length cs
-          m = n `quot` 2
-          l = take m     (iterate (True:) [False])
-          r = take (n-m) (iterate (True:) [True])
-          --
-          bitsToTag = foldl' f 0
-            where
-              f i False =         i `shiftL` 1
-              f i True  = setBit (i `shiftL` 1) 0
-      in
-      map bitsToTag (l ++ r)
 
 
 mkConP :: Name -> [TyVarBndr a] -> Con -> Q (Name, [Dec])

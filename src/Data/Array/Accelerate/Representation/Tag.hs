@@ -29,10 +29,10 @@ type TAG = Word8
 -- through this type. It indicates which fields of the structure represent
 -- the union tags (TagRtag) or store undefined values (TagRundef).
 --
--- The function 'eltTags' produces all valid paths through the type. For
+-- The function 'tagsR' produces all valid paths through the type. For
 -- example the type '(Bool,Bool)' produces the following:
 --
---   ghci> putStrLn . unlines . map show $ eltTags @(Bool,Bool)
+--   ghci> putStr . unlines . map show $ tagsR @(Bool,Bool)
 --   (((),(0#,())),(0#,()))     -- (False, False)
 --   (((),(0#,())),(1#,()))     -- (False, True)
 --   (((),(1#,())),(0#,()))     -- (True, False)
