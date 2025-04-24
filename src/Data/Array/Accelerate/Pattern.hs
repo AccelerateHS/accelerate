@@ -188,22 +188,35 @@ runQ $ do
             |]
 
         -- Generate instance declarations for IsVector of the form:
-        -- instance (Elt v, EltR v ~ Vec 2 a, Elt a) => IsVector Exp v (Exp a, Exp a)
+        -- instance (Elt v, EltR v ~ Vec 2 a1, Elt a1, a1 ~ a2) => IsVector Exp v (Exp a1, Exp a2)
+        -- The element type is `a1`; we leave the element types for each of the
+        -- tuple components as separate type variables in the instance head
+        -- (only to equate them in the instance context) so that type inference
+        -- can already select this instance before it is known that the tuple
+        -- elements are indeed homogeneously typed.
         mkVecPattern :: Int -> Q [Dec]
+        mkVecPattern n | n <= 0 = error "mkVecPattern: must be > 0"
         mkVecPattern n = do
-          a <- newName "a"
+          as@(a1 : a2s) <- mapM (\i -> newName ("a" ++ show i)) [1 .. n]
           v <- newName "v"
           let
-              -- Last argument to `IsVector`, eg (Exp, a, Exp a) in the example
-              tup      = tupT (replicate n ([t| Exp $(varT a)|]))
-              -- Representation as a vector, eg (Vec 2 a)
-              vec      = [t| Vec $(litT (numTyLit (fromIntegral n))) $(varT a) |]
-              -- Constraints for the type class, consisting of Elt constraints on all type variables,
-              -- and an equality constraint on the representation type of `a` and the vector representation `vec`.
-              context  = [t| (Elt $(varT v), VecElt $(varT a), EltR $(varT v) ~ $vec) |]
+              -- Last argument to `IsVector`, eg (Exp a1, Exp a2) in the example
+              tup      = tupT [ [t| Exp $(varT ai) |] | ai <- as ]
+              -- Representation as a vector, eg (Vec 2 a1)
+              vec      = [t| Vec $(litT (numTyLit (fromIntegral n))) $(varT a1) |]
+              -- Constraints for the type class, consisting of:
+              -- - Elt constraints on all type variables;
+              -- - an equality constraint on the representation type of `a` and
+              --   the vector representation `vec`;
+              -- - equality constraints for the `ai` variables.
+              context  = tupT $ [t| Elt $(varT v) |]
+                              : [t| VecElt $(varT a1) |]
+                              : [t| EltR $(varT v) ~ $vec |]
+                              : [ [t| $(varT a1) ~ $(varT ai) |] | ai <- a2s]
               --
-              vecR     = foldr appE ([| VecRnil |] `appE` (varE 'singleType `appTypeE` varT a)) (replicate n [| VecRsucc |])
-              tR       = tupT (replicate n (varT a))
+              vecR     = iterate ([| VecRsucc |] `appE`) [| VecRnil (singleType @($(varT a1))) |]
+                           Prelude.!! n
+              tR       = tupT (replicate n (varT a1))
           --
           [d| instance $context => IsVector Exp $(varT v) $tup where
                 vpack x = case builder x :: Exp $tR of
