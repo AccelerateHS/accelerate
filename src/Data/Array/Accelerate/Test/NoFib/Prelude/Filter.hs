@@ -96,6 +96,7 @@ test_filter runN =
             ]
 
 
+{-# NOINLINE test_even #-}
 test_even
     :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -108,6 +109,7 @@ test_even runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.filter A.even) in go xs ~~~ filterRef P.even xs
 
+{-# NOINLINE test_positive #-}
 test_positive
     :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
     => RunN

@@ -86,6 +86,7 @@ test_permute runN =
             ]
 
 
+{-# NOINLINE test_scatter #-}
 test_scatter
     :: forall sh sh' e. (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, Elt e, Show e)
     => RunN
@@ -121,6 +122,7 @@ test_scatter runN dim dim' e =
     go ix def new ~~~ permuteRef const def (ix S.!) new
 
 
+{-# NOINLINE test_accumulate #-}
 test_accumulate
     :: (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, P.Num e, A.Num e, Show e)
     => RunN

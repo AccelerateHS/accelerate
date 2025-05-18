@@ -145,6 +145,7 @@ test_map runN =
         fullrange gen = gen (Range.linearFracFrom 0 (-flt_max) flt_max)
 
 
+{-# NOINLINE test_negate #-}
 test_negate
     :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
@@ -157,6 +158,7 @@ test_negate runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map negate) in go xs ~~~ mapRef negate xs
 
+{-# NOINLINE test_abs #-}
 test_abs
     :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
@@ -169,6 +171,7 @@ test_abs runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map abs) in go xs ~~~ mapRef abs xs
 
+{-# NOINLINE test_signum #-}
 test_signum
     :: (Shape sh, Show sh, Similar e, Show e, A.Num e, P.Num e, P.Eq sh)
     => RunN
@@ -181,6 +184,7 @@ test_signum runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map signum) in go xs ~~~ mapRef signum xs
 
+{-# NOINLINE test_complement #-}
 test_complement
     :: (Shape sh, Show sh, Similar e, Show e, A.Bits e, P.Bits e, P.Eq sh)
     => RunN
@@ -193,6 +197,7 @@ test_complement runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.complement) in go xs ~~~ mapRef P.complement xs
 
+{-# NOINLINE test_popCount #-}
 test_popCount
     :: (Shape sh, Show sh, Show e, A.Bits e, P.Bits e, P.Eq sh)
     => RunN
@@ -205,6 +210,7 @@ test_popCount runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.popCount) in go xs ~~~ mapRef P.popCount xs
 
+{-# NOINLINE test_countLeadingZeros #-}
 test_countLeadingZeros
     :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
@@ -217,6 +223,7 @@ test_countLeadingZeros runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.countLeadingZeros) in go xs ~~~ mapRef countLeadingZerosRef xs
 
+{-# NOINLINE test_countTrailingZeros #-}
 test_countTrailingZeros
     :: (Shape sh, Show sh, Show e, A.FiniteBits e, P.FiniteBits e, P.Eq sh)
     => RunN
@@ -229,6 +236,7 @@ test_countTrailingZeros runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.countTrailingZeros) in go xs ~~~ mapRef countTrailingZerosRef xs
 
+{-# NOINLINE test_fromIntegral #-}
 test_fromIntegral
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.Integral e, A.Integral e, A.FromIntegral e Double)
     => RunN
@@ -241,6 +249,7 @@ test_fromIntegral runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.fromIntegral) in go xs ~~~ mapRef (P.fromIntegral :: e -> Double) xs
 
+{-# NOINLINE test_recip #-}
 test_recip
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Fractional e, A.Fractional e)
     => RunN
@@ -253,6 +262,7 @@ test_recip runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map recip) in go xs ~~~ mapRef recip xs
 
+{-# NOINLINE test_sin #-}
 test_sin
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -265,6 +275,7 @@ test_sin runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map sin) in go xs ~~~ mapRef sin xs
 
+{-# NOINLINE test_cos #-}
 test_cos
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -277,6 +288,7 @@ test_cos runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map cos) in go xs ~~~ mapRef cos xs
 
+{-# NOINLINE test_tan #-}
 test_tan
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -289,6 +301,7 @@ test_tan runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map tan) in go xs ~~~ mapRef tan xs
 
+{-# NOINLINE test_asin #-}
 test_asin
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -301,6 +314,7 @@ test_asin runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map asin) in go xs ~~~ mapRef asin xs
 
+{-# NOINLINE test_acos #-}
 test_acos
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -313,6 +327,7 @@ test_acos runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map acos) in go xs ~~~ mapRef acos xs
 
+{-# NOINLINE test_atan #-}
 test_atan
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -325,6 +340,7 @@ test_atan runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map atan) in go xs ~~~ mapRef atan xs
 
+{-# NOINLINE test_asinh #-}
 test_asinh
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -337,6 +353,7 @@ test_asinh runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map asinh) in go xs ~~~ mapRef asinh xs
 
+{-# NOINLINE test_acosh #-}
 test_acosh
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -349,6 +366,7 @@ test_acosh runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map acosh) in go xs ~~~ mapRef acosh xs
 
+{-# NOINLINE test_atanh #-}
 test_atanh
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -361,6 +379,7 @@ test_atanh runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map atanh) in go xs ~~~ mapRef atanh xs
 
+{-# NOINLINE test_exp #-}
 test_exp
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -373,6 +392,7 @@ test_exp runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map exp) in go xs ~~~ mapRef exp xs
 
+{-# NOINLINE test_sqrt #-}
 test_sqrt
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -385,6 +405,7 @@ test_sqrt runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map sqrt) in go xs ~~~ mapRef sqrt xs
 
+{-# NOINLINE test_log #-}
 test_log
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -397,6 +418,7 @@ test_log runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map log) in go xs ~~~ mapRef log xs
 
+{-# NOINLINE test_truncate #-}
 test_truncate
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
@@ -409,6 +431,7 @@ test_truncate runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.truncate) in go xs ~~~ mapRef (P.truncate :: e -> Int) xs
 
+{-# NOINLINE test_round #-}
 test_round
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
@@ -421,6 +444,7 @@ test_round runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.round) in go xs ~~~ mapRef (P.round :: e -> Int) xs
 
+{-# NOINLINE test_floor #-}
 test_floor
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN
@@ -433,6 +457,7 @@ test_floor runN dim e =
     xs <- forAll (array sh e)
     let !go = runN (A.map A.floor) in go xs ~~~ mapRef (P.floor :: e -> Int) xs
 
+{-# NOINLINE test_ceiling #-}
 test_ceiling
     :: forall sh e. (Shape sh, Show sh, Show e, P.Eq sh, P.RealFrac e, A.RealFrac e)
     => RunN

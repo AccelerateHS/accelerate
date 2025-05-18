@@ -472,6 +472,7 @@ test_scanr'Seg runN =
 scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
+{-# NOINLINE test_scanl_sum #-}
 test_scanl_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -486,6 +487,7 @@ test_scanl_sum runN dim z e =
     arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanl (+) (the v)) in go (scalar x) arr ~~~ scanlRef (+) x arr
 
+{-# NOINLINE test_scanl1_sum #-}
 test_scanl1_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -498,6 +500,7 @@ test_scanl1_sum runN dim e =
     arr <- forAll (array sh e)
     let !go = runN (A.scanl1 (+)) in go arr ~~~ scanl1Ref (+) arr
 
+{-# NOINLINE test_scanl'_sum #-}
 test_scanl'_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -512,6 +515,7 @@ test_scanl'_sum runN dim z e =
     arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanl' (+) (the v)) in go (scalar x) arr ~~~ scanl'Ref (+) x arr
 
+{-# NOINLINE test_scanr_sum #-}
 test_scanr_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -525,6 +529,7 @@ test_scanr_sum runN dim z e =
     arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanr (+) (the v)) in go (scalar x) arr ~~~ scanrRef (+) x arr
 
+{-# NOINLINE test_scanr1_sum #-}
 test_scanr1_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -537,6 +542,7 @@ test_scanr1_sum runN dim e =
     arr <- forAll (array sh e)
     let !go = runN (A.scanr1 (+)) in go arr ~~~ scanr1Ref (+) arr
 
+{-# NOINLINE test_scanr'_sum #-}
 test_scanr'_sum
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -551,6 +557,7 @@ test_scanr'_sum runN dim z e =
     arr <- forAll (array sh e)
     let !go = runN (\v -> A.scanr' (+) (the v)) in go (scalar x) arr ~~~ scanr'Ref (+) x arr
 
+{-# NOINLINE test_scanl_interval #-}
 test_scanl_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -563,6 +570,7 @@ test_scanl_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl iappend (constant one)) in go arr ~~~ scanlRef iappendRef one arr
 
+{-# NOINLINE test_scanl1_interval #-}
 test_scanl1_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -575,6 +583,7 @@ test_scanl1_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl1 iappend) in go arr ~~~ scanl1Ref iappendRef arr
 
+{-# NOINLINE test_scanl'_interval #-}
 test_scanl'_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -587,6 +596,7 @@ test_scanl'_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanl' iappend (constant one)) in go arr ~~~ scanl'Ref iappendRef one arr
 
+{-# NOINLINE test_scanr_interval #-}
 test_scanr_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -599,6 +609,7 @@ test_scanr_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr iappend (constant one)) in go arr ~~~ scanrRef iappendRef one arr
 
+{-# NOINLINE test_scanr1_interval #-}
 test_scanr1_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -611,6 +622,7 @@ test_scanr1_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr1 iappend) in go arr ~~~ scanr1Ref iappendRef arr
 
+{-# NOINLINE test_scanr'_interval #-}
 test_scanr'_interval
     :: (Shape sh, Show sh, Similar e, P.Eq sh, P.Eq e, P.Num e, A.Eq e, A.Num e, Show e)
     => RunN
@@ -623,6 +635,7 @@ test_scanr'_interval runN dim e =
     let arr  = intervalArray sh n e
     let !go = runN (A.scanr' iappend (constant one)) in go arr ~~~ scanr'Ref iappendRef one arr
 
+{-# NOINLINE test_scanlSeg_sum #-}
 test_scanlSeg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -640,6 +653,7 @@ test_scanlSeg_sum runN dim z e =
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanlSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanlSegRef (+) x arr seg
 
+{-# NOINLINE test_scanl1Seg_sum #-}
 test_scanl1Seg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -655,6 +669,7 @@ test_scanl1Seg_sum runN dim e =
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanl1Seg (+)) in go arr seg ~~~ scanl1SegRef (+) arr seg
 
+{-# NOINLINE test_scanl'Seg_sum #-}
 test_scanl'Seg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -672,6 +687,7 @@ test_scanl'Seg_sum runN dim z e =
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanl'Seg (+) (the v)) in go (scalar x) arr seg ~~~ scanl'SegRef (+) x arr seg
 
+{-# NOINLINE test_scanrSeg_sum #-}
 test_scanrSeg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -689,6 +705,7 @@ test_scanrSeg_sum runN dim z e =
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.scanrSeg (+) (the v)) in go (scalar x) arr seg ~~~ scanrSegRef (+) x arr seg
 
+{-# NOINLINE test_scanr1Seg_sum #-}
 test_scanr1Seg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN
@@ -704,6 +721,7 @@ test_scanr1Seg_sum runN dim e =
     arr     <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.scanr1Seg (+)) in go arr seg ~~~ scanr1SegRef (+) arr seg
 
+{-# NOINLINE test_scanr'Seg_sum #-}
 test_scanr'Seg_sum
     :: forall sh e. (Shape sh, Slice sh, Show sh, Similar e, P.Eq sh, P.Num e, A.Num e, Show e)
     => RunN

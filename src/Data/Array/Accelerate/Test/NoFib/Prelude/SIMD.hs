@@ -86,6 +86,7 @@ test_simd runN =
         ]
 
 
+{-# NOINLINE test_extract_v2 #-}
 test_extract_v2
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
@@ -99,6 +100,7 @@ test_extract_v2 runN dim e =
     (_l,_m) <- P.snd P.<$> forAllWith P.fst (Gen.element [("_1",(_1,_1)), ("_2",(_2,_2))])
     let !go = runN (A.map (view _m . unpackVec2')) in go xs === mapRef (view _l . unpackVec2) xs
 
+{-# NOINLINE test_extract_v3 #-}
 test_extract_v3
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
@@ -112,6 +114,7 @@ test_extract_v3 runN dim e =
     (_l,_m) <- P.snd P.<$> forAllWith P.fst (Gen.element [("_1",(_1,_1)), ("_2",(_2,_2)), ("_3",(_3,_3))])
     let !go = runN (A.map (view _m . unpackVec3')) in go xs === mapRef (view _l . unpackVec3) xs
 
+{-# NOINLINE test_extract_v4 #-}
 test_extract_v4
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
@@ -125,6 +128,7 @@ test_extract_v4 runN dim e =
     (_l,_m) <- P.snd P.<$> forAllWith P.fst (Gen.element [("_1",(_1,_1)), ("_2",(_2,_2)), ("_3",(_3,_3)), ("_4",(_4,_4))])
     let !go = runN (A.map (view _m . unpackVec4')) in go xs === mapRef (view _l . unpackVec4) xs
 
+{-# NOINLINE test_inject_v2 #-}
 test_inject_v2
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
@@ -139,6 +143,7 @@ test_inject_v2 runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith A.V2) in go xs ys === zipWithRef Vec2 xs ys
 
+{-# NOINLINE test_inject_v3 #-}
 test_inject_v3
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN
@@ -155,6 +160,7 @@ test_inject_v3 runN dim e =
     zs  <- forAll (array sh3 e)
     let !go = runN (A.zipWith3 A.V3) in go xs ys zs === zipWith3Ref Vec3 xs ys zs
 
+{-# NOINLINE test_inject_v4 #-}
 test_inject_v4
     :: (Shape sh, Show sh, Show e, VecElt e, P.Eq e, P.Eq sh)
     => RunN

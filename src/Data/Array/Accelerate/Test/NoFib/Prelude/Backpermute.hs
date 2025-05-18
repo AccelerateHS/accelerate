@@ -80,6 +80,7 @@ test_backpermute runN =
             , testProperty "gather->DIM3" $ test_gather runN sh dim3 e
             ]
 
+{-# NOINLINE test_take #-}
 test_take
     :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, Elt e)
     => RunN
@@ -93,6 +94,7 @@ test_take runN dim e =
     i         <- forAll (Gen.int (Range.linear (-2) (n+1)))
     let !go = runN (\v -> A.take (the v)) in go (scalar i) xs ~~~ takeRef i xs
 
+{-# NOINLINE test_drop #-}
 test_drop
     :: (Shape sh, Slice sh, Show sh, Similar e, Show e, P.Eq sh, Elt e)
     => RunN
@@ -106,6 +108,7 @@ test_drop runN dim e =
     i         <- forAll (Gen.int (Range.linear (-2) (n+1)))
     let !go = runN (\v -> A.drop (the v)) in go (scalar i) xs ~~~ dropRef i xs
 
+{-# NOINLINE test_gather #-}
 test_gather
     :: (Shape sh, Shape sh', Show sh, Show sh', P.Eq sh', Similar e, Show e, Elt e)
     => RunN

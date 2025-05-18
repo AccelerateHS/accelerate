@@ -124,6 +124,7 @@ test_foldSeg runN =
 scalar :: Elt e => e -> Scalar e
 scalar x = fromFunction Z (const x)
 
+{-# NOINLINE test_sum #-}
 test_sum
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
@@ -138,6 +139,7 @@ test_sum runN dim z e =
     xs <- forAll (array sh e)
     let !go = runN (\v -> A.fold (+) (the v)) in go (scalar x) xs ~~~ foldRef (+) x xs
 
+{-# NOINLINE test_mss #-}
 test_mss
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, P.Ord e, A.Num e, A.Ord e)
     => RunN
@@ -150,6 +152,7 @@ test_mss runN dim e =
     xs <- forAll (array sh e)
     let !go = runN maximumSegmentSum in go xs ~~~ maximumSegmentSumRef xs
 
+{-# NOINLINE test_minimum #-}
 test_minimum
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -162,6 +165,7 @@ test_minimum runN dim e =
     xs <- forAll (array sh e)
     let !go = runN A.minimum in go xs ~~~ fold1Ref P.min xs
 
+{-# NOINLINE test_maximum #-}
 test_maximum
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -174,6 +178,7 @@ test_maximum runN dim e =
     xs <- forAll (array sh e)
     let !go = runN A.maximum in go xs ~~~ fold1Ref P.max xs
 
+{-# NOINLINE test_segmented_sum #-}
 test_segmented_sum
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
@@ -191,6 +196,7 @@ test_segmented_sum runN dim z e =
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (\v -> A.foldSeg (+) (the v)) in go (scalar x) xs seg ~~~ foldSegRef (+) x xs seg
 
+{-# NOINLINE test_segmented_minimum #-}
 test_segmented_minimum
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -206,6 +212,7 @@ test_segmented_minimum runN dim e =
     xs      <- forAll (array (sh:.P.sum (toList seg)) e)
     let !go = runN (A.fold1Seg A.min) in go xs seg ~~~ fold1SegRef P.min xs seg
 
+{-# NOINLINE test_segmented_maximum #-}
 test_segmented_maximum
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN

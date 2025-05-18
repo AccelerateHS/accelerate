@@ -157,6 +157,7 @@ test_zipWith runN =
 zero :: (P.Num a, P.Eq a) => a -> Bool
 zero x = x P.== 0
 
+{-# NOINLINE test_plus #-}
 test_plus
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
@@ -171,6 +172,7 @@ test_plus runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (+)) in go xs ys ~~~ zipWithRef (+) xs ys
 
+{-# NOINLINE test_minus #-}
 test_minus
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
@@ -185,6 +187,7 @@ test_minus runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (-)) in go xs ys ~~~ zipWithRef (-) xs ys
 
+{-# NOINLINE test_mult #-}
 test_mult
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Num e, A.Num e)
     => RunN
@@ -199,6 +202,7 @@ test_mult runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (*)) in go xs ys ~~~ zipWithRef (*) xs ys
 
+{-# NOINLINE test_quot #-}
 test_quot
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -213,6 +217,7 @@ test_quot runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith quot) in go xs ys ~~~ zipWithRef quot xs ys
 
+{-# NOINLINE test_rem #-}
 test_rem
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -227,6 +232,7 @@ test_rem runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith rem) in go xs ys ~~~ zipWithRef rem xs ys
 
+{-# NOINLINE test_quotRem #-}
 test_quotRem
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -241,6 +247,7 @@ test_quotRem runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith (lift $$ quotRem)) in go xs ys ~~~ zipWithRef quotRem xs ys
 
+{-# NOINLINE test_idiv #-}
 test_idiv
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -255,6 +262,7 @@ test_idiv runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith div) in go xs ys ~~~ zipWithRef div xs ys
 
+{-# NOINLINE test_fdiv #-}
 test_fdiv
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Eq e, P.Fractional e, A.Fractional e)
     => RunN
@@ -269,6 +277,7 @@ test_fdiv runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith (/)) in go xs ys ~~~ zipWithRef (/) xs ys
 
+{-# NOINLINE test_pow #-}
 test_pow
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -283,6 +292,7 @@ test_pow runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (**)) in go xs ys ~~~ zipWithRef (**) xs ys
 
+{-# NOINLINE test_logBase #-}
 test_logBase
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Floating e, A.Floating e)
     => RunN
@@ -297,6 +307,7 @@ test_logBase runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith logBase) in go xs ys ~~~ zipWithRef logBase xs ys
 
+{-# NOINLINE test_atan2 #-}
 test_atan2
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.RealFloat e, A.RealFloat e)
     => RunN
@@ -311,6 +322,7 @@ test_atan2 runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith A.atan2) in go xs ys ~~~ zipWithRef P.atan2 xs ys
 
+{-# NOINLINE test_mod #-}
 test_mod
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -325,6 +337,7 @@ test_mod runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith mod) in go xs ys ~~~ zipWithRef mod xs ys
 
+{-# NOINLINE test_divMod #-}
 test_divMod
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Integral e, A.Integral e)
     => RunN
@@ -339,6 +352,7 @@ test_divMod runN dim e =
     ys  <- forAll (array sh2 (e `except` zero))
     let !go = runN (A.zipWith (lift $$ divMod)) in go xs ys ~~~ zipWithRef divMod xs ys
 
+{-# NOINLINE test_band #-}
 test_band
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
@@ -353,6 +367,7 @@ test_band runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A..&.)) in go xs ys ~~~ zipWithRef (P..&.) xs ys
 
+{-# NOINLINE test_bor #-}
 test_bor
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
@@ -367,6 +382,7 @@ test_bor runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A..|.)) in go xs ys ~~~ zipWithRef (P..|.) xs ys
 
+{-# NOINLINE test_xor #-}
 test_xor
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Bits e, A.Bits e)
     => RunN
@@ -381,6 +397,7 @@ test_xor runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith A.xor) in go xs ys ~~~ zipWithRef P.xor xs ys
 
+{-# NOINLINE test_shift #-}
 test_shift
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -396,6 +413,7 @@ test_shift runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
     let !go = runN (A.zipWith A.shift) in go xs ys ~~~ zipWithRef P.shift xs ys
 
+{-# NOINLINE test_shiftL #-}
 test_shiftL
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -411,6 +429,7 @@ test_shiftL runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linear 0 s)))
     let !go = runN (A.zipWith A.shiftL) in go xs ys ~~~ zipWithRef P.shiftL xs ys
 
+{-# NOINLINE test_shiftR #-}
 test_shiftR
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -426,6 +445,7 @@ test_shiftR runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linear 0 s)))
     let !go = runN (A.zipWith A.shiftR) in go xs ys ~~~ zipWithRef P.shiftR xs ys
 
+{-# NOINLINE test_rotate #-}
 test_rotate
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -441,6 +461,7 @@ test_rotate runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linearFrom 0 (-s) s)))
     let !go = runN (A.zipWith A.rotate) in go xs ys ~~~ zipWithRef P.rotate xs ys
 
+{-# NOINLINE test_rotateL #-}
 test_rotateL
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -456,6 +477,7 @@ test_rotateL runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linear 0 s)))
     let !go = runN (A.zipWith A.rotateL) in go xs ys ~~~ zipWithRef P.rotateL xs ys
 
+{-# NOINLINE test_rotateR #-}
 test_rotateR
     :: forall sh e. (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.FiniteBits e, A.FiniteBits e)
     => RunN
@@ -471,6 +493,7 @@ test_rotateR runN dim e =
     ys  <- forAll (array sh2 (Gen.int (Range.linear 0 s)))
     let !go = runN (A.zipWith A.rotateR) in go xs ys ~~~ zipWithRef P.rotateR xs ys
 
+{-# NOINLINE test_lt #-}
 test_lt
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -485,6 +508,7 @@ test_lt runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.<)) in go xs ys ~~~ zipWithRef (P.<) xs ys
 
+{-# NOINLINE test_gt #-}
 test_gt
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -499,6 +523,7 @@ test_gt runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.>)) in go xs ys ~~~ zipWithRef (P.>) xs ys
 
+{-# NOINLINE test_lte #-}
 test_lte
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -513,6 +538,7 @@ test_lte runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.<=)) in go xs ys ~~~ zipWithRef (P.<=) xs ys
 
+{-# NOINLINE test_gte #-}
 test_gte
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -527,6 +553,7 @@ test_gte runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.>=)) in go xs ys ~~~ zipWithRef (P.>=) xs ys
 
+{-# NOINLINE test_eq #-}
 test_eq
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -541,6 +568,7 @@ test_eq runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.==)) in go xs ys ~~~ zipWithRef (P.==) xs ys
 
+{-# NOINLINE test_neq #-}
 test_neq
     :: (Shape sh, Show sh, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -555,6 +583,7 @@ test_neq runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A./=)) in go xs ys ~~~ zipWithRef (P./=) xs ys
 
+{-# NOINLINE test_min #-}
 test_min
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN
@@ -569,6 +598,7 @@ test_min runN dim e =
     ys  <- forAll (array sh2 e)
     let !go = runN (A.zipWith (A.min)) in go xs ys ~~~ zipWithRef (P.min) xs ys
 
+{-# NOINLINE test_max #-}
 test_max
     :: (Shape sh, Show sh, Similar e, Show e, P.Eq sh, P.Ord e, A.Ord e)
     => RunN

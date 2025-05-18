@@ -97,6 +97,7 @@ test_stencil runN =
             ]
 
 
+{-# NOINLINE test_stencil3 #-}
 test_stencil3
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -116,6 +117,7 @@ test_stencil3 runN e =
     --
     go xs ~~~ stencil3Ref r b xs
 
+{-# NOINLINE test_stencil5 #-}
 test_stencil5
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -135,6 +137,7 @@ test_stencil5 runN e =
     --
     go xs ~~~ stencil5Ref r b xs
 
+{-# NOINLINE test_stencil7 #-}
 test_stencil7
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -154,6 +157,7 @@ test_stencil7 runN e =
     --
     go xs ~~~ stencil7Ref r b xs
 
+{-# NOINLINE test_stencil9 #-}
 test_stencil9
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -174,6 +178,7 @@ test_stencil9 runN e =
     go xs ~~~ stencil9Ref r b xs
 
 
+{-# NOINLINE test_stencil3x3 #-}
 test_stencil3x3
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -195,6 +200,7 @@ test_stencil3x3 runN e =
     --
     go xs ~~~ stencil3x3Ref r b xs
 
+{-# NOINLINE test_stencil5x5 #-}
 test_stencil5x5
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -216,6 +222,7 @@ test_stencil5x5 runN e =
     --
     go xs ~~~ stencil5x5Ref r b xs
 
+{-# NOINLINE test_stencil7x7 #-}
 test_stencil7x7
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -237,6 +244,7 @@ test_stencil7x7 runN e =
     --
     go xs ~~~ stencil7x7Ref r b xs
 
+{-# NOINLINE test_stencil9x9 #-}
 test_stencil9x9
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
@@ -258,6 +266,7 @@ test_stencil9x9 runN e =
     --
     go xs ~~~ stencil9x9Ref r b xs
 
+{-# NOINLINE test_stencil3x3x3 #-}
 test_stencil3x3x3
     :: (P.Num e, A.Num e, Similar e, Show e)
     => RunN
