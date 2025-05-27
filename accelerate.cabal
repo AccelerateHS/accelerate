@@ -313,7 +313,7 @@ flag debug
 flag bounds-checks
   manual:               True
   default:              True
-  description:          Enable bounds checking
+  description:          Enable bounds checking in the interpreter
 
 flag unsafe-checks
   manual:               True
@@ -323,7 +323,7 @@ flag unsafe-checks
 flag internal-checks
   manual:               True
   default:              False
-  description:          Enable internal consistency checks
+  description:          Enable some internal consistency checks
 
 -- Enabling this drastically increases build times
 -- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
