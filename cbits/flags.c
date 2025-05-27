@@ -30,25 +30,39 @@
 #include "getopt.h"
 
 
-/* These globals will be accessed from the Haskell side to implement the
- * corresponding behaviour.
- */
+/* SEE: [layout of command line options bitfield]
+ * There are 7 default-enabled options, followed by 1 default-disabled option,
+ * followed by 17 debug options.
+ * Note the bit trick: ((1 << n) - 1) is a number with the lowest n bits set. */
+static const uint32_t def_enabled_opts_bitfield = { (1<<7) - 1 };
+#ifndef ACCELERATE_DEBUG
+static const uint32_t debug_opts_bitfield = { ((1<<17) - 1) << (7+1) };
+#endif
+static const int disable_opts_offset = (7+1+17);
 
-__flags_t __cmd_line_flags            = { 0xff };  // SEE: [layout of command line options bitfield]
-uint32_t  __unfolding_use_threshold   = 1;
-uint32_t  __max_simplifier_iterations = 25;
+/* This global is accessed from the Haskell side. */
+__flags_t __cmd_line_flags            = { def_enabled_opts_bitfield };
 
 enum {
   OPT_ENABLE = 1,
   OPT_DISABLE,
-  OPT_UNFOLDING_USE_THRESHOLD,
-  OPT_MAX_SIMPLIFIER_ITERATIONS
 };
 
 /* NOTE: [layout of command line options bitfield]
  *
- * When adding new options, make sure the offset value in the OPT_DISABLE branch
- * is updated, and that the flags are kept in order.
+ * HERE BE DRAGONS.
+ *
+ * When adding, removing, reordering, or changing options in ANY way, be aware
+ * of the following:
+ * - Various code relies on the fact (by bit hacks) that these options come in
+ *   this order: -f enablers, -d enablers, -f disablers.
+ * - The -f enablers and -f disablers lists must be exactly the same, including
+ *   the order.
+ * - The order of the options in __flags_t in flags.h must also be the same.
+ * - Data.Array.Accelerate.Debug.Internal.Flags contains 2 blocks of code
+ *   hard-coding offsets into this options list.
+ * - Some metrics about this options list used in the bit hacks are at the top
+ *   of this file (def_enabled_opts_bitfield etc.).
  */
 static const char*         shortopts  = "";
 static const struct option longopts[] =
@@ -56,11 +70,9 @@ static const struct option longopts[] =
   , { "facc-sharing",                   no_argument,       NULL, OPT_ENABLE                    }
   , { "fexp-sharing",                   no_argument,       NULL, OPT_ENABLE                    }
   , { "ffusion",                        no_argument,       NULL, OPT_ENABLE                    }
-  , { "fsimplify",                      no_argument,       NULL, OPT_ENABLE                    }
   , { "finplace",                       no_argument,       NULL, OPT_ENABLE                    }
   , { "ffast-math",                     no_argument,       NULL, OPT_ENABLE                    }
   , { "ffast-permute-const",            no_argument,       NULL, OPT_ENABLE                    }
-  , { "fflush-cache",                   no_argument,       NULL, OPT_ENABLE                    }
   , { "fforce-recomp",                  no_argument,       NULL, OPT_ENABLE                    }
 
   , { "ddebug",                         no_argument,       NULL, OPT_ENABLE                    }
@@ -85,15 +97,13 @@ static const struct option longopts[] =
   , { "fno-acc-sharing",                no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-exp-sharing",                no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-fusion",                     no_argument,       NULL, OPT_DISABLE                   }
-  , { "fno-simplify",                   no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-inplace",                    no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-fast-math",                  no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-fast-permute-const",         no_argument,       NULL, OPT_DISABLE                   }
-  , { "fno-flush-cache",                no_argument,       NULL, OPT_DISABLE                   }
   , { "fno-force-recomp",               no_argument,       NULL, OPT_DISABLE                   }
 
-  , { "funfolding-use-threshold=INT",   required_argument, NULL, OPT_UNFOLDING_USE_THRESHOLD   }
-  , { "fmax-simplifier-iterations=INT", required_argument, NULL, OPT_MAX_SIMPLIFIER_ITERATIONS }
+  /* There were options that took arguments here before; see the git blame of
+   * this comment for how that looked. */
 
   /* required sentinel */
   , { NULL, 0, NULL, 0 }
@@ -126,28 +136,7 @@ static void parse_options(int argc, char *argv[])
       break;
 
     case OPT_DISABLE:
-      __cmd_line_flags.bitfield &= ~(1 << (longindex - 27));  // SEE: [layout of command line options bitfield]
-      break;
-
-    /* attempt to decode the argument to flags which require them */
-    case OPT_UNFOLDING_USE_THRESHOLD:
-      if (1 != sscanf(optarg, "%"PRIu32, &__unfolding_use_threshold)) {
-        fprintf(stderr, "%s: option `-%s' requires an integer argument, but got: %s\n"
-                      , basename(argv[0])
-                      , longopts[longindex].name
-                      , optarg
-                      );
-      }
-      break;
-
-    case OPT_MAX_SIMPLIFIER_ITERATIONS:
-      if (1 != sscanf(optarg, "%"PRIu32, &__max_simplifier_iterations)) {
-        fprintf(stderr, "%s: option `-%s' requires an integer argument, but got: %s\n"
-                      , basename(argv[0])
-                      , longopts[longindex].name
-                      , optarg
-                      );
-      }
+      __cmd_line_flags.bitfield &= ~(1 << (longindex - disable_opts_offset));
       break;
 
     /* option was ambiguous or was missing a required argument
@@ -196,7 +185,7 @@ static void parse_options(int argc, char *argv[])
     }
   }
 #if !defined(ACCELERATE_DEBUG)
-  if (__cmd_line_flags.bitfield & 0x7fffc00) {  // SEE: [layout of command line options bitfield]
+  if (__cmd_line_flags.bitfield & debug_opts_bitfield) {
     fprintf(stderr, "Data.Array.Accelerate: Debugging options are disabled.\n");
     fprintf(stderr, "Reinstall package 'accelerate' with '-fdebug' to enable them.\n");
   }
