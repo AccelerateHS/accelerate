@@ -315,10 +315,11 @@ flag bounds-checks
   default:              True
   description:          Enable bounds checking in the interpreter
 
-flag unsafe-checks
-  manual:               True
-  default:              False
-  description:          Enable bounds checking in unsafe operations
+-- This flag is currently completely unused, so let's not expose it to users
+-- flag unsafe-checks
+--   manual:               True
+--   default:              False
+--   description:          Enable bounds checking in unsafe operations
 
 flag internal-checks
   manual:               True
@@ -621,9 +622,9 @@ library
     cpp-options:
         -DACCELERATE_BOUNDS_CHECKS
 
-  if flag(unsafe-checks)
-    cpp-options:
-        -DACCELERATE_UNSAFE_CHECKS
+  -- if flag(unsafe-checks)
+  --   cpp-options:
+  --       -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
     cpp-options:

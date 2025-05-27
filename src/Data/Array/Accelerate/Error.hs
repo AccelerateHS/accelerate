@@ -128,7 +128,7 @@ ppCallStack = ppLines
 {-# INLINE doChecks #-}
 doChecks :: Check -> Bool
 doChecks Bounds   = doBoundsChecks
-doChecks Unsafe   = doUnsafeChecks
+doChecks Unsafe   = internalError "If you want to do unsafe checks, re-enable the unsafe-checks cabal flag. It is currently disabled because there are no unsafe operation checks."
 doChecks Internal = doInternalChecks
 
 doBoundsChecks :: Bool
@@ -138,12 +138,12 @@ doBoundsChecks = True
 doBoundsChecks = False
 #endif
 
-doUnsafeChecks :: Bool
-#ifdef ACCELERATE_UNSAFE_CHECKS
-doUnsafeChecks = True
-#else
-doUnsafeChecks = False
-#endif
+-- doUnsafeChecks :: Bool
+-- #ifdef ACCELERATE_UNSAFE_CHECKS
+-- doUnsafeChecks = True
+-- #else
+-- doUnsafeChecks = False
+-- #endif
 
 doInternalChecks :: Bool
 #ifdef ACCELERATE_INTERNAL_CHECKS
