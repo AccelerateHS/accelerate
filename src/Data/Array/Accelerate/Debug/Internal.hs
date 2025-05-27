@@ -18,7 +18,7 @@ module Data.Array.Accelerate.Debug.Internal (
 
   debuggingIsEnabled,
   boundsChecksAreEnabled,
-  unsafeChecksAreEnabled,
+  -- unsafeChecksAreEnabled,
   internalChecksAreEnabled,
 
   module Debug,
@@ -50,13 +50,13 @@ boundsChecksAreEnabled = True
 boundsChecksAreEnabled = False
 #endif
 
-{-# INLINE unsafeChecksAreEnabled #-}
-unsafeChecksAreEnabled :: Bool
-#ifdef ACCELERATE_UNSAFE_CHECKS
-unsafeChecksAreEnabled = True
-#else
-unsafeChecksAreEnabled = False
-#endif
+-- {-# INLINE unsafeChecksAreEnabled #-}
+-- unsafeChecksAreEnabled :: Bool
+-- #ifdef ACCELERATE_UNSAFE_CHECKS
+-- unsafeChecksAreEnabled = True
+-- #else
+-- unsafeChecksAreEnabled = False
+-- #endif
 
 {-# INLINE internalChecksAreEnabled #-}
 internalChecksAreEnabled :: Bool
