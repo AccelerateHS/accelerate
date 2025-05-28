@@ -17,10 +17,12 @@ import Test.Tasty
 
 import Data.Array.Accelerate.Test.NoFib.Base
 import Data.Array.Accelerate.Test.NoFib.Misc.Cache
+import Data.Array.Accelerate.Test.NoFib.Misc.Scanl1
 
 
 test_misc :: RunN -> TestTree
 test_misc runN =
   testGroup "misc"
     [ test_misc_cache runN
+    , test_misc_scanl1 runN
     ]
