@@ -22,6 +22,7 @@ module Data.Array.Accelerate.Test.NoFib (
   module Data.Array.Accelerate.Test.NoFib.Imaginary,
   module Data.Array.Accelerate.Test.NoFib.Spectral,
   module Data.Array.Accelerate.Test.NoFib.Issues,
+  module Data.Array.Accelerate.Test.NoFib.Misc,
 #endif
 
 ) where
@@ -34,6 +35,7 @@ import Data.Array.Accelerate.Test.NoFib.Prelude
 import Data.Array.Accelerate.Test.NoFib.Imaginary
 import Data.Array.Accelerate.Test.NoFib.Spectral
 import Data.Array.Accelerate.Test.NoFib.Issues
+import Data.Array.Accelerate.Test.NoFib.Misc
 
 import Test.Tasty
 import Test.Tasty.Runners
@@ -58,6 +60,7 @@ nofib runN = do
         , test_imaginary runN
         , test_spectral runN
         , test_issues runN
+        , test_misc runN
         ]
 #endif
 
