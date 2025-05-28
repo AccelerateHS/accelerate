@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiWayIf #-}
+{-# OPTIONS -Wall #-}
 module Main where
 
 import Distribution.Extra.Doctest
@@ -27,9 +28,8 @@ main =
 preConfHook :: Args -> ConfigFlags -> IO HookedBuildInfo
 preConfHook args config_flags = do
   let verbosity = fromFlagOrDefault normal $ configVerbosity config_flags
-      debugging = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
 
-  when debugging $ do
+  when (tracyMode config_flags) $ do
     yes <- doesFileExist "cbits/tracy/public/TracyClient.cpp"
     if yes
       then
@@ -55,14 +55,12 @@ preConfHook args config_flags = do
 --
 postBuildHook :: Args -> BuildFlags -> PackageDescription -> LocalBuildInfo -> IO ()
 postBuildHook args build_flags pkg_desc lbi = do
-  let config_flags  = configFlags lbi
-      Platform _ os = hostPlatform lbi
+  let Platform _ os = hostPlatform lbi
       verbosity     = fromFlagOrDefault normal $ buildVerbosity build_flags
-      debugging     = fromMaybe False $ lookupFlagAssignment (mkFlagName "debug") (configConfigurationsFlags config_flags)
       targets       = [ ("tracy-capture", "capture",  "tracy-capture")
                       , ("tracy",         "profiler", "tracy-profiler") ]
 
-  when debugging $ do
+  when (tracyMode (configFlags lbi)) $ do
     case os of
       Windows -> return ()  -- XXX TODO: Windows users get the dummy executable that just throws an error
       _       ->
@@ -102,3 +100,8 @@ postBuildHook args build_flags pkg_desc lbi = do
             copyFile (hs_tmpdir </> c_exe) (hs_builddir </> hs_exe)
 
   postBuild simpleUserHooks args build_flags pkg_desc lbi
+
+tracyMode :: ConfigFlags -> Bool
+tracyMode config_flags =
+  fromMaybe False $
+    lookupFlagAssignment (mkFlagName "tracy") (configConfigurationsFlags config_flags)

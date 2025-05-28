@@ -210,31 +210,7 @@ flag debug
   manual:               True
   default:              False
   description:
-    Enable kernel profiling and debug tracing messages.
-    .
-    The executables 'tracy' (GUI) and 'tracy-capture' (command line) will be
-    built to collect and view profiling data from supported backends. This
-    requires several external dependencies:
-    .
-      * cmake
-    .
-      * pkg-config
-    .
-      * freetype2
-    .
-      * glfw3
-    .
-      * gtk3 (linux only)
-    .
-      * TBB (should be part of your compiler toolchain)
-    .
-    For example on Debian/Ubuntu you can install all of these via:
-    .
-      > sudo apt install cmake pkg-config libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
-    .
-    Or on macOS via:
-    .
-      > brew install cmake pkg-config freetype glfw
+    Enable debug tracing messages.
     .
     With debugging enabled, applications will read the following options from
     the environment variable @ACCELERATE_FLAGS@, and via the command-line as:
@@ -304,7 +280,38 @@ flag debug
       * @dump-exec@: Print information related to program execution.
     .
       * @dump-sched@: Print information related to execution scheduling.
+
+flag tracy
+  manual:               True
+  default:              False
+  description:
+    Enable kernel profiling using Tracy. This flag requires @+debug@ to also be
+    set. Note: @accelerate-llvm-ptx@ does not currently kernel profiling via
+    Tracy; for PTX profiling, use Nvidia Nsight directly instead.
     .
+    The executables 'tracy' (GUI) and 'tracy-capture' (command line) will be
+    built to collect and view profiling data from supported backends. This
+    requires several external dependencies:
+    .
+      * cmake
+    .
+      * pkg-config
+    .
+      * freetype2
+    .
+      * glfw3
+    .
+      * gtk3 (linux only)
+    .
+      * TBB (should be part of your compiler toolchain)
+    .
+    For example on Debian/Ubuntu you can install all of these via:
+    .
+      > sudo apt install cmake pkg-config libfreetype-dev libglfw3-dev libgtk-3-dev libtbb-dev
+    .
+    Or on macOS via:
+    .
+      > brew install cmake pkg-config freetype glfw
 
 flag bounds-checks
   manual:               True
@@ -594,6 +601,17 @@ library
 
     cpp-options:
         -DACCELERATE_DEBUG
+
+  if flag(tracy)
+    if !flag(debug)
+      build-depends: accelerate-tracy-flag-depends-on-debug-flag < 0
+      -- buildable: False  -- this suppresses any other error output
+
+    cc-options:
+        -DACCELERATE_TRACY
+
+    cpp-options:
+        -DACCELERATE_TRACY
         -DTRACY_ENABLE
         -DTRACY_NO_SAMPLING
 
@@ -724,7 +742,7 @@ executable tracy
   hs-source-dirs:       app
   main-is:              Main.hs
 
-  if !flag(debug)
+  if !flag(tracy)
     buildable: False
 
   build-depends:
@@ -752,7 +770,7 @@ executable tracy-capture
   hs-source-dirs:       app
   main-is:              Main.hs
 
-  if !flag(debug)
+  if !flag(tracy)
     buildable: False
 
   build-depends:

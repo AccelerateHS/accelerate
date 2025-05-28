@@ -29,7 +29,7 @@ module Data.Array.Accelerate.Debug.Internal.Profile (
 
 ) where
 
-#ifdef ACCELERATE_DEBUG
+#ifdef ACCELERATE_TRACY
 import Control.Monad
 import qualified Data.Array.Accelerate.Debug.Internal.Tracy         as Tracy
 #endif
@@ -63,7 +63,7 @@ runQ $ sequence
 {-# INLINE local_memory_free  #-}
 local_memory_alloc :: Ptr a -> Int -> IO ()
 local_memory_free  :: Ptr a -> IO ()
-#ifndef ACCELERATE_DEBUG
+#ifndef ACCELERATE_TRACY
 local_memory_alloc _ _ = return ()
 local_memory_free _    = return ()
 #else
@@ -85,7 +85,7 @@ local_memory_free _p =
 remote_memory_alloc :: CString -> Ptr a -> Int -> IO ()
 remote_memory_free  :: CString -> Ptr a -> IO ()
 remote_memory_evict :: CString -> Ptr a -> Int -> IO ()
-#ifndef ACCELERATE_DEBUG
+#ifndef ACCELERATE_TRACY
 remote_memory_alloc _ _ _ = return ()
 remote_memory_free _ _    = return ()
 remote_memory_evict _ _ _ = return ()
@@ -106,7 +106,7 @@ remote_memory_evict name ptr bytes = do
 
 remote_memory_alloc_nursery :: Ptr a -> Int -> IO ()
 remote_memory_free_nursery  :: Ptr a -> IO ()
-#ifndef ACCELERATE_DEBUG
+#ifndef ACCELERATE_TRACY
 remote_memory_alloc_nursery _ _ = return ()
 remote_memory_free_nursery _    = return ()
 #else
@@ -121,7 +121,7 @@ remote_memory_free_nursery p    = Tracy.emit_memory_free_named p 0 ___nursery
 {-# INLINE memcpy_from_remote #-}
 memcpy_to_remote   :: Int -> IO ()
 memcpy_from_remote :: Int -> IO ()
-#ifndef ACCELERATE_DEBUG
+#ifndef ACCELERATE_TRACY
 memcpy_to_remote   _ = return ()
 memcpy_from_remote _ = return ()
 #else
@@ -134,7 +134,7 @@ memcpy_from_remote n = void $ Atomic.add __total_bytes_copied_from_remote (fromI
 --
 {-# INLINE emit_remote_gc #-}
 emit_remote_gc :: IO ()
-#ifndef ACCELERATE_DEBUG
+#ifndef ACCELERATE_TRACY
 emit_remote_gc = return ()
 #else
 emit_remote_gc = void $ Atomic.add __num_remote_gcs 1

@@ -20,7 +20,7 @@ import Foreign.C.String
 import Foreign.C.Types
 import Foreign.Ptr
 
-#if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
+#if defined(ACCELERATE_TRACY) && !defined(__GHCIDE__)
 import Language.Haskell.TH.Syntax
 #endif
 
@@ -29,7 +29,7 @@ type SrcLoc = Word64
 
 -- SEE: [HLS and GHC IDE]
 --
-#if defined(ACCELERATE_DEBUG) && !defined(__GHCIDE__)
+#if defined(ACCELERATE_TRACY) && !defined(__GHCIDE__)
 
 #ifdef TRACY_MANUAL_LIFETIME
 foreign import ccall unsafe "___tracy_startup_profiler" startup_profiler :: IO ()

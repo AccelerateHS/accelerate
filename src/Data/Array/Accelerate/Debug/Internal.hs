@@ -17,6 +17,7 @@
 module Data.Array.Accelerate.Debug.Internal (
 
   debuggingIsEnabled,
+  tracyIsEnabled,
   boundsChecksAreEnabled,
   -- unsafeChecksAreEnabled,
   internalChecksAreEnabled,
@@ -40,6 +41,14 @@ debuggingIsEnabled :: Bool
 debuggingIsEnabled = True
 #else
 debuggingIsEnabled = False
+#endif
+
+{-# INLINE tracyIsEnabled #-}
+tracyIsEnabled :: Bool
+#ifdef ACCELERATE_TRACY
+tracyIsEnabled = True
+#else
+tracyIsEnabled = False
 #endif
 
 {-# INLINE boundsChecksAreEnabled #-}
