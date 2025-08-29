@@ -252,11 +252,7 @@ flag debug
     .
       * @fusion@: Enable array fusion (True).
     .
-      * @simplify@: Enable program simplification phase (True).
-    .
       * @inplace@: Enable in-place array updates (True).
-    .
-      * @flush-cache@: Clear any persistent caches on program startup (False).
     .
       * @force-recomp@: Force recompilation of array programs (False).
     .
@@ -313,17 +309,18 @@ flag debug
 flag bounds-checks
   manual:               True
   default:              True
-  description:          Enable bounds checking
+  description:          Enable bounds checking in the interpreter
 
-flag unsafe-checks
-  manual:               True
-  default:              False
-  description:          Enable bounds checking in unsafe operations
+-- This flag is currently completely unused, so let's not expose it to users
+-- flag unsafe-checks
+--   manual:               True
+--   default:              False
+--   description:          Enable bounds checking in unsafe operations
 
 flag internal-checks
   manual:               True
   default:              False
-  description:          Enable internal consistency checks
+  description:          Enable some internal consistency checks
 
 -- Enabling this drastically increases build times
 -- See: https://gitlab.haskell.org/ghc/ghc/issues/15751
@@ -624,9 +621,9 @@ library
     cpp-options:
         -DACCELERATE_BOUNDS_CHECKS
 
-  if flag(unsafe-checks)
-    cpp-options:
-        -DACCELERATE_UNSAFE_CHECKS
+  -- if flag(unsafe-checks)
+  --   cpp-options:
+  --       -DACCELERATE_UNSAFE_CHECKS
 
   if flag(internal-checks)
     cpp-options:

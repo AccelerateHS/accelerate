@@ -11,6 +11,8 @@
 #ifndef __ACCELERATE_FLAGS_H__
 #define __ACCELERATE_FLAGS_H__
 
+#include <stdint.h>
+
 /* NOTE: [layout of command line options bitfield]
  */
 typedef union {
@@ -21,11 +23,9 @@ typedef union {
     uint32_t acc_sharing            : 1;
     uint32_t exp_sharing            : 1;
     uint32_t fusion                 : 1;
-    uint32_t simplify               : 1;
     uint32_t inplace                : 1;
     uint32_t fast_math              : 1;
     uint32_t fast_permute_const     : 1;
-    uint32_t flush_cache            : 1;
     uint32_t force_recomp           : 1;
 
     uint32_t debug                  : 1;
