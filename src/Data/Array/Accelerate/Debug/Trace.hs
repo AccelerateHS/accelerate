@@ -33,7 +33,7 @@ import Data.Array.Accelerate.Sugar.Elt
 import qualified Data.Array.Accelerate.Representation.Array         as R
 import qualified Data.Array.Accelerate.Representation.Shape         as R
 
-import Data.Text
+import Data.Text                                                    ( Text )
 
 
 -- $tracing
