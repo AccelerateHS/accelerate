@@ -7,7 +7,9 @@ resolver: lts-21.4
 packages:
 - .
 
-# extra-deps: []
+extra-deps:
+- git: https://github.com/gregorycollins/hashtables.git
+  commit: 0c5c8548ad7e8e90ab68bfbe6697069c969718aa
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
