@@ -21,7 +21,7 @@ For more details, see our papers:
  * [Type-safe Runtime Code Generation: Accelerate to LLVM][MCGN15] ([slides][MCGN15-slides]) ([video][MCGN15-video])
  * [Streaming Irregular Arrays][CMCK17] ([video][CMCK17-video])
 
-There are also slides from some fairly recent presentations:
+There are also slides from some presentations on Accelerate:
 
  * [Embedded Languages for High-Performance Computing in Haskell][Embedded]
  * [GPGPU Programming in Haskell with Accelerate][YLJ13-slides] ([video][YLJ13-video]) ([workshop][YLJ13-workshop])
@@ -71,7 +71,7 @@ Additional components
 The following supported add-ons are available as separate packages:
 
   * [accelerate-llvm-native][accelerate-llvm-native]: Backend targeting multicore CPUs
-  * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 2.0 or greater (see the [table on Wikipedia][wiki-cc])
+  * [accelerate-llvm-ptx][accelerate-llvm-ptx]: Backend targeting CUDA-enabled NVIDIA GPUs. Requires a GPU with compute capability 3.0 or greater (see the [table on Wikipedia][wiki-cc])
   * [accelerate-examples][accelerate-examples]: Computational kernels and applications showcasing the use of Accelerate as well as a regression test suite (supporting function and performance testing)
   * Conversion between various formats:
     * [accelerate-io](https://hackage.haskell.org/package/accelerate-io): For copying data directly between raw pointers
