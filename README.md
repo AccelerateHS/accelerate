@@ -60,7 +60,7 @@ Availability
 
 Package _Accelerate_ is available from:
 
- * Hackage: [accelerate][Hackage] - install with `cabal install accelerate`
+ * Hackage: [accelerate][Hackage] - just add it to your cabal file
  * GitHub: [AccelerateHS/accelerate][GitHub] - get the source with `git clone https://github.com/AccelerateHS/accelerate.git` 
 
 To install the Haskell toolchain try [GHCup](https://www.haskell.org/ghcup/).
@@ -97,7 +97,7 @@ The following supported add-ons are available as separate packages:
   * [numeric-prelude-accelerate][numeric-prelude-accelerate]: Lifting the [numeric-prelude][numeric-prelude] to Accelerate
   * [wigner-ville-accelerate](https://github.com/Haskell-mouse/wigner-ville-accelerate): Wigner-Ville time-frequency distribution.
 
-Install them from Hackage with `cabal install PACKAGENAME`.
+These are all available on Hackage.
 
 
 Documentation
@@ -112,7 +112,7 @@ Examples
 
 ### accelerate-examples
 
-The [accelerate-examples][accelerate-examples] package provides a range of computational kernels and a few complete applications. To install these from Hackage, issue `cabal install accelerate-examples`. The examples include:
+The [accelerate-examples][accelerate-examples] package provides a range of computational kernels and a few complete applications. The examples include:
 
   * An implementation of [canny edge detection][wiki-canny]
   * An interactive [mandelbrot set][wiki-mandelbrot] generator
@@ -122,6 +122,8 @@ The [accelerate-examples][accelerate-examples] package provides a range of compu
   * A particle based simulation of stable fluid flows
   * A cellular automata simulation
   * A "password recovery" tool, for dictionary lookup of MD5 hashes
+
+To run these, either get the source from Hackage using `cabal get accelerate-examples` or clone the [git repository][accelerate-examples], then use `cabal run` on the individual executables.
 
 [![Mandelbrot](https://i.imgur.com/5Tbsp1j.jpg "accelerate-mandelbrot")](https://i.imgur.com/RgXRqsc.jpg)
 [![Raytracer](https://i.imgur.com/7ohhKm9.jpg "accelerate-ray")](https://i.imgur.com/ZNEGEJK.jpg)

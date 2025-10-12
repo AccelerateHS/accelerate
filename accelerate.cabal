@@ -31,8 +31,8 @@ description:
   .
   [/Additional components/]
   .
-  The following supported add-ons are available as separate packages. Install
-  them from Hackage with @cabal install \<package\>@
+  The following supported add-ons are available as separate packages. Use them by
+  adding them as dependencies to your project's cabal file.
   .
     * @accelerate-llvm-native@: Backend supporting parallel execution on
       multicore CPUs.
