@@ -155,9 +155,10 @@ extra-source-files:
     cbits/tracy/public/client/*.cpp
     -- These are used to build Tracy's client tools in Setup.hs
     cbits/tracy/cmake/*.cmake
+    cbits/tracy/cmake/*.patch
     cbits/tracy/capture/CMakeLists.txt
     cbits/tracy/profiler/CMakeLists.txt
-    -- Used by the Tracy's client tools
+    -- Used by Tracy's client tools
     cbits/tracy/capture/src/*.cpp
     cbits/tracy/dtl/*.hpp
     cbits/tracy/getopt/*.c
