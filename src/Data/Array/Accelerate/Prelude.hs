@@ -2547,7 +2547,7 @@ expand f g xs =
                      $ scanl1 (segmentedL const)
                      $ zip head_flags
                      $ permute const
-                               (fill (I1 n) undef)
+                               (fill (I1 n) 0)
                                -- If any of the elements expand to zero new
                                -- elements then this would result in multiple
                                -- writes to the same index since the offsets are
