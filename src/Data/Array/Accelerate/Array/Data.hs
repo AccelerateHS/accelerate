@@ -53,12 +53,10 @@ module Data.Array.Accelerate.Array.Data (
 
 import Data.Array.Accelerate.Array.Unique
 import Data.Array.Accelerate.Error
+import Data.Array.Accelerate.Lifetime
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Type
 import Data.Primitive.Vec
-#ifdef ACCELERATE_TRACY
-import Data.Array.Accelerate.Lifetime
-#endif
 
 import Data.Array.Accelerate.Debug.Internal.Flags
 import Data.Array.Accelerate.Debug.Internal.Profile
@@ -290,9 +288,20 @@ allocateArray !size = internalCheck "size must be >= 0" (size >= 0) $ do
            traceM dump_gc ("gc: allocated new host array (size=" % int % ", ptr=" % build % ")") bytes (unsafeForeignPtrToPtr ptr)
            local_memory_alloc (unsafeForeignPtrToPtr ptr) bytes
            return (castForeignPtr ptr)
+
+  -- If we can, avoid attaching a finalizer at all for performance
 #ifdef ACCELERATE_TRACY
-  addFinalizer (uniqueArrayData arr) (local_memory_free (unsafeUniqueArrayPtr arr))
+  let doTracy = True
+#else
+  let doTracy = False
 #endif
+  haveDumpGc <- getFlag dump_gc
+  if doTracy || haveDumpGc
+    then addFinalizer (uniqueArrayData arr) $ do
+           traceM dump_gc ("gc: finalizer for host array " % build % ")") (unsafeUniqueArrayPtr arr)
+           if doTracy then local_memory_free (unsafeUniqueArrayPtr arr) else return ()
+    else return ()
+
   return arr
 
 -- | Register the given function as the callback to use to allocate new array
