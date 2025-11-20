@@ -321,7 +321,7 @@ flag nofib
 
 library
   build-depends:
-          base                          >= 4.12 && < 4.21
+          base                          >= 4.12 && < 4.23
         , ansi-terminal                 >= 0.6.2
         , base-orphans                  >= 0.3
         , bytestring                    >= 0.10.2
@@ -343,7 +343,7 @@ library
         , prettyprinter-ansi-terminal   >= 1.1.2
         , primitive                     >= 0.6.4
         , tasty                         >= 0.11
-        , template-haskell              < 2.23
+        , template-haskell              < 2.25
         , terminal-size                 >= 0.3
         , text                          >= 1.2.4
         , transformers                  >= 0.3
