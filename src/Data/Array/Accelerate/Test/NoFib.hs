@@ -37,20 +37,20 @@ import Data.Array.Accelerate.Test.NoFib.Spectral
 import Data.Array.Accelerate.Test.NoFib.Issues
 import Data.Array.Accelerate.Test.NoFib.Misc
 
-import Test.Tasty
 import Test.Tasty.Runners
 import Test.Tasty.Ingredients.Rerun
 import System.Environment
 #endif
+import Test.Tasty
 
 
-nofib :: RunN -> IO ()
+nofib :: RunN -> TestTree -> IO ()
 #ifdef ACCELERATE_DISABLE_NOFIB
-nofib _    = error $ unlines [ "Data.Array.Accelerate: the nofib test-suite has been disabled."
+nofib _ _  = error $ unlines [ "Data.Array.Accelerate: the nofib test-suite has been disabled."
                              , "Reinstall package 'accelerate' with '-fnofib' to enable it."
                              ]
 #else
-nofib runN = do
+nofib runN test_runq = do
   me <- getProgName
   defaultMainWithIngredients [rerunningTests (nofibIngredient : defaultIngredients)]
     $ localOption (NumThreads 1)                        -- run each test sequentially with many cores
@@ -61,6 +61,7 @@ nofib runN = do
         , test_spectral runN
         , test_issues runN
         , test_misc runN
+        , test_runq
         ]
 #endif
 

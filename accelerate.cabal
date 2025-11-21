@@ -706,6 +706,7 @@ test-suite nofib-interpreter
   build-depends:
           base                          >= 4.10
         , accelerate
+        , tasty
 
   ghc-options:
         -O2
