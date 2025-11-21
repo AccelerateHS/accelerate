@@ -14,10 +14,11 @@ import Data.Array.Accelerate.Test.NoFib
 import Data.Array.Accelerate.Interpreter
 
 import System.Environment
+import Test.Tasty
 
 main :: IO ()
 main = do
   setEnv "TASTY_INTERPRETER" "True"
   setEnv "TASTY_HEDGEHOG_TESTS" "50"
-  nofib runN
+  nofib runN (testGroup "runQ" [])
 

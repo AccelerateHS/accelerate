@@ -37,11 +37,11 @@ import Data.Array.Accelerate.Test.NoFib.Spectral
 import Data.Array.Accelerate.Test.NoFib.Issues
 import Data.Array.Accelerate.Test.NoFib.Misc
 
-import Test.Tasty
 import Test.Tasty.Runners
 import Test.Tasty.Ingredients.Rerun
 import System.Environment
 #endif
+import Test.Tasty
 
 
 nofib :: RunN -> TestTree -> IO ()
