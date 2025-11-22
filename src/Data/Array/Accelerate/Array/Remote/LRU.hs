@@ -113,8 +113,8 @@ instance Task () where
 --
 -- The function supplied should be the `free` for the remote pointers being
 -- stored. This function will be called by the GC, which typically runs on a
--- different thread. Unlike the `free` in `RemoteMemory`, this function cannot
--- depend on any state.
+-- different thread. Consequently, unlike the functions in 'RemoteMemory', this
+-- function cannot depend on any state.
 --
 new :: (forall a. ptr a -> IO ()) -> IO (MemoryTable ptr task)
 new release = do
