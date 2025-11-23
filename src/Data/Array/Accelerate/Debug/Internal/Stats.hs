@@ -208,11 +208,11 @@ pprTickCount counts =
 
 pprTickGroup :: [(Tick,Int)] -> Doc
 pprTickGroup []  = error "pprTickGroup"
-pprTickGroup grp =
+pprTickGroup grp@((groupRepr, _) : _) =
   hang 2 (vcat $ (pretty groupTotal <+> groupName)
                : [ pretty n <+> pprTickCtx t | (t,n) <- sortBy (flip (comparing snd)) grp ])
   where
-    groupName  = tickToStr (fst (head grp))
+    groupName  = tickToStr groupRepr
     groupTotal = sum [n | (_,n) <- grp]
 
 tickToTag :: Tick -> Int

@@ -217,7 +217,8 @@ strengthenShrunkLHS (LeftHandSideSingle _)   (LeftHandSideWildcard _) k = \ix ->
   SuccIdx ix' -> k ix'
 strengthenShrunkLHS (LeftHandSidePair l h)   (LeftHandSideWildcard t) k = strengthenShrunkLHS h (LeftHandSideWildcard t2) $ strengthenShrunkLHS l (LeftHandSideWildcard t1) k
   where
-    TupRpair t1 t2 = t
+    (t1, t2) = case t of TupRpair t1' t2' -> (t1', t2')
+                         _                -> internalError "Pair type was not TupRpair"
 strengthenShrunkLHS (LeftHandSideWildcard _) _                        _ = internalError "Second LHS defines more variables"
 strengthenShrunkLHS _                        _                        _ = internalError "Mismatch LHS single with LHS pair"
 

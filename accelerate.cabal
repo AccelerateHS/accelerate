@@ -560,7 +560,6 @@ library
         -O2
         -Wall
         -Wcompat
-        -Wmissed-specialisations
         -- -Wredundant-constraints
         -freduction-depth=100
         -fspec-constr-count=50
