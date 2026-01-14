@@ -1,7 +1,7 @@
 cabal-version:          2.2
 
 name:                   accelerate
-version:                1.3.0.0
+version:                1.4.0.0
 tested-with:            GHC >= 8.6
 build-type:             Custom
 
@@ -42,6 +42,19 @@ description:
       greater. See the following table for supported GPUs:
       <http://en.wikipedia.org/wiki/CUDA#Supported_GPUs>
   .
+    * @containers-accelerate@: Container types for use with Accelerate.
+  .
+    * @hashable-accelerate@: Class for types which can be converted to a hash
+      value.
+  .
+    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
+  .
+    * @mwc-random-accelerate@: Generate Accelerate arrays filled with high
+      quality pseudorandom numbers.
+  .
+  Additional libraries that have worked in the past but are not included in the
+  current release:
+  .
     * @accelerate-examples@: Computational kernels and applications
       demonstrating the use of Accelerate.
   .
@@ -56,32 +69,18 @@ description:
   .
     * @accelerate-bignum@: Fixed-width large integer arithmetic.
   .
-    * @containers-accelerate@: Container types for use with Accelerate.
-  .
-    * @hashable-accelerate@: Class for types which can be converted to a hash
-      value.
-  .
-    * @colour-accelerate@: Colour representations in Accelerate (RGB, sRGB, HSV, and HSL).
-  .
-    * @containers-accelerate@: Hashing-based container types
-  .
     * @gloss-accelerate@: Generate gloss pictures from Accelerate.
   .
     * @gloss-raster-accelerate@: Parallel rendering of raster images and
       animations.
   .
-    * @hashable-accelerate@: A class for types which can be converted into a hash value
-  .
     * @lens-accelerate@: Lens operators for Accelerate types.
   .
     * @linear-accelerate@: Linear vector spaces in Accelerate.
   .
-    * @mwc-random-accelerate@: Generate Accelerate arrays filled with high
-      quality pseudorandom numbers.
-  .
   [/Examples and documentation/]
   .
-  Haddock documentation is included in the package
+  Haddock documentation is included in the package.
   .
   The @accelerate-examples@ package demonstrates a range of computational
   kernels and several complete applications, including:
@@ -269,8 +268,8 @@ flag tracy
   default:              False
   description:
     Enable kernel profiling using Tracy. This flag requires @+debug@ to also be
-    set. Note: @accelerate-llvm-ptx@ does not currently kernel profiling via
-    Tracy; for PTX profiling, use Nvidia Nsight directly instead.
+    set. Note: currently only works with @accelerate-llvm-native@; for PTX
+    profiling, use Nvidia Nsight directly instead.
     .
     The executables 'tracy' (GUI) and 'tracy-capture' (command line) will be
     built to collect and view profiling data from supported backends. This
@@ -774,7 +773,7 @@ source-repository head
 
 source-repository this
   Type:                 git
-  Tag:                  v1.3.0.0
+  Tag:                  v1.4.0.0
   Location:             git://github.com/AccelerateHS/accelerate.git
 
 -- vim: nospell
