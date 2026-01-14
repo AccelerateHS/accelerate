@@ -6,15 +6,21 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
-## [next]
+## [1.40.0.] -- ???
 ### Added
-  * Added debugging functions in module `Data.Array.Accelerate.Debug.Trace` ([#485](https://github.com/AccelerateHS/accelerate/pull/485))
-
-### Changed
-  * Removed dependency on lens ([#493](https://github.com/AccelerateHS/accelerate/pull/493))
+  * Compatibility with GHC 9.12 and Cabal 3.16
+  * Support for profiling with [Tracy](https://github.com/wolfpld/tracy) in `accelerate-llvm-native` (enable the `tracy` Cabal flag on `accelerate`) ([#503](https://github.com/AccelerateHS/accelerate/pull/503))
+  * Passing `+ACC -dverbose` makes `show` output of `Acc` terms print the hash
+    of the kernel, to make cross-referencing against compiled code and
+    execution information easier ([#478](https://github.com/AccelerateHS/accelerate/pull/478))
+  * Debugging functions in module `Data.Array.Accelerate.Debug.Trace` ([#485](https://github.com/AccelerateHS/accelerate/pull/485))
+  * A `Monad` class, and export `Functor` and `Either` from `Data.Array.Accelerate` ([#488](https://github.com/AccelerateHS/accelerate/pull/488))
 
 ### Fixed
   * Graphviz graph generation of `-ddump-dot` and `-ddump-simpl-dot` ([#384](https://github.com/AccelerateHS/accelerate/issues/384))
+  * `+ACC` argument parsing ([#539](https://github.com/AccelerateHS/accelerate/pull/539))
+  * Removed dependency on lens ([#493](https://github.com/AccelerateHS/accelerate/pull/493))
+  * And various other things!
 
 ### Contributors
 
@@ -24,6 +30,10 @@ Special thanks to those who contributed patches as part of this release:
   * David van Balen (@dpvanbalen)
   * Tom Smeding (@tomsmeding)
   * Trevor L. McDonell (@tmcdonell)
+  * Maksymilian Demitraszek (@MaksymilianDemitraszek)
+  * Laurent René de Cotret (@LaurentRDC)
+  * Robbert van der Helm (@robbert-vdh)
+  * Mirek Kratochvil (@exaexa)
 
 
 ## [1.3.0.0] - 2020-08-26
