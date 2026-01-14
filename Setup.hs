@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP        #-}
+{-# LANGUAGE DataKinds  #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# OPTIONS -Wall #-}
 module Main where
@@ -10,6 +12,17 @@ import Distribution.Simple.Setup
 import Distribution.Simple.Utils
 import Distribution.System
 import Distribution.Verbosity
+
+#if MIN_VERSION_Cabal(3,14,0)
+-- Note [Cabal 3.14]
+--
+-- If you change any path stuff, either test that the package still works with
+-- Cabal 3.12 or stop declaring support for it in accelerate.cabal. (If you do
+-- the latter, also remove all of the other conditionals in this file.)
+-- Note that supporting old versions of Cabal is useful for being able to run
+-- e.g. Accelerate on old GPU clusters, which is nice.
+import Distribution.Utils.Path (SymbolicPath, FileOrDir(Dir), Pkg, CWD, interpretSymbolicPath)
+#endif
 
 import Control.Monad
 import Data.Maybe
@@ -44,13 +57,13 @@ preConfHook args config_flags = do
         -- Stack and cabal based builds require updating the submodules
         git <- doesDirectoryExist ".git"
         if git
-           then rawSystemExit verbosity "git" ["submodule", "update", "--init", "--recursive"]
+           then rawSystemExit' verbosity "git" ["submodule", "update", "--init", "--recursive"]
            else do
              -- XXX: This must be kept up to date with the git submodule revision
              let archive = "v0.11.1.tar.gz"
              createDirectoryIfMissing True "cbits/tracy"
-             rawSystemExit verbosity "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
-             rawSystemExit verbosity "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
+             rawSystemExit' verbosity "curl" ["-LO", "https://github.com/wolfpld/tracy/archive/refs/tags/" ++ archive]
+             rawSystemExit' verbosity "tar" ["-xzf", archive, "-C", "cbits/tracy", "--strip-components", "1"]
              removeFile archive
 
   preConf simpleUserHooks args config_flags
@@ -69,8 +82,9 @@ postBuildHook args build_flags pkg_desc lbi = do
       Windows -> return ()  -- XXX TODO: Windows users get the dummy executable that just throws an error
       _       ->
         forM_ targets $ \(hs_exe, c_dir, c_exe) -> do
-          let c_projdir  = "cbits/tracy" </> c_dir
-              hs_builddir = buildDir lbi </> hs_exe
+          let cwd = flagToMaybe (workingDirFlag build_flags)
+              c_projdir  = "cbits/tracy" </> c_dir
+              hs_builddir = interpretSymbolicPath cwd (buildDir lbi) </> hs_exe
               hs_tmpdir   = hs_builddir </> hs_exe ++ "-tmp"
 
           -- TODO: This creates a separate build directory for each tracy
@@ -92,12 +106,12 @@ postBuildHook args build_flags pkg_desc lbi = do
             setupMessage verbosity (printf "Building executable '%s' from Tracy C++ sources for" hs_exe) (package pkg_desc)
 
             -- We set LEGACY=1 so that tracy builds with X11 instead of Wayland.
-            rawSystemExit verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
+            rawSystemExit' verbosity "cmake" ["-B", hs_tmpdir, "-S", c_projdir, "-DCMAKE_BUILD_TYPE=Release", "-DLEGACY=1"]
 
             -- Build in parallel with 2 jobs because likely, accelerate is one of
             -- the last dependencies in a build, so we aren't stealing CPU time
             -- from other packages, and tracy takes way too long to build
-            rawSystemExit verbosity "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
+            rawSystemExit' verbosity "cmake" ["--build", hs_tmpdir, "--config", "Release", "-j", "2"]
 
             -- Copy, not rename, to prevent cmake from linking again on the next
             -- reconfigure
@@ -109,3 +123,23 @@ tracyMode :: ConfigFlags -> Bool
 tracyMode config_flags =
   fromMaybe False $
     lookupFlagAssignment (mkFlagName "tracy") (configConfigurationsFlags config_flags)
+
+
+rawSystemExit' :: Verbosity -> FilePath -> [String] -> IO ()
+
+#if MIN_VERSION_Cabal(3,14,0)
+rawSystemExit' verb = rawSystemExit verb Nothing
+
+workingDirFlag :: BuildFlags -> Flag (SymbolicPath CWD ('Dir Pkg))
+workingDirFlag = setupWorkingDir . buildCommonFlags
+
+-- interpretSymbolicPath is an actual useful function in Cabal-3.14
+#else
+rawSystemExit' = rawSystemExit
+
+workingDirFlag :: BuildFlags -> Flag ()
+workingDirFlag _ = NoFlag
+
+interpretSymbolicPath :: Maybe CWDPath -> FilePath -> FilePath
+interpretSymbolicPath _ = id
+#endif
