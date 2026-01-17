@@ -136,6 +136,6 @@ rawSystemExit' = rawSystemExit
 workingDirFlag :: BuildFlags -> Flag ()
 workingDirFlag _ = NoFlag
 
-interpretSymbolicPath :: Maybe CWDPath -> FilePath -> FilePath
+interpretSymbolicPath :: Maybe () -> FilePath -> FilePath
 interpretSymbolicPath _ = id
 #endif
