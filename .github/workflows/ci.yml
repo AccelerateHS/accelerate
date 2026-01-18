@@ -34,9 +34,9 @@ jobs:
           - 'windows-latest'
         arch:
           - "x64"
-          - "ARM64"
-        ghc:
-          - 'latest'
+          # - "ARM64"
+        ghc:  # at time of writing (2026-01-18), deps haven't been updated for 9.14 yet
+          - '9.12'
           - '9.10'
           - '9.8'
           - '9.6'
@@ -50,7 +50,6 @@ jobs:
         exclude:
           - os: 'windows-latest'
             mode: 'debug'
-          - arch: "ARM64"
 
     steps:
       - uses: actions/checkout@v3
