@@ -68,7 +68,7 @@ jobs:
           sed -i'~' -e '/ post-if: /d' .github/actions/cache-always/action.yml
 
       - name: Set up Haskell
-        uses: haskell/actions/setup@v2
+        uses: haskell-actions/setup@v2
         id: setup-haskell
         with:
           ghc-version: ${{ matrix.ghc }}
