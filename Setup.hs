@@ -5,7 +5,7 @@
 module Main where
 
 import Distribution.Extra.Doctest
-import Distribution.PackageDescription
+import Distribution.PackageDescription hiding (Flag)
 import Distribution.Simple
 import Distribution.Simple.LocalBuildInfo
 import Distribution.Simple.Setup
