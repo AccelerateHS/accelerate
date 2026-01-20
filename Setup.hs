@@ -43,9 +43,9 @@ preConfHook args config_flags = do
   let verbosity = fromFlagOrDefault normal $ configVerbosity config_flags
 
   when (tracyMode config_flags) $ do
-    dieNoVerbosity $ "In this version of Accelerate, Tracy is disabled to \
-                     \prevent problems with cabal on Windows. The problems should\
-                     \be fixed in Cabal 3.16, which is not released yet."
+    dieNoVerbosity $ "In this version of Accelerate, Tracy is disabled to " ++
+                     "prevent problems with cabal on Windows. The problems should" ++
+                     "be fixed in Cabal 3.16, which is not released yet."
 
     yes <- doesFileExist "cbits/tracy/public/TracyClient.cpp"
     if yes
@@ -140,6 +140,6 @@ rawSystemExit' = rawSystemExit
 workingDirFlag :: BuildFlags -> Flag ()
 workingDirFlag _ = NoFlag
 
-interpretSymbolicPath :: Maybe CWDPath -> FilePath -> FilePath
+interpretSymbolicPath :: Maybe () -> FilePath -> FilePath
 interpretSymbolicPath _ = id
 #endif
