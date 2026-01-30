@@ -1,7 +1,9 @@
+{-# LANGUAGE BlockArguments        #-}
 {-# LANGUAGE CPP                   #-}
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -46,6 +48,7 @@ import Data.Array.Accelerate.Pattern
 import Data.Array.Accelerate.Smart
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Type
+import Data.Array.Accelerate.Prelude                                ( match )
 
 import Data.Function
 import Data.Monoid                                                  hiding ( (<>) )
@@ -171,3 +174,22 @@ instance (Elt a, Elt b, Elt c, Elt d, Monoid (Exp a), Monoid (Exp b), Monoid (Ex
 instance (Elt a, Elt b, Elt c, Elt d, Elt e, Monoid (Exp a), Monoid (Exp b), Monoid (Exp c), Monoid (Exp d), Monoid (Exp e)) => Monoid (Exp (a,b,c,d,e)) where
   mempty = T5 mempty mempty mempty mempty mempty
 
+
+-- Lexicographical ordering
+-- ------------------------
+
+-- | @since 1.4.0.0
+instance Semigroup (Exp Ordering) where
+  x <> y = x & match \case
+    LT_ -> LT_
+    EQ_ -> y
+    GT_ -> GT_
+
+  stimes n x = case P.compare n 0 of
+      LT -> P.errorWithoutStackTrace "stimes: Exp Ordering, negative multiplier"
+      EQ -> EQ_
+      GT -> x
+
+-- | @since 1.4.0.0
+instance Monoid (Exp Ordering) where
+  mempty = EQ_
