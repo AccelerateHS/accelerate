@@ -171,6 +171,7 @@ The Accelerate team (past and present) consists of:
   * Ben Lever ([@blever])                     <!-- 2010..2011 -->
   * Sean Seefried ([@sseefried])              <!-- 2010..2011 -->
   * Ivo Gabe de Wolff ([@ivogabe])            <!-- 2019..     -->
+  * Tom Smeding ([@tomsmeding])               <!-- 2021..2026? -->
 
 The maintainer and principal developer of Accelerate is Trevor L.
 McDonell <trevor.mcdonell@gmail.com>.
@@ -236,6 +237,7 @@ Here is a list of features that are currently missing:
   [@blever]:                    https://github.com/blever
   [@sseefried]:                 https://github.com/sseefried
   [@ivogabe]:                   https://github.com/ivogabe
+  [@tomsmeding]:                https://github.com/tomsmeding
 
   [CKLM+11]:                    https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-cuda-damp2011.pdf
   [MCKL13]:                     https://github.com/tmcdonell/tmcdonell.github.io/raw/master/papers/acc-optim-icfp2013.pdf
