@@ -202,7 +202,7 @@ flag debug
     Note that a backend may not implement (or be applicable to) all options.
     .
     The following flags control phases of the compiler. The are enabled with
-    @-f\<flag\>@ and can be reveresed with @-fno-\<flag\>@:
+    @-f\<flag\>@ and can be reversed with @-fno-\<flag\>@:
     .
       * @acc-sharing@: Enable sharing recovery of array expressions (True).
     .
