@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Module      : Data.Array.Accelerate.Trafo.Var
 -- Copyright   : [2012..2020] The Accelerate Team
