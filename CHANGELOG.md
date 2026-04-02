@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/) and the
 project adheres to the [Haskell Package Versioning
 Policy (PVP)](https://pvp.haskell.org)
 
-## [1.4.0.0] -- 2026-03-30
+## [1.4.0.0] -- 2026-04-02
 ### Added
   * Compatibility with GHC 9.12 and Cabal 3.16
   * Support for profiling with [Tracy](https://github.com/wolfpld/tracy) in `accelerate-llvm-native` (enable the `tracy` Cabal flag on `accelerate`) ([#503](https://github.com/AccelerateHS/accelerate/pull/503))
