@@ -130,7 +130,7 @@ instance Ord a => Ord (Maybe a) where
       go Nothing_  Just_{}    = LT_
       go Just_{}   Nothing_{} = GT_
 
-instance (Monoid (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
+instance (Semigroup (Exp a), Elt a) => Monoid (Exp (Maybe a)) where
   mempty = Nothing_
 
 instance (Semigroup (Exp a), Elt a) => Semigroup (Exp (Maybe a)) where
