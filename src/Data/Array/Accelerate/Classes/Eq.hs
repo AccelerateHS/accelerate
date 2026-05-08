@@ -203,7 +203,7 @@ runQ $ do
   ts <- mapM mkTup [2..16]
   return $ concat (concat [is,fs,ns,cs,ts])
 
-instance Eq sh => Eq (sh :. Int) where
+instance (Eq sh, Eq i) => Eq (sh :. i) where
   x == y = indexHead x == indexHead y && indexTail x == indexTail y
   x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
