@@ -25,6 +25,7 @@ module Data.Array.Accelerate.Control.Monad (
   -- ** Basic functions
   (=<<), (>>),
   (>=>), (<=<),
+  join,
 
   -- ** Conditional execution of monadic expressions
   when, unless,
@@ -40,7 +41,7 @@ import Data.Array.Accelerate.Language
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Smart
 
-import Prelude                                                      ( Bool, flip )
+import Prelude                                                      ( Bool, flip, id )
 
 
 -- | The 'Monad' class is used for scalar types which can be sequenced.
@@ -134,6 +135,19 @@ infixr 1 <=<
       -> (Exp a -> Exp (m c))
 (<=<) = flip (>=>)
 
+-- | The 'join' function is the conventional monad join operator. It
+-- is used to remove one level of monadic structure, projecting its
+-- bound argument into the outer level.
+--
+-- \'@'join' bss@\' can be understood as the @do@ expression
+--
+-- @
+-- do bs <- bss
+--    bs
+-- @
+--
+join :: (Monad m, Elt a, Elt (m a), Elt (m (m a))) => Exp (m (m a)) -> Exp (m a)
+join = (>>= id)
 
 -- | Conditional execution of a monadic expression
 --
