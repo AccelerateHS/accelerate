@@ -119,6 +119,15 @@ instance Eq Z where
   _ == _ = True_
   _ /= _ = False_
 
+instance (Shape sh) => Eq (Any sh) where
+  _ == _ = True_
+  _ /= _ = False_
+
+instance Eq All where
+  _ == _ = True_
+  _ /= _ = False_
+
+
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
