@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE ExplicitNamespaces  #-}
 {-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -413,7 +414,9 @@ module Data.Array.Accelerate (
   -- ---------------------------------------------------------------------------
   -- * Useful re-exports
   (.), ($), (&), flip, error, undefined, const, id, otherwise,
+#if __GLASGOW_HASKELL__ >= 904
   type (~),
+#endif
   Show, Generic, HasCallStack,
   fromString, -- -XOverloadedStrings
   fromListN,  -- -XOverloadedLists
@@ -465,7 +468,10 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as S
 import qualified Data.Array.Accelerate.Sugar.Shape                  as S
 
 import Data.Function                                                ( (&) )
-import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, id, otherwise, type (~) )
+#if __GLASGOW_HASKELL__ >= 904
+import Data.Type.Equality ( type (~) )
+#endif
+import Prelude                                                      ( (.), ($), Char, Show, flip, undefined, error, const, id, otherwise )
 
 import GHC.Exts                                                     ( fromListN, fromString )
 import GHC.Generics                                                 ( Generic )
