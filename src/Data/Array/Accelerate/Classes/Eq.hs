@@ -119,6 +119,15 @@ instance Eq Z where
   _ == _ = True_
   _ /= _ = False_
 
+instance (Shape sh) => Eq (Any sh) where
+  _ == _ = True_
+  _ /= _ = False_
+
+instance Eq All where
+  _ == _ = True_
+  _ /= _ = False_
+
+
 -- Instances of 'Prelude.Eq' don't make sense with the standard signatures as
 -- the return type is fixed to 'Bool'. This instance is provided to provide
 -- a useful error message.
@@ -203,7 +212,7 @@ runQ $ do
   ts <- mapM mkTup [2..16]
   return $ concat (concat [is,fs,ns,cs,ts])
 
-instance Eq sh => Eq (sh :. Int) where
+instance (Eq sh, Eq i) => Eq (sh :. i) where
   x == y = indexHead x == indexHead y && indexTail x == indexTail y
   x /= y = indexHead x /= indexHead y || indexTail x /= indexTail y
 
