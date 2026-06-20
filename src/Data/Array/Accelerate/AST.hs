@@ -82,7 +82,7 @@ module Data.Array.Accelerate.AST (
   ALeftHandSide, ArrayVar, ArrayVars,
 
   -- ** Scalar expressions
-  ELeftHandSide, ExpVar, ExpVars, expVars,
+  ELeftHandSide, ExpVar, ExpVars, expVars, undefs,
   Fun, OpenFun(..),
   Exp, OpenExp(..),
   Boundary(..),
@@ -513,6 +513,10 @@ expVars TupRunit         = Nil
 expVars (TupRsingle var) = Evar var
 expVars (TupRpair v1 v2) = expVars v1 `Pair` expVars v2
 
+undefs :: TypeR t -> OpenExp env aenv t
+undefs (TupRsingle tp) = Undef tp
+undefs (TupRpair t1 t2) = undefs t1 `Pair` undefs t2
+undefs TupRunit = Nil
 
 -- | Vanilla open expressions using de Bruijn indices for variables ranging
 -- over tuples of scalars and arrays of tuples. All code, except Cond, is

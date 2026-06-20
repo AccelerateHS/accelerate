@@ -337,26 +337,34 @@ simplifyOpenExp env = first getAny . cvtE
            -> (Any, [(TAG, OpenExp env aenv b)])
            -> (Any, Maybe (OpenExp env aenv b))
            -> (Any, OpenExp env aenv b)
-    caseof x@(_,x') xs@(_,xs') md@(_,md')
-      | Const _ t   <- x'
-      = Stats.caseElim "known" (yes (fromJust $ lookup t xs'))
+    caseof tag@(_,tag') xs@(_,xs') md@(_,md')
+      | Const _ t   <- tag'
+      = Stats.caseElim "known" $ yes $ fromMaybe
+        -- If the tag matches no alternative, then return the default (if present)
+        -- or undef.
+        (fromMaybe (undefs tp) md')
+        $ lookup t xs'
       | Just d      <- md'
       , []          <- xs'
       = Stats.caseElim "redundant" (yes d)
       | Just d      <- md'
       , [(_,(_,u))] <- us
       , Just Refl   <- matchOpenExp d u
-      = Stats.caseDefault "merge" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "merge" $ yes (Case tag' (map snd vs) (Just u))
       | Nothing     <- md'
       , []          <- vs
       , [(_,(_,u))] <- us
       = Stats.caseElim "overlap" (yes u)
       | Nothing     <- md'
       , [(_,(_,u))] <- us
-      = Stats.caseDefault "introduction" $ yes (Case x' (map snd vs) (Just u))
+      = Stats.caseDefault "introduction" $ yes (Case tag' (map snd vs) (Just u))
       | otherwise
-      = Case <$> x <*> xs <*> md
+      = Case <$> tag <*> xs <*> md
       where
+        tp
+          | Just d <- md' = expType d
+          | (_, x) : _ <- xs' = expType x
+          | otherwise = internalError "Empty case statement should not occur"
         (us,vs) = partition (\(n,_) -> n > 1)
                 $ Map.elems
                 . Map.fromListWith merge
