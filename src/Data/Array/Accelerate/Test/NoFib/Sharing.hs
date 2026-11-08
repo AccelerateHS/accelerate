@@ -22,9 +22,14 @@ module Data.Array.Accelerate.Test.NoFib.Sharing (
 import Data.Array.Accelerate                                        as A hiding ( exp )
 import Data.Array.Accelerate.Trafo.Sharing
 import Data.Array.Accelerate.Data.Bits                              as A
+import Data.Array.Accelerate.Representation.Type                    ( TupR(..) )
+import qualified Data.Array.Accelerate.Smart                        as Smart
 
 import Control.DeepSeq
 import Control.Exception
+import Data.List                                                    ( nub )
+import Data.Unique                                                  ( Unique )
+import System.Mem                                                   ( performGC )
 import Test.Tasty
 import Test.Tasty.ExpectedFailure
 import Test.Tasty.HUnit
@@ -50,6 +55,16 @@ test_sharing =
     , testCase  "pipe"                  $ sharingAcc test_pipe
     , testCase  "bound variables"       $ sharingAcc test_bound_variables
     , testCase  "big tuple"             $ sharingExp test_big_tuple
+    , testGroup "node identity"
+      [ testCase "Acc"                  $ checkIdentity (Smart.SmartAcc . Smart.Atag TupRunit) Smart.smartAccUnique
+      , testCase "Exp"                  $ checkIdentity (Smart.SmartExp . Smart.Tag TupRunit) Smart.smartExpUnique
+      , testCase "lazy Acc match"       $ case undefined :: Smart.SmartAcc () of
+                                            Smart.SmartAcc _ -> pure ()
+      , testCase "lazy Exp match"       $ case undefined :: Smart.SmartExp () of
+                                            Smart.SmartExp _ -> pure ()
+      , testCase "lazy Acc payload"     $ evaluate (Smart.smartAccUnique (Smart.SmartAcc undefined :: Smart.SmartAcc ())) >> pure ()
+      , testCase "lazy Exp payload"     $ evaluate (Smart.smartExpUnique (Smart.SmartExp undefined :: Smart.SmartExp ())) >> pure ()
+      ]
     , testGroup "iteration"
       [ testCase "simple"               $ sharingAcc test_iteration_simple
       , testCase "outside"              $ sharingAcc test_iteration_outside
@@ -73,6 +88,14 @@ test_sharing =
     sharingExp exp =
       catch (rnf (convertExp exp) `seq` pure ())
             (\(e :: SomeException) -> assertFailure (show e))
+
+    checkIdentity :: (Int -> a) -> (a -> Unique) -> Assertion
+    checkIdentity make identity = do
+      nodes <- mapM (evaluate . make) [1..32]
+      names <- mapM (evaluate . identity) nodes
+      assertBool "different nodes have different identities" (P.length (nub names) P.== P.length names)
+      performGC
+      assertBool "node identities survive GC" (names P.== P.map identity nodes)
 
 
 --------------------------------------------------------------------------------
