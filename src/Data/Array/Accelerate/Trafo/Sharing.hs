@@ -700,7 +700,7 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) formatTypeR matchTypeR tp i lyt)
       | otherwise                                    = internalError (unlined @[] builder) msg
       where
-        ctx i = bformat ("shared 'Exp' tree with node identity " % formatNodeHeight % "; i=" % int) se i
+        ctx = bformat ("shared 'Exp' tree with node identity " % formatNodeHeight % "; i=" % int) se
         msg   =
           [ if null env'
                then bformat ("cyclic definition of a value of type 'Exp' (sa=" % formatNodeHeight % ")") se
