@@ -305,6 +305,9 @@ import GHC.TypeLits
 --
 newtype Acc a = Acc (SmartAcc (Sugar.ArraysR a))
 
+-- Never use record updates: changing the payload must allocate a fresh identity.
+-- Rebuild through 'SmartAcc' instead.
+--
 data SmartAcc a = SmartAcc'
     { preSmartAcc    :: PreSmartAcc SmartAcc SmartExp a
     , smartAccUnique :: !Unique
@@ -489,6 +492,10 @@ data PreSmartAcc acc exp as where
 -- unsupported.
 --
 newtype Exp t = Exp (SmartExp (EltR t))
+
+-- Never use record updates: changing the payload must allocate a fresh identity.
+-- Rebuild through 'SmartExp' instead.
+--
 data SmartExp t = SmartExp'
     { preSmartExp    :: PreSmartExp SmartAcc SmartExp t
     , smartExpUnique :: !Unique

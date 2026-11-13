@@ -73,6 +73,7 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 import Control.Applicative                                          hiding ( Const )
 import Control.Monad.Fix
 import Control.Monad.ST                                             ( ST, runST )
+import Control.Monad.ST.Unsafe                                      ( unsafeIOToST )
 import Data.Function                                                ( on )
 import Data.Hashable
 import Data.Kind                                                    ( Type )
@@ -3069,6 +3070,12 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 -- leaves representing free variables. The occurrence tables are local to this conversion;
 -- their mutable state is confined to 'runST'.
 --
+-- There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
+-- variables to be shared if any of them is used more than once. If construction of one is
+-- duplicated by the compiler (see 'withUnique'), the environment for de Bruijn conversion will
+-- have a duplicate entry, and hence, be of the wrong size, which is fatal. (The 'buildInitialEnv*'
+-- functions will already bail out.)
+--
 {-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc
     :: HasCallStack
@@ -3133,10 +3140,10 @@ recoverSharingSeq config seq
 -- ---------
 
 traceLine :: Builder -> Builder -> ST s ()
-traceLine header msg = return $! tracePure header msg ()
+traceLine header msg = unsafeIOToST $ Debug.traceM Debug.dump_sharing (builder % ": " % builder) header msg
 
 traceChunk :: Builder -> Builder -> ST s ()
-traceChunk header msg = return $! Debug.trace Debug.dump_sharing (bformat (builder % ":\n" % indented 4 builder) header msg) ()
+traceChunk header msg = unsafeIOToST $ Debug.traceM Debug.dump_sharing (builder % ":\n" % indented 4 builder) header msg
 
 tracePure :: Builder -> Builder -> a -> a
 tracePure header msg = Debug.trace Debug.dump_sharing (bformat (builder % ": " % builder) header msg)
