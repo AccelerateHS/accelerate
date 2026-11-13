@@ -1,5 +1,4 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE FlexibleInstances   #-}
 {-# LANGUAGE GADTs               #-}
@@ -9,7 +8,6 @@
 {-# LANGUAGE PatternGuards       #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving  #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE TypeApplications    #-}
 {-# LANGUAGE TypeFamilies        #-}
@@ -60,6 +58,7 @@ import Data.Array.Accelerate.Representation.Stencil
 import Data.Array.Accelerate.Representation.Tag
 import Data.Array.Accelerate.Representation.Type
 import Data.Array.Accelerate.Smart                                  as Smart
+import Data.Array.Accelerate.Smart.Unique                           ( withUnique )
 import Data.Array.Accelerate.Sugar.Array                            hiding ( Array, ArraysR, (!!) )
 import Data.Array.Accelerate.Sugar.Elt
 import Data.Array.Accelerate.Trafo.Config
@@ -73,21 +72,23 @@ import qualified Data.Array.Accelerate.Sugar.Array                  as Sugar
 
 import Control.Applicative                                          hiding ( Const )
 import Control.Monad.Fix
+import Control.Monad.ST                                             ( ST, runST )
+import Control.Monad.ST.Unsafe                                      ( unsafeIOToST )
 import Data.Function                                                ( on )
 import Data.Hashable
+import Data.Kind                                                    ( Type )
 import Data.List                                                    ( elemIndex, findIndex, groupBy, partition )
 import qualified Data.List.NonEmpty                                 as NE
 import Data.Maybe
 import Data.Monoid                                                  ( Any(..) )
 import Data.Text.Lazy.Builder
+import Data.Unique                                                  ( Unique, hashUnique )
 import Formatting
 import Lens.Micro                                                   ( over, mapped, _1, _2 )
-import System.IO.Unsafe                                             ( unsafePerformIO )
-import System.Mem.StableName
 import qualified Data.HashMap.Strict                                as Map
 import qualified Data.HashSet                                       as Set
-import qualified Data.HashTable.IO                                  as Hash
-import qualified Data.IntMap                                        as IntMap
+import qualified Data.HashTable.Class                               as Hash
+import qualified Data.HashTable.ST.Basic                            as Basic
 import qualified Formatting.Buildable                               as F
 import Prelude                                                      hiding ( unlines )
 
@@ -262,12 +263,12 @@ convertSharingAcc _ alyt aenv (ScopedAcc lams (AvarSharing sa repr))
   = avarsIn AST.OpenAcc
   $ prjIdx (bformat (builder % "; i = " % int) ctxt i) formatArraysR matchArraysR repr i alyt
   | null aenv'
-  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashStableNameHeight sa) ++ ")"
+  = error $ "Cyclic definition of a value of type 'Acc' (sa = " ++ show (hashNodeHeight sa) ++ ")"
   | otherwise
   = internalError builder err
   where
     aenv' = lams ++ aenv
-    ctxt  = bformat ("shared 'Acc' tree with stable name " % formatStableNameHeight) sa
+    ctxt  = bformat ("shared 'Acc' tree with node identity " % formatNodeHeight) sa
     err   = bformat ("inconsistent valuation @ " % builder % ";\n  aenv = " % list formatStableSharingAcc) ctxt aenv'
 
 convertSharingAcc config alyt aenv (ScopedAcc lams (AletSharing sa@(StableSharingAcc (_ :: StableAccName as) boundAcc) bodyAcc))
@@ -700,11 +701,11 @@ convertSharingExp config lyt alyt env aenv exp@(ScopedExp lams _) = cvt exp
       | Just i <- findIndex (matchStableExp se) env' = expVars (prjIdx (ctx i) formatTypeR matchTypeR tp i lyt)
       | otherwise                                    = internalError (unlined @[] builder) msg
       where
-        ctx i = bformat ("shared 'Exp' tree with stable name " % formatStableNameHeight % "; i=" % int) se i
+        ctx = bformat ("shared 'Exp' tree with node identity " % formatNodeHeight % "; i=" % int) se
         msg   =
           [ if null env'
-               then bformat ("cyclic definition of a value of type 'Exp' (sa=" % formatStableNameHeight % ")") se
-               else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % formatStableNameHeight % "; env=" % list formatStableSharingExp % ")") se env'
+               then bformat ("cyclic definition of a value of type 'Exp' (sa=" % formatNodeHeight % ")") se
+               else bformat ("inconsistent valuation at shared 'Exp' tree (sa=" % formatNodeHeight % "; env=" % list formatStableSharingExp % ")") se env'
           , ""
           , "Note that this error usually arises due to the presence of nested data"
           , "parallelism; when a parallel computation attempts to initiate new parallel"
@@ -976,14 +977,13 @@ convertSharingStencilFun2 config alyt aenv sR1 sR2 stencil =
 --   tree /with/ sharing.  Consequently, the occurrence count is that in the tree with sharing
 --   as well.
 --
--- During computation of the occurrences, the tree is annotated with stable names on every node
+-- During computation of the occurrences, the tree is annotated with node identities on every node
 -- using 'AccSharing' constructors and all but the first occurrence of shared subtrees are pruned
--- using 'AvarSharing' constructors (see 'SharingAcc' below).  This phase is impure as it is based
--- on stable names.
+-- using 'AvarSharing' constructors (see 'SharingAcc' below). Identities are read from the
+-- 'SmartAcc' and 'SmartExp' nodes and are preserved when the garbage collector copies a node.
 --
--- We use a hash table (instead of 'Data.Map') as computing stable names forces us to live in IO
--- anyway.  Once, the computation of occurrence counts is complete, we freeze the hash table into
--- a 'Data.Map'.
+-- We use a mutable hash table to count occurrences efficiently. Once the computation of
+-- occurrence counts is complete, we freeze the hash table into an immutable hash map.
 --
 -- (Implemented by 'makeOccMap*'.)
 --
@@ -1003,7 +1003,7 @@ convertSharingStencilFun2 config alyt aenv sR1 sR2 stencil =
 --
 -- We recover sharing for each expression (including function bodies) independently of any other
 -- expression — i.e., we cannot share scalar expressions across array computations.  Hence, during
--- Phase One, we mark all scalar expression nodes with a stable name and compute one occurrence map
+-- Phase One, we mark all scalar expression nodes with their identity and compute one occurrence map
 -- for every scalar expression (including functions) that occurs in an array computation.  These
 -- occurrence maps are added to the root of scalar expressions using 'RootExp'.
 --
@@ -1018,62 +1018,57 @@ convertSharingStencilFun2 config alyt aenv sR1 sR2 stencil =
 -- the /level/ of each variable at its binding occurrence.  The level at the root of the AST is 0
 -- and increases by one with each lambda on each path through the AST.
 
--- Stable names
--- ------------
+-- Node identities
+-- ---------------
 
--- Opaque stable name for AST nodes — used to key the occurrence map.
+-- Opaque identity for AST nodes — used to key the occurrence map.
+-- The phantom parameter distinguishes array computations from scalar expressions.
 --
-data StableASTName c where
-  StableASTName :: StableName (c t) -> StableASTName c
+newtype ASTName (c :: Type -> Type) = ASTName Unique
+  deriving Eq
 
-instance Show (StableASTName c) where
-  show (StableASTName sn) = show (hashStableName sn)
+instance Show (ASTName c) where
+  show (ASTName sn) = show (hashUnique sn)
 
-instance Eq (StableASTName c) where
-  StableASTName sn1 == StableASTName sn2 = eqStableName sn1 sn2
+instance Hashable (ASTName c) where
+  hashWithSalt s (ASTName sn) = hashWithSalt s (hashUnique sn)
 
-instance Hashable (StableASTName c) where
-  hashWithSalt s (StableASTName sn) = hashWithSalt s sn
+formatUnique :: Format r (Unique -> r)
+formatUnique = later $ bformat int . hashUnique
 
-makeStableAST :: c t -> IO (StableName (c t))
-makeStableAST e = e `seq` makeStableName e
-
-formatStableName :: Format r (StableName a -> r)
-formatStableName = later $ bformat int . hashStableName
-
--- Stable name for an AST node including the height of the AST representing the array computation.
+-- Node identity and height.
 --
-data StableNameHeight t = StableNameHeight (StableName t) Int
+data NodeHeight t = NodeHeight Unique Int
 
-instance Eq (StableNameHeight t) where
-  (StableNameHeight sn1 _) == (StableNameHeight sn2 _) = eqStableName sn1 sn2
+instance Eq (NodeHeight t) where
+  (NodeHeight sn1 _) == (NodeHeight sn2 _) = sn1 == sn2
 
-higherSNH :: StableNameHeight t1 -> StableNameHeight t2 -> Bool
-StableNameHeight _ h1 `higherSNH` StableNameHeight _ h2 = h1 > h2
+higherNH :: NodeHeight t1 -> NodeHeight t2 -> Bool
+NodeHeight _ h1 `higherNH` NodeHeight _ h2 = h1 > h2
 
-hashStableNameHeight :: StableNameHeight t -> Int
-hashStableNameHeight (StableNameHeight sn _) = hashStableName sn
+hashNodeHeight :: NodeHeight t -> Int
+hashNodeHeight (NodeHeight sn _) = hashUnique sn
 
-formatStableNameHeight :: Format r (StableNameHeight t -> r)
-formatStableNameHeight = later $ \case
-  StableNameHeight sn _ -> bformat formatStableName sn
+formatNodeHeight :: Format r (NodeHeight t -> r)
+formatNodeHeight = later $ \case
+  NodeHeight sn _ -> bformat formatUnique sn
 
 -- Mutable occurrence map
 -- ----------------------
 
--- Hash table keyed on the stable names of array computations.
+-- Hash table keyed on AST node identities.
 --
-type HashTable key val = Hash.BasicHashTable key val
-type ASTHashTable c v  = HashTable (StableASTName c) v
+type HashTable s key val = Basic.HashTable s key val
+type ASTHashTable s c v  = HashTable s (ASTName c) v
 
 -- Mutable hashtable version of the occurrence map, which associates each AST node with an
 -- occurrence count and the height of the AST.
 --
-type OccMapHash c = ASTHashTable c (Int, Int)
+type OccMapHash s c = ASTHashTable s c (Int, Int)
 
 -- Create a new hash table keyed on AST nodes.
 --
-newASTHashTable :: IO (ASTHashTable c v)
+newASTHashTable :: ST s (ASTHashTable s c v)
 newASTHashTable = Hash.new
 
 -- Enter one AST node occurrence into an occurrence map.  Returns 'Just h' if this is a repeated
@@ -1083,7 +1078,7 @@ newASTHashTable = Hash.new
 -- otherwise, the height will be *extracted* from the occurrence map.  In the latter case, this
 -- function yields the AST height.
 --
-enterOcc :: OccMapHash c -> StableASTName c -> Int -> IO (Maybe Int)
+enterOcc :: OccMapHash s c -> ASTName c -> Int -> ST s (Maybe Int)
 enterOcc occMap sa height
   = Hash.mutate occMap sa
   $ \case
@@ -1094,58 +1089,51 @@ enterOcc occMap sa height
 -- Immutable occurrence map
 -- ------------------------
 
--- Immutable version of the occurrence map (storing the occurrence count only, not the height).  We
--- use the 'StableName' hash to index an 'IntMap' and disambiguate 'StableName's with identical
--- hashes explicitly, storing them in a list in the 'IntMap'.
+-- Immutable version of the occurrence map (storing the occurrence count only, not the height).
+-- Keys compare the full 'Unique', so hash collisions do not merge distinct nodes.
 --
-type OccMap c = IntMap.IntMap [(StableASTName c, Int)]
+type OccMap c = Map.HashMap (ASTName c) Int
 
 -- Turn a mutable into an immutable occurrence map.
 --
-freezeOccMap :: OccMapHash c -> IO (OccMap c)
+freezeOccMap :: OccMapHash s c -> ST s (OccMap c)
 freezeOccMap oc
   = do
       ocl <- Hash.toList oc
       traceChunk "OccMap" (fromString (show ocl))
 
-      return . IntMap.fromList
-             . map (\kvs -> (key (NE.head kvs), NE.toList kvs))
-             . NE.groupBy sameKey
-             . map dropHeight
-             $ ocl
+      return . Map.fromList . map dropHeight $ ocl
   where
-    key (StableASTName sn, _) = hashStableName sn
-    sameKey kv1 kv2           = key kv1 == key kv2
-    dropHeight (k, (cnt, _))  = (k, cnt)
+    dropHeight (k, (cnt, _)) = (k, cnt)
 
--- Look up the occurrence map keyed by array computations using a stable name.  If the key does
+-- Look up the occurrence map using a node identity. If the key does
 -- not exist in the map, return an occurrence count of '1'.
 --
-lookupWithASTName :: OccMap c -> StableASTName c -> Int
-lookupWithASTName oc sa@(StableASTName sn)
-  = fromMaybe 1 $ IntMap.lookup (hashStableName sn) oc >>= Prelude.lookup sa
+lookupWithASTName :: OccMap c -> ASTName c -> Int
+lookupWithASTName oc sa
+  = fromMaybe 1 $ Map.lookup sa oc
 
 -- Look up the occurrence map keyed by array computations using a sharing array computation.  If an
 -- the key does not exist in the map, return an occurrence count of '1'.
 --
 lookupWithSharingAcc :: OccMap SmartAcc -> StableSharingAcc -> Int
-lookupWithSharingAcc oc (StableSharingAcc (StableNameHeight sn _) _)
-  = lookupWithASTName oc (StableASTName sn)
+lookupWithSharingAcc oc (StableSharingAcc (NodeHeight sn _) _)
+  = lookupWithASTName oc (ASTName sn)
 
 -- Look up the occurrence map keyed by scalar expressions using a sharing expression.  If an
 -- the key does not exist in the map, return an occurrence count of '1'.
 --
 lookupWithSharingExp :: OccMap SmartExp -> StableSharingExp -> Int
-lookupWithSharingExp oc (StableSharingExp (StableNameHeight sn _) _)
-  = lookupWithASTName oc (StableASTName sn)
+lookupWithSharingExp oc (StableSharingExp (NodeHeight sn _) _)
+  = lookupWithASTName oc (ASTName sn)
 
 
 -- Stable 'SmartAcc' nodes
 -- ------------------
 
--- Stable name for 'SmartAcc' nodes including the height of the AST.
+-- Node identity for 'SmartAcc' nodes including the height of the AST.
 --
-type StableAccName t = StableNameHeight (SmartAcc t)
+type StableAccName t = NodeHeight (SmartAcc t)
 
 -- Interleave sharing annotations into an array computation AST.  Subtrees can be marked as being
 -- represented by variable (binding a shared subtree) using 'AvarSharing' and as being prefixed by
@@ -1179,7 +1167,7 @@ instance HasArraysR ScopedAcc where
   arraysR (ScopedAcc _ acc) = Smart.arraysR acc
 
 
--- Stable name for an array computation associated with its sharing-annotated version.
+-- Node identity for an array computation associated with its sharing-annotated version.
 --
 data StableSharingAcc where
   StableSharingAcc :: StableAccName arrs
@@ -1187,37 +1175,37 @@ data StableSharingAcc where
                    -> StableSharingAcc
 
 instance Show StableSharingAcc where
-  show (StableSharingAcc sn _) = show (hashStableNameHeight sn)
+  show (StableSharingAcc sn _) = show (hashNodeHeight sn)
 
 instance Eq StableSharingAcc where
-  StableSharingAcc (StableNameHeight sn1 _) _ == StableSharingAcc (StableNameHeight sn2 _) _
-    = eqStableName sn1 sn2
+  StableSharingAcc (NodeHeight sn1 _) _ == StableSharingAcc (NodeHeight sn2 _) _
+    = sn1 == sn2
 
 formatStableSharingAcc :: Format r (StableSharingAcc -> r)
 formatStableSharingAcc = later $ \case
-  StableSharingAcc sn _ -> bformat formatStableNameHeight sn
+  StableSharingAcc sn _ -> bformat formatNodeHeight sn
 
 higherSSA :: StableSharingAcc -> StableSharingAcc -> Bool
-StableSharingAcc sn1 _ `higherSSA` StableSharingAcc sn2 _ = sn1 `higherSNH` sn2
+StableSharingAcc sn1 _ `higherSSA` StableSharingAcc sn2 _ = sn1 `higherNH` sn2
 
--- Test whether the given stable names matches an array computation with sharing.
+-- Test whether the given identity matches an array computation with sharing.
 --
 matchStableAcc :: StableAccName arrs -> StableSharingAcc -> Bool
-matchStableAcc (StableNameHeight sn1 _) (StableSharingAcc (StableNameHeight sn2 _) _)
-  = eqStableName sn1 sn2
+matchStableAcc (NodeHeight sn1 _) (StableSharingAcc (NodeHeight sn2 _) _)
+  = sn1 == sn2
 
 -- Dummy entry for environments to be used for unused variables.
 --
 {-# NOINLINE noStableAccName #-}
 noStableAccName :: StableAccName arrs
-noStableAccName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
+noStableAccName = withUnique $ \u -> NodeHeight u 0
 
 -- Stable 'Exp' nodes
 -- ------------------
 
--- Stable name for 'Exp' nodes including the height of the AST.
+-- Node identity for 'Exp' nodes including the height of the AST.
 --
-type StableExpName t = StableNameHeight (SmartExp t)
+type StableExpName t = NodeHeight (SmartExp t)
 
 -- Interleave sharing annotations into a scalar expressions AST in the same manner as 'SharingAcc'
 -- do for array computations.
@@ -1256,35 +1244,35 @@ instance HasTypeR ScopedExp where
 --
 data RootExp t = RootExp (OccMap SmartExp) (UnscopedExp t)
 
--- Stable name for an expression associated with its sharing-annotated version.
+-- Node identity for an expression associated with its sharing-annotated version.
 --
 data StableSharingExp where
   StableSharingExp :: StableExpName t -> SharingExp ScopedAcc ScopedExp t -> StableSharingExp
 
 instance Show StableSharingExp where
-  show (StableSharingExp sn _) = show (hashStableNameHeight sn)
+  show (StableSharingExp sn _) = show (hashNodeHeight sn)
 
 instance Eq StableSharingExp where
-  StableSharingExp (StableNameHeight sn1 _) _ == StableSharingExp (StableNameHeight sn2 _) _ =
-    eqStableName sn1 sn2
+  StableSharingExp (NodeHeight sn1 _) _ == StableSharingExp (NodeHeight sn2 _) _ =
+    sn1 == sn2
 
 formatStableSharingExp :: Format r (StableSharingExp -> r)
 formatStableSharingExp = later $ \case
-  StableSharingExp sn _ -> bformat formatStableNameHeight sn
+  StableSharingExp sn _ -> bformat formatNodeHeight sn
 
 higherSSE :: StableSharingExp -> StableSharingExp -> Bool
-StableSharingExp sn1 _ `higherSSE` StableSharingExp sn2 _ = sn1 `higherSNH` sn2
+StableSharingExp sn1 _ `higherSSE` StableSharingExp sn2 _ = sn1 `higherNH` sn2
 
--- Test whether the given stable names matches an expression with sharing.
+-- Test whether the given identity matches an expression with sharing.
 --
 matchStableExp :: StableExpName t -> StableSharingExp -> Bool
-matchStableExp (StableNameHeight sn1 _) (StableSharingExp (StableNameHeight sn2 _) _) = eqStableName sn1 sn2
+matchStableExp (NodeHeight sn1 _) (StableSharingExp (NodeHeight sn2 _) _) = sn1 == sn2
 
 -- Dummy entry for environments to be used for unused variables.
 --
 {-# NOINLINE noStableExpName #-}
 noStableExpName :: StableExpName t
-noStableExpName = unsafePerformIO $ StableNameHeight <$> makeStableName undefined <*> pure 0
+noStableExpName = withUnique $ \u -> NodeHeight u 0
 
 
 {--
@@ -1353,7 +1341,7 @@ matchStableSeq sn1 (StableSharingSeq sn2 _)
 -- Occurrence counting
 -- ===================
 
--- Compute the 'SmartAcc' occurrence map, marks all nodes (both 'Seq' and 'Exp' nodes) with stable names,
+-- Compute the 'SmartAcc' occurrence map, mark array and scalar nodes with their identities,
 -- and drop repeated occurrences of shared 'SmartAcc' and 'Exp' subtrees (Phase One).
 --
 -- We compute a single 'SmartAcc' occurrence map for the whole AST, but one 'Exp' occurrence map for each
@@ -1383,7 +1371,7 @@ makeOccMapAcc
     => Config
     -> Level
     -> SmartAcc arrs
-    -> IO (UnscopedAcc arrs, OccMap SmartAcc)
+    -> ST s (UnscopedAcc arrs, OccMap SmartAcc)
 makeOccMapAcc config lvl acc = do
   traceLine "makeOccMapAcc" "Enter"
   accOccMap             <- newASTHashTable
@@ -1394,12 +1382,12 @@ makeOccMapAcc config lvl acc = do
 
 
 makeOccMapSharingAcc
-    :: HasCallStack
+    :: forall s arrs. HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level
     -> SmartAcc arrs
-    -> IO (UnscopedAcc arrs, Int)
+    -> ST s (UnscopedAcc arrs, Int)
 makeOccMapSharingAcc config accOccMap = traverseAcc
   where
     traverseFun1
@@ -1407,7 +1395,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         => Level
         -> TypeR a
         -> (SmartExp a -> SmartExp b)
-        -> IO (SmartExp a -> RootExp b, Int)
+        -> ST s (SmartExp a -> RootExp b, Int)
     traverseFun1 = makeOccMapFun1 config accOccMap
 
     traverseFun2
@@ -1416,7 +1404,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         -> TypeR a
         -> TypeR b
         -> (SmartExp a -> SmartExp b -> SmartExp c)
-        -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
+        -> ST s (SmartExp a -> SmartExp b -> RootExp c, Int)
     traverseFun2 = makeOccMapFun2 config accOccMap
 
     traverseAfun1
@@ -1424,14 +1412,14 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         => Level
         -> ArraysR a
         -> (SmartAcc a -> SmartAcc b)
-        -> IO (SmartAcc a -> UnscopedAcc b, Int)
+        -> ST s (SmartAcc a -> UnscopedAcc b, Int)
     traverseAfun1 = makeOccMapAfun1 config accOccMap
 
     traverseExp
       :: HasCallStack
       => Level
       -> SmartExp e
-      -> IO (RootExp e, Int)
+      -> ST s (RootExp e, Int)
     traverseExp = makeOccMapExp config accOccMap
 
     traverseBoundary
@@ -1439,7 +1427,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         => Level
         -> ShapeR sh
         -> PreBoundary SmartAcc SmartExp (Array sh e)
-        -> IO (PreBoundary UnscopedAcc RootExp (Array sh e), Int)
+        -> ST s (PreBoundary UnscopedAcc RootExp (Array sh e), Int)
     traverseBoundary lvl shr bndy =
       case bndy of
         Clamp      -> return (Clamp, 0)
@@ -1459,16 +1447,16 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         :: forall arrs. HasCallStack
         => Level
         -> SmartAcc arrs
-        -> IO (UnscopedAcc arrs, Int)
+        -> ST s (UnscopedAcc arrs, Int)
     traverseAcc lvl acc@(SmartAcc pacc)
       = mfix $ \ ~(_, height) -> do
-          -- Compute stable name and enter it into the occurrence map
+          -- Read the node identity and enter it into the occurrence map
           --
-          sn                         <- makeStableAST acc
-          heightIfRepeatedOccurrence <- enterOcc accOccMap (StableASTName sn) height
+          let sn = smartAccUnique acc
+          heightIfRepeatedOccurrence <- enterOcc accOccMap (ASTName sn) height
 
           traceLine (bformat formatPreAccOp pacc) $ do
-            let hash = hashStableName sn
+            let hash = hashUnique sn
             case heightIfRepeatedOccurrence of
               Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
               Nothing     -> bformat ("first occurrence (sn = " % int % ")") hash
@@ -1478,14 +1466,14 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
           -- In case of a repeated occurrence, the height comes from the occurrence map; otherwise
           -- it is computed by the traversal function passed in 'newAcc'. See also 'enterOcc'.
           --
-          let reconstruct :: IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
-                          -> IO (UnscopedAcc arrs, Int)
+          let reconstruct :: ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+                          -> ST s (UnscopedAcc arrs, Int)
               reconstruct newAcc
                 = case heightIfRepeatedOccurrence of
                     Just height | acc_sharing `member` options config
-                      -> return (UnscopedAcc [] (AvarSharing (StableNameHeight sn height) (Smart.arraysR pacc)), height)
+                      -> return (UnscopedAcc [] (AvarSharing (NodeHeight sn height) (Smart.arraysR pacc)), height)
                     _ -> do (acc, height) <- newAcc
-                            return (UnscopedAcc [] (AccSharing (StableNameHeight sn height) acc), height)
+                            return (UnscopedAcc [] (AccSharing (NodeHeight sn height) acc), height)
 
           reconstruct $ case pacc of
             Atag repr i                 -> return (Atag repr i, 0)           -- height is 0!
@@ -1585,7 +1573,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
         travA :: HasCallStack
               => (UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
               -> SmartAcc arrs'
-              -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+              -> ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
@@ -1595,7 +1583,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
                => (RootExp b -> UnscopedAcc arrs' -> PreSmartAcc UnscopedAcc RootExp arrs)
                -> SmartExp b
                -> SmartAcc arrs'
-               -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+               -> ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travEA c exp acc
           = do
               (exp', h1) <- traverseExp lvl exp
@@ -1610,7 +1598,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
             -> (SmartExp b -> SmartExp c -> SmartExp d)
             -> SmartExp e
             -> SmartAcc arrs'
-            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+            -> ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2EA c t1 t2 fun exp acc
           = do
               (fun', h1) <- traverseFun2 lvl t1 t2 fun
@@ -1626,7 +1614,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
             -> (SmartExp b -> SmartExp c -> SmartExp d)
             -> Maybe (SmartExp e)
             -> SmartAcc arrs'
-            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+            -> ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2MEA c t1 t2 fun exp acc
           = do
               (fun', h1) <- traverseFun2 lvl t1 t2 fun
@@ -1634,7 +1622,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
               (acc', h3) <- traverseAcc lvl acc
               return (c fun' exp' acc', h1 `max` h2 `max` h3 + 1)
 
-        travME :: HasCallStack => Maybe (SmartExp t) -> IO (Maybe (RootExp t), Int)
+        travME :: HasCallStack => Maybe (SmartExp t) -> ST s (Maybe (RootExp t), Int)
         travME Nothing  = return (Nothing, 0)
         travME (Just e) = do
           (e', c) <- traverseExp lvl e
@@ -1648,7 +1636,7 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
             -> (SmartExp b -> SmartExp c -> SmartExp d)
             -> SmartAcc arrs1
             -> SmartAcc arrs2
-            -> IO (PreSmartAcc UnscopedAcc RootExp arrs, Int)
+            -> ST s (PreSmartAcc UnscopedAcc RootExp arrs, Int)
         travF2A2 c t1 t2 fun acc1 acc2
           = do
               (fun' , h1) <- traverseFun2 lvl t1 t2 fun
@@ -1659,16 +1647,18 @@ makeOccMapSharingAcc config accOccMap = traverseAcc
 makeOccMapAfun1
     :: HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level
     -> ArraysR a
     -> (SmartAcc a -> SmartAcc b)
-    -> IO (SmartAcc a -> UnscopedAcc b, Int)
+    -> ST s (SmartAcc a -> UnscopedAcc b, Int)
 makeOccMapAfun1 config accOccMap lvl repr f = do
   let x = SmartAcc (Atag repr lvl)
   --
-  (UnscopedAcc [] body, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) (f x)
-  return (const (UnscopedAcc [lvl] body), height)
+  (acc, height) <- makeOccMapSharingAcc config accOccMap (lvl+1) (f x)
+  case acc of
+    UnscopedAcc [] body -> return (const (UnscopedAcc [lvl] body), height)
+    _                  -> internalError "makeOccMapAfun1: unexpected lambda-bound variables"
 
 {--
 makeOccMapAfun2 :: (Arrays a, Arrays b, Typeable c)
@@ -1707,20 +1697,20 @@ makeOccMapAfun3 config accOccMap lvl f = do
 makeOccMapExp
     :: HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level
     -> SmartExp e
-    -> IO (RootExp e, Int)
+    -> ST s (RootExp e, Int)
 makeOccMapExp config accOccMap lvl = makeOccMapRootExp config accOccMap lvl []
 
 makeOccMapFun1
     :: HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level
     -> TypeR a
     -> (SmartExp a -> SmartExp b)
-    -> IO (SmartExp a -> RootExp b, Int)
+    -> ST s (SmartExp a -> RootExp b, Int)
 makeOccMapFun1 config accOccMap lvl tp f = do
   let x = SmartExp (Tag tp lvl)
   --
@@ -1730,12 +1720,12 @@ makeOccMapFun1 config accOccMap lvl tp f = do
 makeOccMapFun2
     :: HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level
     -> TypeR a
     -> TypeR b
     -> (SmartExp a -> SmartExp b -> SmartExp c)
-    -> IO (SmartExp a -> SmartExp b -> RootExp c, Int)
+    -> ST s (SmartExp a -> SmartExp b -> RootExp c, Int)
 makeOccMapFun2 config accOccMap lvl t1 t2 f = do
   let x = SmartExp (Tag t1 (lvl+1))
       y = SmartExp (Tag t2 lvl)
@@ -1744,13 +1734,13 @@ makeOccMapFun2 config accOccMap lvl t1 t2 f = do
   return (\_ _ -> body, height)
 
 makeOccMapStencil1
-    :: forall sh a b stencil. HasCallStack
+    :: forall s sh a b stencil. HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> R.StencilR sh a stencil
     -> Level
     -> (SmartExp stencil -> SmartExp b)
-    -> IO (SmartExp stencil -> RootExp b, Int)
+    -> ST s (SmartExp stencil -> RootExp b, Int)
 makeOccMapStencil1 config accOccMap s lvl stencil = do
   let x = SmartExp (Tag (R.stencilR s) lvl)
   --
@@ -1758,14 +1748,14 @@ makeOccMapStencil1 config accOccMap s lvl stencil = do
   return (const body, height)
 
 makeOccMapStencil2
-    :: forall sh a b c stencil1 stencil2. HasCallStack
+    :: forall s sh a b c stencil1 stencil2. HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> R.StencilR sh a stencil1
     -> R.StencilR sh b stencil2
     -> Level
     -> (SmartExp stencil1 -> SmartExp stencil2 -> SmartExp c)
-    -> IO (SmartExp stencil1 -> SmartExp stencil2 -> RootExp c, Int)
+    -> ST s (SmartExp stencil1 -> SmartExp stencil2 -> RootExp c, Int)
 makeOccMapStencil2 config accOccMap sR1 sR2 lvl stencil = do
   let x = SmartExp (Tag (R.stencilR sR1) (lvl+1))
       y = SmartExp (Tag (R.stencilR sR2) lvl)
@@ -1783,42 +1773,45 @@ makeOccMapStencil2 config accOccMap sR1 sR2 lvl stencil = do
 makeOccMapRootExp
     :: HasCallStack
     => Config
-    -> OccMapHash SmartAcc
+    -> OccMapHash s SmartAcc
     -> Level                            -- The level of currently bound scalar variables
     -> [Int]                            -- The tags of newly introduced free scalar variables in this expression
     -> SmartExp e
-    -> IO (RootExp e, Int)
+    -> ST s (RootExp e, Int)
 makeOccMapRootExp config accOccMap lvl fvs exp = do
   traceLine "makeOccMapRootExp" "Enter"
   expOccMap                     <- newASTHashTable
-  (UnscopedExp [] exp', height) <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
-  frozenExpOccMap               <- freezeOccMap expOccMap
-  traceLine "makeOccMapRootExp" "Exit"
-  return (RootExp frozenExpOccMap (UnscopedExp fvs exp'), height)
+  (unscopedExp, height)         <- makeOccMapSharingExp config accOccMap expOccMap lvl exp
+  case unscopedExp of
+    UnscopedExp [] exp' -> do
+      frozenExpOccMap <- freezeOccMap expOccMap
+      traceLine "makeOccMapRootExp" "Exit"
+      return (RootExp frozenExpOccMap (UnscopedExp fvs exp'), height)
+    _ -> internalError "makeOccMapRootExp: unexpected lambda-bound variables"
 
 
 -- Generate sharing information for an open scalar expression.
 --
 makeOccMapSharingExp
-    :: HasCallStack
+    :: forall s e. HasCallStack
     => Config
-    -> OccMapHash SmartAcc
-    -> OccMapHash SmartExp
+    -> OccMapHash s SmartAcc
+    -> OccMapHash s SmartExp
     -> Level                            -- The level of currently bound variables
     -> SmartExp e
-    -> IO (UnscopedExp e, Int)
+    -> ST s (UnscopedExp e, Int)
 makeOccMapSharingExp config accOccMap expOccMap = travE
   where
-    travE :: forall a. HasCallStack => Level -> SmartExp a -> IO (UnscopedExp a, Int)
+    travE :: forall a. HasCallStack => Level -> SmartExp a -> ST s (UnscopedExp a, Int)
     travE lvl exp@(SmartExp pexp)
       = mfix $ \ ~(_, height) -> do
-          -- Compute stable name and enter it into the occurrence map
+          -- Read the node identity and enter it into the occurrence map
           --
-          sn                         <- makeStableAST exp
-          heightIfRepeatedOccurrence <- enterOcc expOccMap (StableASTName sn) height
+          let sn = smartExpUnique exp
+          heightIfRepeatedOccurrence <- enterOcc expOccMap (ASTName sn) height
 
           traceLine (bformat formatPreExpOp pexp) $ do
-            let hash = hashStableName sn
+            let hash = hashUnique sn
             case heightIfRepeatedOccurrence of
               Just height -> bformat ("REPEATED occurrence (sn = " % int % "; height = " % int % ")") hash height
               Nothing     -> bformat ("first occurrence (sn = " % int % ")") hash
@@ -1828,14 +1821,14 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
           -- In case of a repeated occurrence, the height comes from the occurrence map; otherwise
           -- it is computed by the traversal function passed in 'newExp'.  See also 'enterOcc'.
           --
-          let reconstruct :: IO (PreSmartExp UnscopedAcc UnscopedExp a, Int)
-                          -> IO (UnscopedExp a, Int)
+          let reconstruct :: ST s (PreSmartExp UnscopedAcc UnscopedExp a, Int)
+                          -> ST s (UnscopedExp a, Int)
               reconstruct newExp
                 = case heightIfRepeatedOccurrence of
                     Just height | exp_sharing `member` options config
-                      -> return (UnscopedExp [] (VarSharing (StableNameHeight sn height) (typeR pexp)), height)
+                      -> return (UnscopedExp [] (VarSharing (NodeHeight sn height) (typeR pexp)), height)
                     _ -> do (exp, height) <- newExp
-                            return (UnscopedExp [] (ExpSharing (StableNameHeight sn height) exp), height)
+                            return (UnscopedExp [] (ExpSharing (NodeHeight sn height) exp), height)
 
           reconstruct $ case pexp of
             Tag tp i            -> return (Tag tp i, 0)      -- height is 0!
@@ -1871,7 +1864,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             Coerce t1 t2 e      -> travE1 (Coerce t1 t2) e
 
       where
-        traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> IO (UnscopedAcc arrs, Int)
+        traverseAcc :: HasCallStack => Level -> SmartAcc arrs -> ST s (UnscopedAcc arrs, Int)
         traverseAcc = makeOccMapSharingAcc config accOccMap
 
         traverseFun1
@@ -1879,15 +1872,17 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
             => Level
             -> TypeR a
             -> (SmartExp a -> SmartExp b)
-            -> IO (SmartExp a -> UnscopedExp b, Int)
+            -> ST s (SmartExp a -> UnscopedExp b, Int)
         traverseFun1 lvl tp f
           = do
               let x = SmartExp (Tag tp lvl)
-              (UnscopedExp [] body, height) <- travE (lvl+1) (f x)
-              return (const (UnscopedExp [lvl] body), height + 1)
+              (exp, height) <- travE (lvl+1) (f x)
+              case exp of
+                UnscopedExp [] body -> return (const (UnscopedExp [lvl] body), height + 1)
+                _                  -> internalError "traverseFun1: unexpected lambda-bound variables"
 
 
-        travE1 :: HasCallStack => (UnscopedExp b -> r) -> SmartExp b -> IO (r, Int)
+        travE1 :: HasCallStack => (UnscopedExp b -> r) -> SmartExp b -> ST s (r, Int)
         travE1 c e
           = do
               (e', h) <- travE lvl e
@@ -1897,7 +1892,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                => (UnscopedExp b -> UnscopedExp c -> r)
                -> SmartExp b
                -> SmartExp c
-               -> IO (r, Int)
+               -> ST s (r, Int)
         travE2 c e1 e2
           = do
               (e1', h1) <- travE lvl e1
@@ -1909,7 +1904,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                -> SmartExp b
                -> SmartExp c
                -> SmartExp d
-               -> IO (r, Int)
+               -> ST s (r, Int)
         travE3 c e1 e2 e3
           = do
               (e1', h1) <- travE lvl e1
@@ -1917,7 +1912,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
               (e3', h3) <- travE lvl e3
               return (c e1' e2' e3', h1 `max` h2 `max` h3 + 1)
 
-        travA :: HasCallStack => (UnscopedAcc b -> r) -> SmartAcc b -> IO (r, Int)
+        travA :: HasCallStack => (UnscopedAcc b -> r) -> SmartAcc b -> ST s (r, Int)
         travA c acc
           = do
               (acc', h) <- traverseAcc lvl acc
@@ -1927,7 +1922,7 @@ makeOccMapSharingExp config accOccMap expOccMap = travE
                => (UnscopedAcc b -> UnscopedExp c -> r)
                -> SmartAcc b
                -> SmartExp c
-               -> IO (r, Int)
+               -> ST s (r, Int)
         travAE c acc e
           = do
               (acc', h1) <- traverseAcc lvl acc
@@ -2076,12 +2071,12 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
 --   - All 'Exp' node counts precede all 'SmartAcc' node counts as we don't share 'Exp' nodes across 'SmartAcc'
 --     nodes. Similarly, all 'Seq' nodes precede 'SmartAcc' nodes and 'Exp' nodes precede 'Seq' nodes.
 --
--- We determine the subterm property by using the tree height in 'StableNameHeight'.  Trees get
+-- We determine the subterm property by using the tree height in 'NodeHeight'.  Trees get
 -- smaller towards the end of a 'NodeCounts' list.  The height of free variables ('Atag' or 'Tag')
 -- is 0, whereas other leaves have height 1.  This guarantees that all free variables are at the end
 -- of the 'NodeCounts' list.
 --
--- The graph is represented as a map where a stable name 'a' is mapped to a set of stables names 'b'
+-- The graph is represented as a map where a node identity 'a' is mapped to a set of identities 'b'
 -- such that if there exists a edge from 'a' to 'c' that 'c' is contained within 'b'.
 --
 --  Properties of the graph:
@@ -2093,17 +2088,14 @@ makeOccMapSharingSeq config accOccMap seqOccMap = traverseSeq
 --
 type NodeCounts = ([NodeCount], Map.HashMap NodeName (Set.HashSet NodeName))
 
-data NodeName where
-  NodeName :: StableName a -> NodeName
-
-instance Eq NodeName where
-  (NodeName sn1) == (NodeName sn2) = eqStableName sn1 sn2
+newtype NodeName = NodeName Unique
+  deriving Eq
 
 instance Hashable NodeName where
-  hashWithSalt hash (NodeName sn1) = hash + hashStableName sn1
+  hashWithSalt hash (NodeName sn) = hashWithSalt hash (hashUnique sn)
 
 instance Show NodeName where
-  show (NodeName sn) = show (hashStableName sn)
+  show (NodeName sn) = show (hashUnique sn)
 
 data NodeCount = AccNodeCount StableSharingAcc Int
                | ExpNodeCount StableSharingExp Int
@@ -2126,7 +2118,7 @@ noNodeCounts = ([], Map.empty)
 -- TODO: Perform cycle detection here.
 --
 insertAccNode :: StableSharingAcc -> NodeCounts -> NodeCounts
-insertAccNode ssa@(StableSharingAcc (StableNameHeight sn _) _) (subterms,g)
+insertAccNode ssa@(StableSharingAcc (NodeHeight sn _) _) (subterms,g)
   = ([AccNodeCount ssa 1], g') +++ (subterms,g)
   where
     k  = NodeName sn
@@ -2139,7 +2131,7 @@ insertAccNode ssa@(StableSharingAcc (StableNameHeight sn _) _) (subterms,g)
 -- TODO: Perform cycle detection here.
 --
 insertExpNode :: StableSharingExp -> NodeCounts -> NodeCounts
-insertExpNode ssa@(StableSharingExp (StableNameHeight sn _) _) (subterms,g)
+insertExpNode ssa@(StableSharingExp (NodeHeight sn _) _) (subterms,g)
   = ([ExpNodeCount ssa 1], g') +++ (subterms,g)
   where
     k  = NodeName sn
@@ -2171,8 +2163,8 @@ cleanCounts (ns, g) = (ns, Map.fromList [(h, Set.filter (flip elem hs) (g Map.! 
     hs = map nodeName ns
 
 nodeName :: NodeCount -> NodeName
-nodeName (AccNodeCount (StableSharingAcc (StableNameHeight sn _) _) _) = NodeName sn
-nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeName sn
+nodeName (AccNodeCount (StableSharingAcc (NodeHeight sn _) _) _) = NodeName sn
+nodeName (ExpNodeCount (StableSharingExp (NodeHeight sn _) _) _) = NodeName sn
 -- nodeName (SeqNodeCount (StableSharingSeq (StableNameHeight sn _) _) _) = NodeName sn
 
 
@@ -2226,8 +2218,7 @@ nodeName (ExpNodeCount (StableSharingExp (StableNameHeight sn _) _) _) = NodeNam
 -- in the second argument. (Tags are not used if a bound variable has no usage occurrence.)
 --
 -- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
--- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
--- at 'determineScopesAcc'.
+-- variable was not preserved and we cannot build an appropriate initial environment.
 --
 buildInitialEnvAcc
     :: HasCallStack
@@ -2249,8 +2240,8 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
         noStableSharing :: StableSharingAcc
         noStableSharing = StableSharingAcc noStableAccName (undefined :: SharingAcc acc exp ())
 
-    showSA (StableSharingAcc _ (AccSharing  sn acc)) = bformat (formatStableNameHeight % ": " % formatPreAccOp) sn acc
-    showSA (StableSharingAcc _ (AvarSharing sn _))   = bformat ("AvarSharing " % formatStableNameHeight) sn
+    showSA (StableSharingAcc _ (AccSharing  sn acc)) = bformat (formatNodeHeight % ": " % formatPreAccOp) sn acc
+    showSA (StableSharingAcc _ (AvarSharing sn _))   = bformat ("AvarSharing " % formatNodeHeight) sn
     showSA (StableSharingAcc _ (AletSharing sa _))   = bformat ("AletSharing " % formatStableSharingAcc % "...") sa
 
 -- Build an initial environment for the tag values given in the first argument for traversing a
@@ -2258,8 +2249,7 @@ buildInitialEnvAcc tags sas = map (lookupSA sas) tags
 -- in the second argument. (Tags are not used if a bound variable has no usage occurrence.)
 --
 -- Bail out if any tag occurs multiple times as this indicates that the sharing of an argument
--- variable was not preserved and we cannot build an appropriate initial environment (c.f., comments
--- at 'determineScopesAcc'.
+-- variable was not preserved and we cannot build an appropriate initial environment.
 --
 buildInitialEnvExp
     :: HasCallStack
@@ -2281,8 +2271,8 @@ buildInitialEnvExp tags ses = map (lookupSE ses) tags
         noStableSharing :: StableSharingExp
         noStableSharing = StableSharingExp noStableExpName (undefined :: SharingExp acc exp ())
 
-    showSE (StableSharingExp _ (ExpSharing sn exp)) = bformat (formatStableNameHeight % ": " % formatPreExpOp) sn exp
-    showSE (StableSharingExp _ (VarSharing sn _ ))  = bformat ("VarSharing " % formatStableNameHeight) sn
+    showSE (StableSharingExp _ (ExpSharing sn exp)) = bformat (formatNodeHeight % ": " % formatPreExpOp) sn exp
+    showSE (StableSharingExp _ (VarSharing sn _ ))  = bformat ("VarSharing " % formatNodeHeight) sn
     showSE (StableSharingExp _ (LetSharing se _ ))  = bformat ("LetSharing " % formatStableSharingExp % "...") se
 
 -- Determine whether a 'NodeCount' is for an 'Atag' or 'Tag', which represent free variables.
@@ -2518,9 +2508,9 @@ determineScopesSharingAcc config accOccMap = scopesAcc
             (acc', accCount) = scopesAcc acc
 
           -- Occurrence count of the currently processed node
-        accOccCount = let StableNameHeight sn' _ = sn
+        accOccCount = let NodeHeight sn' _ = sn
                       in
-                      lookupWithASTName accOccMap (StableASTName sn')
+                      lookupWithASTName accOccMap (ASTName sn')
 
         -- Reconstruct the current tree node.
         --
@@ -2842,8 +2832,8 @@ determineScopesSharingExp config accOccMap expOccMap = scopesExp
         abstract acc@(ScopedAcc ssa (AccSharing sn a)) lets = (ScopedAcc ssa (AvarSharing sn $ Smart.arraysR a), StableSharingAcc sn (lets acc))
 
         -- Occurrence count of the currently processed node
-        expOccCount = let StableNameHeight sn' _ = sn
-                       in lookupWithASTName expOccMap (StableASTName sn')
+        expOccCount = let NodeHeight sn' _ = sn
+                       in lookupWithASTName expOccMap (ASTName sn')
 
         -- Reconstruct the current tree node.
         --
@@ -3075,16 +3065,16 @@ determineScopesSharingSeq config accOccMap _seqOccMap = scopesSeq
 -- Also returns the 'StableSharingAcc's of all 'Atag' leaves in environment order — they represent
 -- the free variables of the AST.
 --
--- NB: Strictly speaking, this function is not deterministic, as it uses stable pointers to
---     determine the sharing of subterms.  The stable pointer API does not guarantee its
---     completeness; i.e., it may miss some equalities, which implies that we may fail to discover
---     some sharing.  However, sharing does not affect the denotational meaning of an array
---     computation; hence, we do not compromise denotational correctness.
+-- Node identities are stored in the HOAS AST, so copying a node during garbage collection
+-- preserves its identity. This applies to shared computations as well as the 'Atag' and 'Tag'
+-- leaves representing free variables. The occurrence tables are local to this conversion;
+-- their mutable state is confined to 'runST'.
 --
---     There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
---     variables to be shared if any of them is used more than once.  If one is duplicated, the
---     environment for de Bruijn conversion will have a duplicate entry, and hence, be of the wrong
---     size, which is fatal. (The 'buildInitialEnv*' functions will already bail out.)
+-- There is one caveat: We currently rely on the 'Atag' and 'Tag' leaves representing free
+-- variables to be shared if any of them is used more than once. If construction of one is
+-- duplicated by the compiler (see 'withUnique'), the environment for de Bruijn conversion will
+-- have a duplicate entry, and hence, be of the wrong size, which is fatal. (The 'buildInitialEnv*'
+-- functions will already bail out.)
 --
 {-# NOINLINE recoverSharingAcc #-}
 recoverSharingAcc
@@ -3096,8 +3086,7 @@ recoverSharingAcc
     -> (ScopedAcc a, [StableSharingAcc])
 recoverSharingAcc config alvl avars acc
   = let (acc', occMap)
-          = unsafePerformIO             -- to enable stable pointers; this is safe as explained above
-          $ makeOccMapAcc config alvl acc
+          = runST $ makeOccMapAcc config alvl acc
     in
     determineScopesAcc config avars occMap acc'
 
@@ -3112,7 +3101,7 @@ recoverSharingExp
     -> (ScopedExp e, [StableSharingExp])
 recoverSharingExp config lvl fvar exp
   = let
-        (rootExp, accOccMap) = unsafePerformIO $ do
+        (rootExp, accOccMap) = runST $ do
           accOccMap       <- newASTHashTable
           (exp', _)       <- makeOccMapRootExp config accOccMap lvl fvar exp
           frozenAccOccMap <- freezeOccMap accOccMap
@@ -3150,11 +3139,11 @@ recoverSharingSeq config seq
 -- Debugging
 -- ---------
 
-traceLine :: Builder -> Builder -> IO ()
-traceLine = Debug.traceM Debug.dump_sharing (builder % ": " % builder)
+traceLine :: Builder -> Builder -> ST s ()
+traceLine header msg = unsafeIOToST $ Debug.traceM Debug.dump_sharing (builder % ": " % builder) header msg
 
-traceChunk :: Builder -> Builder -> IO ()
-traceChunk = Debug.traceM Debug.dump_sharing (builder % ":\n" % indented 4 builder)
+traceChunk :: Builder -> Builder -> ST s ()
+traceChunk header msg = unsafeIOToST $ Debug.traceM Debug.dump_sharing (builder % ":\n" % indented 4 builder) header msg
 
 tracePure :: Builder -> Builder -> a -> a
 tracePure header msg = Debug.trace Debug.dump_sharing (bformat (builder % ": " % builder) header msg)

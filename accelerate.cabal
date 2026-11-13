@@ -460,6 +460,7 @@ library
         Data.Array.Accelerate.Pretty.Graphviz.Monad
         Data.Array.Accelerate.Pretty.Graphviz.Type
         Data.Array.Accelerate.Pretty.Print
+        Data.Array.Accelerate.Smart.Unique
         Data.Array.Accelerate.Trafo.Algebra
         Data.Array.Accelerate.Trafo.Environment
         Data.Array.Accelerate.Trafo.Shrink

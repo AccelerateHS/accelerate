@@ -1,6 +1,6 @@
 {-# LANGUAGE ConstraintKinds     #-}
 {-# LANGUAGE FlexibleContexts    #-}
-{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE GADTs               #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators       #-}
 -- |
@@ -22,9 +22,16 @@ module Data.Array.Accelerate.Test.NoFib.Sharing (
 import Data.Array.Accelerate                                        as A hiding ( exp )
 import Data.Array.Accelerate.Trafo.Sharing
 import Data.Array.Accelerate.Data.Bits                              as A
+import Data.Array.Accelerate.Representation.Type                    ( TupR(..) )
+import qualified Data.Array.Accelerate.AST                          as AST
+import qualified Data.Array.Accelerate.Smart                        as Smart
 
 import Control.DeepSeq
 import Control.Exception
+import Control.Monad                                                ( forM_, void )
+import Data.List                                                    ( nub )
+import Data.Unique                                                  ( Unique )
+import System.Mem                                                   ( performGC )
 import Test.Tasty
 import Test.Tasty.ExpectedFailure
 import Test.Tasty.HUnit
@@ -50,6 +57,26 @@ test_sharing =
     , testCase  "pipe"                  $ sharingAcc test_pipe
     , testCase  "bound variables"       $ sharingAcc test_bound_variables
     , testCase  "big tuple"             $ sharingExp test_big_tuple
+    , testGroup "node identity"
+      [ testCase "Acc"                  $ checkIdentity (Smart.SmartAcc . Smart.Atag TupRunit) Smart.smartAccUnique
+      , testCase "Exp"                  $ checkIdentity (Smart.SmartExp . Smart.Tag TupRunit) Smart.smartExpUnique
+      , testCase "lazy Acc match"       $ case undefined :: Smart.SmartAcc () of
+                                            Smart.SmartAcc _ -> pure ()
+      , testCase "lazy Exp match"       $ case undefined :: Smart.SmartExp () of
+                                            Smart.SmartExp _ -> pure ()
+      , testCase "lazy Acc payload"     $ void $ evaluate (Smart.smartAccUnique (Smart.SmartAcc undefined :: Smart.SmartAcc ()))
+      , testCase "lazy Exp payload"     $ void $ evaluate (Smart.smartExpUnique (Smart.SmartExp undefined :: Smart.SmartExp ()))
+      ]
+    , testGroup "recovered sharing"
+      [ testCase "shared Acc"             test_shared_acc
+      , testCase "distinct Acc"           test_distinct_acc
+      , testCase "shared Exp"             test_shared_exp
+      , testCase "distinct Exp"           test_distinct_exp
+      ]
+    , testGroup "issue 587"
+      [ testCase "Acc"                  $ forM_ [1..1000] $ \n -> evaluate (rnf (convertAfun (test_issue587_acc n)))
+      , testCase "Exp"                  $ forM_ [1..1000] $ \n -> evaluate (rnf (convertFun (test_issue587_exp n)))
+      ]
     , testGroup "iteration"
       [ testCase "simple"               $ sharingAcc test_iteration_simple
       , testCase "outside"              $ sharingAcc test_iteration_outside
@@ -74,6 +101,14 @@ test_sharing =
       catch (rnf (convertExp exp) `seq` pure ())
             (\(e :: SomeException) -> assertFailure (show e))
 
+    checkIdentity :: (Int -> a) -> (a -> Unique) -> Assertion
+    checkIdentity make identity = do
+      nodes <- mapM (evaluate . make) [1..32]
+      names <- mapM (evaluate . identity) nodes
+      assertBool "different nodes have different identities" (P.length (nub names) P.== P.length names)
+      performGC
+      assertBool "node identities survive GC" (names P.== P.map identity nodes)
+
 
 --------------------------------------------------------------------------------
 --
@@ -82,6 +117,52 @@ test_sharing =
 
 mkArray :: Int -> Acc (Array DIM1 Int)
 mkArray n = use $ fromList (Z:.1) [n]
+
+test_shared_acc :: Assertion
+test_shared_acc =
+  let a = mkArray 1
+  in case convertAcc (lift (a, a) :: Acc (Vector Int, Vector Int)) of
+       AST.OpenAcc (AST.Alet _ (AST.OpenAcc AST.Use{})
+         (AST.OpenAcc (AST.Apair
+           (AST.OpenAcc (AST.Apair (AST.OpenAcc AST.Anil) (AST.OpenAcc AST.Avar{})))
+           (AST.OpenAcc AST.Avar{})))) -> pure ()
+       acc -> assertFailure ("Expected one array binding referenced twice, got: " P.++ show acc)
+
+test_distinct_acc :: Assertion
+test_distinct_acc =
+  case convertAcc (lift (mkArray 1, mkArray 2) :: Acc (Vector Int, Vector Int)) of
+    AST.OpenAcc (AST.Apair
+      (AST.OpenAcc (AST.Apair (AST.OpenAcc AST.Anil) (AST.OpenAcc AST.Use{})))
+      (AST.OpenAcc AST.Use{})) -> pure ()
+    acc -> assertFailure ("Expected two distinct array nodes, got: " P.++ show acc)
+
+test_shared_exp :: Assertion
+test_shared_exp =
+  let e = constant (1 :: Int) + 2
+  in case convertExp (lift (e, e) :: Exp (Int, Int)) of
+       AST.Let _ AST.PrimApp{} (AST.Pair (AST.Pair AST.Nil AST.Evar{}) AST.Evar{}) -> pure ()
+       exp -> assertFailure ("Expected one scalar binding referenced twice, got: " P.++ show exp)
+
+test_distinct_exp :: Assertion
+test_distinct_exp =
+  case convertExp (lift (constant (1 :: Int) + 2, constant (3 :: Int) + 4) :: Exp (Int, Int)) of
+    AST.Pair (AST.Pair AST.Nil AST.PrimApp{}) AST.PrimApp{} -> pure ()
+    exp -> assertFailure ("Expected two distinct scalar nodes, got: " P.++ show exp)
+
+-- Repeated conversion under parallel GC used to lose sharing of Atag/Tag nodes.
+-- Run with +RTS -N8 -A64k -n32k to stress this case.
+--
+test_issue587_acc :: Int -> Acc (Vector Double) -> Acc (Vector Double)
+test_issue587_acc n input =
+  P.foldl (\x f -> f x) input (P.replicate 40 (stage n >-> stage (n + 1)))
+  where
+    stage k xs = P.foldl1 (A.zipWith (+)) [A.map (\x -> x + constant (P.fromIntegral (k + i))) xs | i <- [1..8 :: Int]]
+
+test_issue587_exp :: Int -> Exp Double -> Exp Double
+test_issue587_exp n input =
+  P.foldl (\x f -> f x) input (P.replicate 40 (stage n . stage (n + 1)))
+  where
+    stage k x = P.sum [x + constant (P.fromIntegral (k + i)) | i <- [1..8 :: Int]]
 
 test_blowup :: Int -> Acc (Array DIM1 Int)
 test_blowup 0 = (mkArray 0)
