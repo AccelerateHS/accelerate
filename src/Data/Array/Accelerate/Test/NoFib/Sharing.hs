@@ -64,8 +64,8 @@ test_sharing =
                                             Smart.SmartAcc _ -> pure ()
       , testCase "lazy Exp match"       $ case undefined :: Smart.SmartExp () of
                                             Smart.SmartExp _ -> pure ()
-      , testCase "lazy Acc payload"     $ void $ evaluate (Smart.smartAccUnique (Smart.SmartAcc undefined :: Smart.SmartAcc ()))
-      , testCase "lazy Exp payload"     $ void $ evaluate (Smart.smartExpUnique (Smart.SmartExp undefined :: Smart.SmartExp ()))
+      , testCase "strict Acc payload"   $ checkStrict (Smart.SmartAcc undefined :: Smart.SmartAcc ())
+      , testCase "strict Exp payload"   $ checkStrict (Smart.SmartExp undefined :: Smart.SmartExp ())
       ]
     , testGroup "recovered sharing"
       [ testCase "shared Acc"             test_shared_acc
@@ -100,6 +100,13 @@ test_sharing =
     sharingExp exp =
       catch (rnf (convertExp exp) `seq` pure ())
             (\(e :: SomeException) -> assertFailure (show e))
+
+    checkStrict :: a -> Assertion
+    checkStrict value = do
+      result <- try (void $ evaluate value)
+      case result of
+        Left (_ :: ErrorCall) -> pure ()
+        Right ()              -> assertFailure "Expected evaluation to force the payload"
 
     checkIdentity :: (Int -> a) -> (a -> Unique) -> Assertion
     checkIdentity make identity = do

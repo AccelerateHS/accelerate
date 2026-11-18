@@ -305,13 +305,13 @@ import GHC.TypeLits
 --
 newtype Acc a = Acc (SmartAcc (Sugar.ArraysR a))
 
--- Never use record updates: changing the payload must allocate a fresh identity.
--- Rebuild through 'SmartAcc' instead.
---
-data SmartAcc a = SmartAcc'
-    { preSmartAcc    :: PreSmartAcc SmartAcc SmartExp a
-    , smartAccUnique :: !Unique
-    }
+data SmartAcc a = SmartAcc' !(PreSmartAcc SmartAcc SmartExp a) !Unique
+
+preSmartAcc :: SmartAcc a -> PreSmartAcc SmartAcc SmartExp a
+preSmartAcc (SmartAcc' acc _) = acc
+
+smartAccUnique :: SmartAcc a -> Unique
+smartAccUnique (SmartAcc' _ unique) = unique
 
 pattern SmartAcc :: PreSmartAcc SmartAcc SmartExp a -> SmartAcc a
 pattern SmartAcc acc <- ~(SmartAcc' acc _)
@@ -493,13 +493,13 @@ data PreSmartAcc acc exp as where
 --
 newtype Exp t = Exp (SmartExp (EltR t))
 
--- Never use record updates: changing the payload must allocate a fresh identity.
--- Rebuild through 'SmartExp' instead.
---
-data SmartExp t = SmartExp'
-    { preSmartExp    :: PreSmartExp SmartAcc SmartExp t
-    , smartExpUnique :: !Unique
-    }
+data SmartExp t = SmartExp' !(PreSmartExp SmartAcc SmartExp t) !Unique
+
+preSmartExp :: SmartExp t -> PreSmartExp SmartAcc SmartExp t
+preSmartExp (SmartExp' e _) = e
+
+smartExpUnique :: SmartExp t -> Unique
+smartExpUnique (SmartExp' _ unique) = unique
 
 pattern SmartExp :: PreSmartExp SmartAcc SmartExp t -> SmartExp t
 pattern SmartExp e <- ~(SmartExp' e _)
