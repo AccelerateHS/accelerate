@@ -314,7 +314,7 @@ smartAccUnique :: SmartAcc a -> Unique
 smartAccUnique (SmartAcc' _ unique) = unique
 
 pattern SmartAcc :: PreSmartAcc SmartAcc SmartExp a -> SmartAcc a
-pattern SmartAcc acc <- ~(SmartAcc' acc _)
+pattern SmartAcc acc <-SmartAcc' acc _
   where
     SmartAcc = withUnique . SmartAcc'
 {-# COMPLETE SmartAcc #-}
@@ -502,7 +502,7 @@ smartExpUnique :: SmartExp t -> Unique
 smartExpUnique (SmartExp' _ unique) = unique
 
 pattern SmartExp :: PreSmartExp SmartAcc SmartExp t -> SmartExp t
-pattern SmartExp e <- ~(SmartExp' e _)
+pattern SmartExp e <- SmartExp' e _
   where
     SmartExp = withUnique . SmartExp'
 {-# COMPLETE SmartExp #-}

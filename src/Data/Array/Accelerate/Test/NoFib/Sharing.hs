@@ -60,10 +60,6 @@ test_sharing =
     , testGroup "node identity"
       [ testCase "Acc"                  $ checkIdentity (Smart.SmartAcc . Smart.Atag TupRunit) Smart.smartAccUnique
       , testCase "Exp"                  $ checkIdentity (Smart.SmartExp . Smart.Tag TupRunit) Smart.smartExpUnique
-      , testCase "lazy Acc match"       $ case undefined :: Smart.SmartAcc () of
-                                            Smart.SmartAcc _ -> pure ()
-      , testCase "lazy Exp match"       $ case undefined :: Smart.SmartExp () of
-                                            Smart.SmartExp _ -> pure ()
       , testCase "strict Acc payload"   $ checkStrict (Smart.SmartAcc undefined :: Smart.SmartAcc ())
       , testCase "strict Exp payload"   $ checkStrict (Smart.SmartExp undefined :: Smart.SmartExp ())
       ]
